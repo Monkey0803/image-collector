@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Image Collector</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <img class="brand-icon" src="icons/icon.svg" alt="" aria-hidden="true" />
+        <div class="brand-copy">
+          <p class="eyebrow">IMAGE TOOLKIT</p>
+          <h1>Image Collector</h1>
+        </div>
+        <div class="topbar-actions">
+          <span id="scanStatus" class="scan-status">扫描中</span>
+          <button id="refreshButton" class="icon-button" type="button" title="重新扫描" aria-label="重新扫描">↻</button>
+        </div>
+      </header>
+
+      <section class="page-summary">
+        <div class="page-icon" id="pageIcon">◎</div>
+        <div class="page-copy">
+          <strong id="pageTitle">正在读取当前页面</strong>
+          <span id="pageUrl">—</span>
+        </div>
+      </section>
+
+      <section class="filter-panel" aria-label="图片筛选">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">FILTER</p>
+            <h2>按尺寸筛选</h2>
+          </div>
+          <button id="clearFilters" class="text-button" type="button">清除</button>
+        </div>
+        <div class="dimension-slider">
+          <div class="slider-label"><span>宽度</span><strong id="widthValue">不限</strong></div>
+          <div class="range-slider" id="widthTrack">
+            <input id="minWidth" type="range" min="0" max="5000" value="0" aria-label="最小宽度" />
+            <input id="maxWidth" type="range" min="0" max="5000" value="5000" aria-label="最大宽度" />
+          </div>
+        </div>
+        <div class="dimension-slider">
+          <div class="slider-label"><span>高度</span><strong id="heightValue">不限</strong></div>
+          <div class="range-slider" id="heightTrack">
+            <input id="minHeight" type="range" min="0" max="5000" value="0" aria-label="最小高度" />
+            <input id="maxHeight" type="range" min="0" max="5000" value="5000" aria-label="最大高度" />
+          </div>
+        </div>
+        <div class="format-filter">
+          <div class="slider-label"><span>格式</span><span class="format-hint">按文件类型查看</span></div>
+          <div id="formatTabs" class="format-tabs" role="group" aria-label="按图片格式筛选">
+            <button class="format-tab active" type="button" data-format="all" aria-pressed="true">全部 <strong data-count>0</strong></button>
+            <button class="format-tab" type="button" data-format="jpeg" aria-pressed="false">JPEG <strong data-count>0</strong></button>
+            <button class="format-tab" type="button" data-format="png" aria-pressed="false">PNG <strong data-count>0</strong></button>
+            <button class="format-tab" type="button" data-format="webp" aria-pressed="false">WEBP <strong data-count>0</strong></button>
+            <button class="format-tab" type="button" data-format="avif" aria-pressed="false">AVIF <strong data-count>0</strong></button>
+            <button class="format-tab" type="button" data-format="other" aria-pressed="false">其它 <strong data-count>0</strong></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="results-section">
+        <div class="results-heading">
+          <div class="results-title">
+            <label class="select-all"><input id="selectAll" type="checkbox" /><span>全选当前结果</span></label>
+            <span id="selectedSummary" class="selection-summary">已选 0</span>
+          </div>
+          <span id="resultCount" class="result-count">0 张图片</span>
+        </div>
+        <div id="imageGrid" class="image-grid"></div>
+        <div id="emptyState" class="empty-state" hidden>
+          <div class="empty-icon">◌</div>
+          <strong>没有符合条件的图片</strong>
+          <span>尝试放宽尺寸筛选，或重新扫描当前页面。</span>
+        </div>
+        <div id="loadingState" class="loading-state">
+          <span class="spinner"></span> 正在扫描当前页面…
+        </div>
+        <div id="errorState" class="error-state" hidden></div>
+      </section>
+
+      <section class="download-panel">
+        <div class="download-caption">
+          <label class="save-option"><input id="saveAs" type="checkbox" checked /><span>下载时选择保存位置</span><span class="help" title="ZIP 下载或单张下载时会打开 Chrome 的保存对话框">?</span></label>
+          <span class="download-caption-note">支持普通文件与 ZIP</span>
+        </div>
+        <div class="download-actions">
+          <button id="downloadButton" class="secondary-button" type="button" disabled>下载选中 <span id="selectedCount">0</span></button>
+          <button id="zipButton" class="primary-button" type="button" disabled><span class="zip-icon">▣</span> 下载 ZIP</button>
+        </div>
+        <p class="download-note">ZIP 会将当前选中的图片合并为一个文件，适合批量保存。</p>
+      </section>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
