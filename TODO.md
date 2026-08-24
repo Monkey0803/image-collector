@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录 `1.0.1` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
+本文档记录 `1.0.2` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
 
 ## 1.0.1
 
@@ -12,21 +12,28 @@
 - [x] 下载进度：显示普通下载和 ZIP 读取、压缩任务的处理进度。
 - [x] 失败重试：保留失败图片，可以直接重试失败项，并继续使用原来的下载模式。
 
-## 1.1.0
+## 1.0.2
 
 ### 图片发现能力
 
-- [ ] 扫描 `iframe` 中的图片。
-- [ ] 监听页面 DOM 变化，自动发现滚动和懒加载产生的新图片。
-- [ ] 支持 `video poster`、`object` 和更多图片懒加载属性。
-- [ ] 提供“仅显示原图候选”筛选开关。
+- [x] 扫描 `iframe` 中的图片。
+- [x] 在扫描期间监听页面 DOM 变化，并通过短时二次扫描发现懒加载图片。
+- [x] 支持 `video poster`、`object` 和更多图片懒加载属性。
+- [x] 提供“仅显示原图候选”筛选开关。
 
 ### 下载能力
 
-- [ ] 支持文件名模板和按域名、日期、格式创建 ZIP 子目录。
-- [ ] 显示文件大小和 MIME 类型。
-- [ ] 增加下载任务队列、取消任务和更详细的错误原因。
-- [ ] 支持导出图片 URL、JSON 和 CSV 清单。
+- [x] 支持按域名、格式或域名/格式创建 ZIP 子目录。
+- [x] 异步显示文件大小和 MIME 类型。
+- [x] 支持取消进行中的图片读取、ZIP 压缩和下载任务。
+- [x] 支持导出当前筛选结果为 JSON 或 CSV 清单。
+
+## 1.1.0
+
+### 下载能力
+
+- [ ] 支持文件名模板和日期目录。
+- [ ] 增加真正的下载任务队列和更详细的错误原因。
 
 ## 1.2.0
 
@@ -39,7 +46,7 @@
 
 ## English
 
-Completed items use `[x]`. The remaining items are planned for future releases.
+This document tracks `1.0.2` and future releases. Completed items use `[x]`.
 
 ### 1.0.1 core experience
 
@@ -49,14 +56,21 @@ Completed items use `[x]`. The remaining items are planned for future releases.
 - [x] Show progress for regular downloads and ZIP reading/compression tasks.
 - [x] Keep failed images available for retry with the original download mode.
 
-### 1.1.0 image discovery and downloads
+### 1.0.2 image discovery and downloads
 
-- [ ] Scan images inside `iframe` elements.
-- [ ] Observe DOM changes and discover lazy-loaded images after scrolling.
-- [ ] Support `video poster`, `object`, and more lazy-loading attributes.
-- [ ] Add filename templates and ZIP subfolders by hostname, date, or format.
-- [ ] Display file size and MIME type.
-- [ ] Add a cancellable download queue and JSON/CSV URL export.
+- [x] Scan images inside `iframe` elements.
+- [x] Observe mutations during scanning and perform short delayed rescans for lazy-loaded images.
+- [x] Support `video poster`, `object`, and more lazy-loading attributes.
+- [x] Add an original-image-only filter.
+- [x] Add ZIP subfolders by hostname, format, or hostname/format.
+- [x] Display file size and MIME type when the server exposes metadata.
+- [x] Cancel active image reading, ZIP compression, and download tasks.
+- [x] Export the current filtered results as JSON or CSV.
+
+### 1.1.0 download improvements
+
+- [ ] Add filename templates and date-based folders.
+- [ ] Add a full download queue and more detailed error reporting.
 
 ### 1.2.0 local library
 

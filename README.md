@@ -26,6 +26,13 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 按文件名、域名或 URL 搜索，并按尺寸、面积或文件名排序
 - 使用像素指纹或规范化 URL 过滤重复图片
 - 显示普通下载和 ZIP 任务进度，失败图片可以单独重试
+- 扫描同页面的 iframe，并识别动态加载和懒加载图片
+- 识别 `video poster`、`object` 嵌入图片和更多懒加载属性
+- 支持“仅显示原图候选”筛选
+- 异步显示图片文件大小和 MIME 类型
+- ZIP 可按网站、格式或网站/格式建立子目录
+- 可取消图片读取、ZIP 压缩和下载任务
+- 可将当前筛选结果导出为 JSON 或 CSV 清单
 
 ### 安装方式
 
@@ -98,6 +105,8 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 点击“下载选中”，会分别下载选中的图片。
 - 点击“下载 ZIP”，会将选中的图片合并为一个 ZIP 文件。
 - 下载面板会显示当前任务进度；部分图片失败时，可以点击“重试失败项”。
+- ZIP 分组可以选择不分组、按网站、按格式或按网站/格式。
+- 下载任务进行中可以取消图片读取、ZIP 压缩或下载任务。
 
 ZIP 文件默认命名为：
 
@@ -134,7 +143,9 @@ image_2026.08.20.zip
 - 图片服务器的防盗链、登录限制、跨域策略或临时 URL 可能导致 ZIP 无法读取某些图片。
 - 普通 URL 下载由 Chrome 直接处理，通常比 ZIP 下载兼容性更好。
 - CSS `background-image` 可能只能显示元素渲染尺寸，无法确定图片的原始尺寸。
+- 文件大小和 MIME 类型依赖图片服务器提供 `HEAD` 响应及相关响应头，未提供时不会显示。
 - 页面中的懒加载图片只有在实际加载或出现在 DOM 中后，才可能被扫描到。
+- iframe 扫描依赖当前扩展对对应 frame 来源拥有访问权限；受保护或沙盒 frame 可能无法注入。
 
 ### 从 GitHub 获取和更新
 
@@ -161,7 +172,7 @@ download_image/
 │   ├── icon-48.png     # 扩展管理页图标
 │   └── icon-128.png    # 扩展详情和安装页图标
 ├── LICENSE             # MIT 开源许可证
-├── TODO.md             # 1.0.1 已完成任务和后续路线图
+├── TODO.md             # 1.0.2 已完成任务和后续路线图
 └── README.md           # 中文和英文项目文档
 ```
 
@@ -228,6 +239,13 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Search by filename, hostname, or URL and sort by dimensions, area, or filename
 - Filter duplicates with pixel fingerprints or normalized URLs
 - Show download progress and retry failed images
+- Scan same-page iframes and discover dynamically loaded or lazy-loaded images
+- Detect `video poster`, `object` embeds, and more lazy-loading attributes
+- Filter to original-image candidates
+- Display image file size and MIME type asynchronously
+- Organize ZIP entries by hostname, format, or hostname and format
+- Cancel image reading, ZIP compression, and download tasks
+- Export current filtered results as JSON or CSV
 
 ### Installation
 
@@ -296,6 +314,8 @@ Duplicate results are filtered automatically. Same-origin images use a small pix
 - Click **Download selected** to download selected images individually.
 - Click **Download ZIP** to combine selected images into one ZIP archive.
 - The download panel shows task progress. If some images fail, click **Retry failed items** to retry them with the same download mode.
+- ZIP grouping can be flat, by hostname, by format, or by hostname and format.
+- Active image reading, ZIP compression, and download tasks can be cancelled.
 
 The default ZIP filename is generated in this format:
 
@@ -330,7 +350,9 @@ Image filtering and list processing happen locally in the browser. The project d
 - Anti-hotlinking, authentication requirements, cross-origin policies, or expiring URLs may prevent some images from being read into a ZIP archive.
 - Regular URL downloads are handled directly by Chrome and are generally more compatible than ZIP downloads.
 - CSS `background-image` entries may expose only the rendered element size rather than the original image size.
+- File size and MIME type depend on the image server exposing `HEAD` metadata and may remain unavailable.
 - Lazy-loaded images may not be detected until they have been inserted into the DOM or loaded by the page.
+- Iframe scanning depends on access to the frame's origin; protected or sandboxed frames may reject injection.
 
 ### Getting and updating from GitHub
 
@@ -357,7 +379,7 @@ download_image/
 │   ├── icon-48.png     # Extensions management icon
 │   └── icon-128.png    # Extension detail and installation icon
 ├── LICENSE             # MIT open-source license
-├── TODO.md             # 1.0.1 checklist and future roadmap
+├── TODO.md             # 1.0.2 checklist and future roadmap
 └── README.md           # Chinese and English documentation
 ```
 

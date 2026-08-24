@@ -61,6 +61,7 @@
             <button class="format-tab" type="button" data-format="other" aria-pressed="false">其它 <strong data-count>0</strong></button>
           </div>
         </div>
+        <label class="original-filter"><input id="originalOnly" type="checkbox" /><span>仅显示原图候选</span><small>优先使用页面提供的高清地址</small></label>
       </section>
 
       <section class="results-section">
@@ -112,7 +113,22 @@
           <div class="progress-track"><span id="progressBar"></span></div>
           <div class="progress-detail">
             <span id="progressDetail">等待任务开始</span>
-            <button id="retryButton" class="retry-button" type="button" hidden>重试失败项 <span id="retryCount">0</span></button>
+            <div class="progress-actions">
+              <button id="cancelButton" class="cancel-button" type="button" hidden>取消任务</button>
+              <button id="retryButton" class="retry-button" type="button" hidden>重试失败项 <span id="retryCount">0</span></button>
+            </div>
+          </div>
+        </div>
+        <div class="zip-options">
+          <label><span>ZIP 分组</span><select id="zipLayout" aria-label="ZIP 文件夹分组方式">
+            <option value="flat">不分组</option>
+            <option value="domain">按网站</option>
+            <option value="format">按格式</option>
+            <option value="domain-format">按网站 / 格式</option>
+          </select></label>
+          <div class="utility-actions">
+            <button id="exportJson" type="button">导出 JSON</button>
+            <button id="exportCsv" type="button">导出 CSV</button>
           </div>
         </div>
         <div class="download-actions">
