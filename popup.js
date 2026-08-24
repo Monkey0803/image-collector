@@ -11,6 +11,8 @@ const state = {
   sort: 'page',
   originalOnly: false,
   zipLayout: 'flat',
+  filenameTemplate: '{name}',
+  dateFolder: false,
   duplicateCount: 0,
   dynamicScanPasses: 0,
   dynamicScanTimer: null,
@@ -34,7 +36,8 @@ const els = {
   widthValue: $('#widthValue'), heightValue: $('#heightValue'), widthTrack: $('#widthTrack'), heightTrack: $('#heightTrack'),
   clearFilters: $('#clearFilters'), selectAll: $('#selectAll'), resultCount: $('#resultCount'),
   selectedSummary: $('#selectedSummary'), searchInput: $('#searchInput'), sortSelect: $('#sortSelect'),
-  originalOnly: $('#originalOnly'), zipLayout: $('#zipLayout'), exportJson: $('#exportJson'), exportCsv: $('#exportCsv'),
+  originalOnly: $('#originalOnly'), zipLayout: $('#zipLayout'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'),
+  exportJson: $('#exportJson'), exportCsv: $('#exportCsv'),
   formatTabs: [...document.querySelectorAll('[data-format]')],
   grid: $('#imageGrid'), empty: $('#emptyState'), loading: $('#loadingState'), error: $('#errorState'),
   saveAs: $('#saveAs'), download: $('#downloadButton'), zip: $('#zipButton'), selectedCount: $('#selectedCount'),
@@ -50,13 +53,15 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 
 async function init() {
-  const saved = await chrome.storage.local.get({ filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, zipLayout: 'flat' });
+  const saved = await chrome.storage.local.get({ filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false });
   const savedFilters = saved.filters && typeof saved.filters === 'object' ? saved.filters : {};
   state.saveAs = typeof saved.saveAs === 'boolean' ? saved.saveAs : true;
   state.searchQuery = typeof saved.searchQuery === 'string' ? saved.searchQuery : '';
   state.sort = ['page', 'width-desc', 'height-desc', 'area-desc', 'name-asc'].includes(saved.sort) ? saved.sort : 'page';
   state.originalOnly = Boolean(saved.originalOnly);
   state.zipLayout = ['flat', 'domain', 'format', 'domain-format'].includes(saved.zipLayout) ? saved.zipLayout : 'flat';
+  state.filenameTemplate = typeof saved.filenameTemplate === 'string' && saved.filenameTemplate.trim() ? saved.filenameTemplate : '{name}';
+  state.dateFolder = Boolean(saved.dateFolder);
   state.filterValues = {
     width: { min: normalizeLimit(savedFilters.minWidth), max: normalizeLimit(savedFilters.maxWidth) },
     height: { min: normalizeLimit(savedFilters.minHeight), max: normalizeLimit(savedFilters.maxHeight) }
@@ -70,6 +75,8 @@ async function init() {
   els.sortSelect.value = state.sort;
   els.originalOnly.checked = state.originalOnly;
   els.zipLayout.value = state.zipLayout;
+  els.filenameTemplate.value = state.filenameTemplate;
+  els.dateFolder.checked = state.dateFolder;
   bindEvents();
   await scanPage();
 }
@@ -116,6 +123,15 @@ function bindEvents() {
   els.zipLayout.addEventListener('change', () => {
     state.zipLayout = els.zipLayout.value;
     chrome.storage.local.set({ zipLayout: state.zipLayout });
+  });
+  els.filenameTemplate.addEventListener('change', () => {
+    state.filenameTemplate = els.filenameTemplate.value.trim() || '{name}';
+    els.filenameTemplate.value = state.filenameTemplate;
+    chrome.storage.local.set({ filenameTemplate: state.filenameTemplate });
+  });
+  els.dateFolder.addEventListener('change', () => {
+    state.dateFolder = els.dateFolder.checked;
+    chrome.storage.local.set({ dateFolder: state.dateFolder });
   });
   els.formatTabs.forEach((tab) => tab.addEventListener('click', () => {
     state.format = tab.dataset.format || 'all';
@@ -664,7 +680,10 @@ async function downloadImages(images, asZip) {
   els.zip.disabled = true;
   updateDownloadProgress({ phase: 'starting', completed: 0, total: images.length, failed: 0, percent: 0, detail: asZip ? '准备生成 ZIP…' : '准备下载图片…' });
   try {
-    const response = await chrome.runtime.sendMessage({ type: asZip ? 'downloadZip' : 'downloadImages', images, saveAs: state.saveAs, zipLayout: state.zipLayout, jobId });
+    const response = await chrome.runtime.sendMessage({
+      type: asZip ? 'downloadZip' : 'downloadImages', images, saveAs: state.saveAs,
+      zipLayout: state.zipLayout, filenameTemplate: state.filenameTemplate, dateFolder: state.dateFolder, jobId
+    });
     const failed = Array.isArray(response?.failed) ? response.failed : [];
     const byUrl = new Map(images.map((image) => [image.url, image]));
     state.retryImages = failed.map((item) => byUrl.get(item.url)).filter(Boolean);
@@ -676,7 +695,11 @@ async function downloadImages(images, asZip) {
       return;
     }
     if (!response?.ok) throw new Error(response?.error || '下载失败');
-    if (failed.length) showToast(`已开始下载，${failed.length} 张图片失败，可点击重试`);
+    if (failed.length) {
+      const reason = failed[0]?.error ? `：${failed[0].error}` : '';
+      updateDownloadProgress({ phase: 'complete', completed: images.length, total: images.length, failed: failed.length, percent: 100, detail: `已处理 ${images.length} 张，失败 ${failed.length}${reason}` });
+      showToast(`已开始下载，${failed.length} 张图片失败，可点击重试`);
+    }
     else showToast(asZip ? 'ZIP 已开始下载' : '下载已开始');
   } catch (error) {
     if (!state.retryImages.length) state.retryImages = [...images];

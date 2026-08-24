@@ -120,12 +120,16 @@
           </div>
         </div>
         <div class="zip-options">
-          <label><span>ZIP 分组</span><select id="zipLayout" aria-label="ZIP 文件夹分组方式">
-            <option value="flat">不分组</option>
-            <option value="domain">按网站</option>
-            <option value="format">按格式</option>
-            <option value="domain-format">按网站 / 格式</option>
-          </select></label>
+          <div class="download-settings">
+            <label><span>ZIP 分组</span><select id="zipLayout" aria-label="ZIP 文件夹分组方式">
+              <option value="flat">不分组</option>
+              <option value="domain">按网站</option>
+              <option value="format">按格式</option>
+              <option value="domain-format">按网站 / 格式</option>
+            </select></label>
+            <label class="filename-setting"><span>文件名模板</span><input id="filenameTemplate" type="text" value="{name}" placeholder="{name}" title="支持 {name}、{filename}、{domain}、{format}、{width}、{height}、{date}" aria-label="文件名模板" /></label>
+            <label class="date-folder-setting"><input id="dateFolder" type="checkbox" /><span>按日期建目录</span></label>
+          </div>
           <div class="utility-actions">
             <button id="exportJson" type="button">导出 JSON</button>
             <button id="exportCsv" type="button">导出 CSV</button>

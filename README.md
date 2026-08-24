@@ -33,6 +33,10 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - ZIP 可按网站、格式或网站/格式建立子目录
 - 可取消图片读取、ZIP 压缩和下载任务
 - 可将当前筛选结果导出为 JSON 或 CSV 清单
+- 支持自定义文件名模板，并可使用日期、域名、格式和尺寸变量
+- 支持按 `YYYY.MM.DD` 自动创建日期目录
+- 多个下载请求会进入后台队列，按顺序执行，避免任务互相干扰
+- 对登录限制、防盗链、网络错误和服务器错误显示更具体的失败原因
 
 ### 安装方式
 
@@ -106,7 +110,24 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 点击“下载 ZIP”，会将选中的图片合并为一个 ZIP 文件。
 - 下载面板会显示当前任务进度；部分图片失败时，可以点击“重试失败项”。
 - ZIP 分组可以选择不分组、按网站、按格式或按网站/格式。
-- 下载任务进行中可以取消图片读取、ZIP 压缩或下载任务。
+- 下载任务进行中可以取消排队、图片读取、ZIP 压缩或下载任务。
+
+文件名模板默认是 `{name}`，支持以下变量：
+
+| 变量 | 含义 |
+| --- | --- |
+| `{name}` | 原始文件名，不含扩展名 |
+| `{filename}` | 原始文件名，包含扩展名 |
+| `{domain}` | 图片域名 |
+| `{format}` | 图片格式 |
+| `{width}` / `{height}` | 图片尺寸 |
+| `{date}` | 当前日期，格式为 `YYYY.MM.DD` |
+
+例如填写 `{domain}_{date}_{name}`，会生成类似 `example.com_2026.08.24_photo.jpg` 的文件名。开启“按日期建目录”后，普通下载会保存为 `2026.08.24/example.com_2026.08.24_photo.jpg`；ZIP 内的图片也会放入对应日期目录。未知变量会被忽略，文件名中的非法字符会自动替换为下划线。
+
+多个下载请求会由后台按提交顺序排队。当前任务完成或取消后，队列中的下一个任务会自动开始；排队中的任务也可以取消。
+
+当部分图片失败时，失败列表会保留图片地址、失败阶段和可读原因，例如“需要登录后才能访问”“服务器拒绝访问，可能存在防盗链”或“图片服务器暂时不可用”。
 
 ZIP 文件默认命名为：
 
@@ -172,7 +193,7 @@ download_image/
 │   ├── icon-48.png     # 扩展管理页图标
 │   └── icon-128.png    # 扩展详情和安装页图标
 ├── LICENSE             # MIT 开源许可证
-├── TODO.md             # 1.0.2 已完成任务和后续路线图
+├── TODO.md             # 1.0.3 已完成任务和后续路线图
 └── README.md           # 中文和英文项目文档
 ```
 
@@ -246,6 +267,10 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Organize ZIP entries by hostname, format, or hostname and format
 - Cancel image reading, ZIP compression, and download tasks
 - Export current filtered results as JSON or CSV
+- Customize filenames with template variables for names, domains, formats, dimensions, and dates
+- Create `YYYY.MM.DD` date folders for regular downloads and ZIP entries
+- Queue multiple download requests and run them in submission order
+- Report clearer causes for authentication, anti-hotlinking, network, and server failures
 
 ### Installation
 
@@ -315,7 +340,24 @@ Duplicate results are filtered automatically. Same-origin images use a small pix
 - Click **Download ZIP** to combine selected images into one ZIP archive.
 - The download panel shows task progress. If some images fail, click **Retry failed items** to retry them with the same download mode.
 - ZIP grouping can be flat, by hostname, by format, or by hostname and format.
-- Active image reading, ZIP compression, and download tasks can be cancelled.
+- Queued, active image reading, ZIP compression, and download tasks can be cancelled.
+
+The default filename template is `{name}`. Supported variables are:
+
+| Variable | Meaning |
+| --- | --- |
+| `{name}` | Original filename without its extension |
+| `{filename}` | Original filename including its extension |
+| `{domain}` | Image hostname |
+| `{format}` | Image format |
+| `{width}` / `{height}` | Image dimensions |
+| `{date}` | Current date in `YYYY.MM.DD` format |
+
+For example, `{domain}_{date}_{name}` can produce `example.com_2026.08.24_photo.jpg`. When **Create date folder** is enabled, regular downloads use a path such as `2026.08.24/example.com_2026.08.24_photo.jpg`, and ZIP entries use the same date folder. Unknown variables are omitted and illegal filename characters are replaced with underscores.
+
+Multiple download requests are processed by a background queue in submission order. The next task starts automatically when the current task completes or is cancelled, and queued tasks can also be cancelled.
+
+When some images fail, the failure list keeps the URL, failure stage, and a readable reason such as “login required”, “access denied or anti-hotlink protection”, or “image server temporarily unavailable”.
 
 The default ZIP filename is generated in this format:
 
@@ -379,7 +421,7 @@ download_image/
 │   ├── icon-48.png     # Extensions management icon
 │   └── icon-128.png    # Extension detail and installation icon
 ├── LICENSE             # MIT open-source license
-├── TODO.md             # 1.0.2 checklist and future roadmap
+├── TODO.md             # 1.0.3 checklist and future roadmap
 └── README.md           # Chinese and English documentation
 ```
 

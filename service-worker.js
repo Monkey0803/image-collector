@@ -6,14 +6,18 @@ const FORMAT_EXTENSIONS = {
   jpeg: '.jpg', png: '.png', gif: '.gif', webp: '.webp', avif: '.avif', svg: '.svg'
 };
 const activeJobs = new Map();
+const downloadQueue = [];
+let queueRunning = false;
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'downloadImages') {
-    downloadImages(message.images || [], Boolean(message.saveAs), message.jobId, message.zipLayout).then((result) => sendResponse(result));
+    const jobId = message.jobId || createJobId();
+    enqueueJob(jobId, message.images || [], () => downloadImages(message.images || [], Boolean(message.saveAs), jobId, message)).then((result) => sendResponse(result));
     return true;
   }
   if (message.type === 'downloadZip') {
-    downloadZip(message.images || [], Boolean(message.saveAs), message.jobId, message.zipLayout).then((result) => sendResponse(result));
+    const jobId = message.jobId || createJobId();
+    enqueueJob(jobId, message.images || [], () => downloadZip(message.images || [], Boolean(message.saveAs), jobId, message)).then((result) => sendResponse(result));
     return true;
   }
   if (message.type === 'inspectImages') {
@@ -28,20 +32,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
-async function downloadImages(images, saveAs, jobId, zipLayout = 'flat') {
+async function downloadImages(images, saveAs, jobId, settings = {}) {
   const failed = [];
   let started = 0;
   const total = images.length;
-  const job = beginJob(jobId);
+  const job = getJob(jobId);
   sendProgress(jobId, { phase: 'starting', completed: 0, total, failed: 0, percent: 0, detail: '准备提交下载任务' });
   for (const [index, image] of images.entries()) {
     if (job.cancelled) return finishDownloadJob(jobId, { ok: started > 0, started, failed, cancelled: true, error: '下载任务已取消' }, total, failed.length);
     sendProgress(jobId, {
       phase: 'downloading', completed: index, total, failed: failed.length, percent: progressPercent(index, total),
-      detail: `正在提交 ${index + 1}/${total}：${normalizeName(image, '', zipLayout)}`
+      detail: `正在提交 ${index + 1}/${total}：${normalizeName(image, '', settings)}`
     });
     try {
-      const downloadId = await chrome.downloads.download({ url: image.url, filename: normalizeName(image, '', zipLayout), saveAs, conflictAction: 'uniquify' });
+      const downloadId = await chrome.downloads.download({ url: image.url, filename: normalizeName(image, '', settings), saveAs, conflictAction: 'uniquify' });
       job.downloadIds.add(downloadId);
       if (job.cancelled) {
         await chrome.downloads.cancel(downloadId).catch(() => {});
@@ -49,7 +53,8 @@ async function downloadImages(images, saveAs, jobId, zipLayout = 'flat') {
       }
       started += 1;
     } catch (error) {
-      failed.push({ url: image.url, error: error.message || '下载失败' });
+      if (job.cancelled) return finishDownloadJob(jobId, { ok: started > 0, started, failed, cancelled: true, error: '下载任务已取消' }, total, failed.length);
+      failed.push({ url: image.url, error: readableError(error, '下载失败'), stage: 'download' });
     }
     const completed = started + failed.length;
     sendProgress(jobId, {
@@ -61,12 +66,12 @@ async function downloadImages(images, saveAs, jobId, zipLayout = 'flat') {
   return finishJob(jobId, { ok: started > 0, started, failed, error: started ? '' : '没有图片能够开始下载' });
 }
 
-async function downloadZip(images, saveAs, jobId, zipLayout = 'flat') {
+async function downloadZip(images, saveAs, jobId, settings = {}) {
   const entries = [];
   const failed = [];
   const usedNames = new Set();
   const total = images.length;
-  const job = beginJob(jobId);
+  const job = getJob(jobId);
   sendProgress(jobId, { phase: 'starting', completed: 0, total, failed: 0, percent: 0, detail: '准备读取图片' });
   for (const [index, image] of images.entries()) {
     if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, cancelled: true, error: 'ZIP 任务已取消' }, total, failed.length);
@@ -79,10 +84,12 @@ async function downloadZip(images, saveAs, jobId, zipLayout = 'flat') {
     try {
       const response = await fetch(image.url, { credentials: 'omit', redirect: 'follow', signal: controller.signal });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const name = uniqueName(zipPath(image, normalizeName(image, response.headers.get('content-type')), zipLayout), usedNames);
+      const contentType = response.headers.get('content-type') || '';
+      const filename = normalizeName(image, contentType, { ...settings, dateFolder: false });
+      const name = uniqueName(zipPath(image, filename, settings.zipLayout || 'flat', settings, contentType), usedNames);
       entries.push({ name, data: new Uint8Array(await response.arrayBuffer()) });
     } catch (error) {
-      if (!job.cancelled) failed.push({ url: image.url, error: error.message || '读取失败' });
+      if (!job.cancelled) failed.push({ url: image.url, error: readableError(error, '读取失败'), stage: 'read' });
     } finally {
       job.controllers.delete(controller);
     }
@@ -92,9 +99,10 @@ async function downloadZip(images, saveAs, jobId, zipLayout = 'flat') {
       detail: `已读取 ${completed}/${total} 张图片`
     });
   }
+  if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, cancelled: true, error: 'ZIP 任务已取消' }, total, failed.length);
   if (!entries.length) {
     sendProgress(jobId, { phase: 'failed', completed: total, total, failed: failed.length, percent: 100, detail: '没有可加入 ZIP 的图片' });
-    return finishJob(jobId, { ok: false, failed, error: job.cancelled ? 'ZIP 任务已取消' : '图片无法读取，可能受跨域或防盗链限制' });
+    return finishJob(jobId, { ok: false, failed, error: '图片无法读取，可能受跨域或防盗链限制' });
   }
   if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, cancelled: true, error: 'ZIP 任务已取消' }, total, failed.length);
   try {
@@ -106,8 +114,9 @@ async function downloadZip(images, saveAs, jobId, zipLayout = 'flat') {
     sendProgress(jobId, { phase: 'complete', completed: total, total, failed: failed.length, percent: 100, detail: `ZIP 已提交下载，共 ${entries.length} 张图片` });
     return finishJob(jobId, { ok: true, started: 1, failed });
   } catch (error) {
-    sendProgress(jobId, { phase: 'failed', completed: total, total, failed: failed.length, percent: 100, detail: error.message || 'ZIP 下载失败' });
-    return finishJob(jobId, { ok: false, failed, error: error.message || 'ZIP 下载失败' });
+    const reason = readableError(error, 'ZIP 下载失败');
+    sendProgress(jobId, { phase: 'failed', completed: total, total, failed: failed.length, percent: 100, detail: reason });
+    return finishJob(jobId, { ok: false, failed, error: reason });
   }
 }
 
@@ -134,10 +143,88 @@ function beginJob(jobId) {
   return job;
 }
 
+function getJob(jobId) {
+  return (jobId && activeJobs.get(jobId)) || beginJob(jobId);
+}
+
+function createJobId() {
+  const suffix = typeof crypto?.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+  return `${Date.now()}-${suffix}`;
+}
+
+function enqueueJob(jobId, images, task) {
+  const job = beginJob(jobId);
+  const item = { jobId, images, task, resolve: null };
+  const position = downloadQueue.length + (queueRunning ? 1 : 0);
+  job.queueItem = item;
+  sendProgress(jobId, {
+    phase: 'queued', completed: 0, total: images.length, failed: 0, percent: 0,
+    detail: position ? `已加入下载队列，前方 ${position} 个任务` : '正在启动下载任务'
+  });
+  const promise = new Promise((resolve) => { item.resolve = resolve; });
+  downloadQueue.push(item);
+  processQueue();
+  return promise;
+}
+
+async function processQueue() {
+  if (queueRunning) return;
+  queueRunning = true;
+  try {
+    while (downloadQueue.length) {
+      const item = downloadQueue.shift();
+      const job = activeJobs.get(item.jobId);
+      if (!job || job.cancelled) {
+        item.resolve(finishDownloadJob(item.jobId, {
+          ok: false, failed: [], cancelled: true, error: '下载任务已取消'
+        }, item.images.length, 0));
+        continue;
+      }
+      job.queueItem = null;
+      updateQueueProgress();
+      try {
+        item.resolve(await item.task());
+      } catch (error) {
+        item.resolve(finishJob(item.jobId, {
+          ok: false, failed: [], error: readableError(error, '下载任务失败')
+        }));
+      }
+    }
+  } finally {
+    queueRunning = false;
+    updateQueueProgress();
+    if (downloadQueue.length) processQueue();
+  }
+}
+
+function updateQueueProgress() {
+  downloadQueue.forEach((item, index) => {
+    const job = activeJobs.get(item.jobId);
+    if (!job || job.cancelled) return;
+    const ahead = index + (queueRunning ? 1 : 0);
+    sendProgress(item.jobId, {
+      phase: 'queued', completed: 0, total: item.images.length, failed: 0, percent: 0,
+      detail: ahead ? `等待下载队列，前方 ${ahead} 个任务` : '正在启动下载任务'
+    });
+  });
+}
+
 function cancelDownload(jobId) {
   const job = activeJobs.get(jobId);
   if (!job) return;
   job.cancelled = true;
+  if (job.queueItem) {
+    const index = downloadQueue.indexOf(job.queueItem);
+    if (index >= 0) downloadQueue.splice(index, 1);
+    const item = job.queueItem;
+    job.queueItem = null;
+    item.resolve(finishDownloadJob(jobId, {
+      ok: false, failed: [], cancelled: true, error: '下载任务已取消'
+    }, item.images.length, 0));
+    updateQueueProgress();
+    processQueue();
+    return;
+  }
   job.controllers.forEach((controller) => controller.abort());
   job.downloadIds.forEach((downloadId) => chrome.downloads.cancel(downloadId).catch(() => {}));
   sendProgress(jobId, { phase: 'cancelled', percent: 100, detail: '任务已取消' });
@@ -160,26 +247,66 @@ function sendProgress(jobId, progress) {
   chrome.runtime.sendMessage({ type: 'downloadProgress', jobId, ...progress }).catch(() => {});
 }
 
-function normalizeName(image, contentType = '') {
-  let name = image.name || fileName(image.url) || 'image';
-  name = name.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').trim() || 'image';
-  if (!/\.[a-z0-9]{2,5}$/i.test(name)) {
-    name += MIME_EXTENSIONS[(contentType || '').split(';')[0].trim()] || FORMAT_EXTENSIONS[image.format] || '.jpg';
-  }
-  return name;
+function normalizeName(image, contentType = '', settings = {}) {
+  const original = safeSegment(image.name || fileName(image.url) || 'image');
+  const extensionMatch = original.match(/^(.*?)(\.[a-z0-9]{2,8})$/i);
+  const filename = extensionMatch ? original : `${original}${extensionFor(image, contentType)}`;
+  const name = extensionMatch ? extensionMatch[1] || 'image' : original;
+  const domain = hostnameFor(image.url);
+  const format = formatFor(image, contentType);
+  const values = { name, filename, domain, format, width: image.width || 0, height: image.height || 0, date: dateStamp() };
+  const template = typeof settings.filenameTemplate === 'string' && settings.filenameTemplate.trim()
+    ? settings.filenameTemplate.trim()
+    : '{name}';
+  let output = template.replace(/\{([^{}]+)\}/g, (_match, key) => (
+    Object.prototype.hasOwnProperty.call(values, key) ? values[key] : ''
+  ));
+  output = String(output).replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').trim();
+  if (!output) output = name;
+  if (!/\.[a-z0-9]{2,8}$/i.test(output)) output += extensionFor(image, contentType);
+  return settings.dateFolder ? `${dateStamp()}/${output}` : output;
 }
 
-function zipPath(image, name, layout) {
-  if (layout === 'flat') return name;
-  let hostname = 'site';
-  try { hostname = new URL(image.url).hostname.replace(/^www\./, '') || hostname; } catch { /* Keep the fallback folder. */ }
-  const format = (image.format || 'other').toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'other';
-  if (layout === 'domain') return `${safeSegment(hostname)}/${name}`;
-  if (layout === 'format') return `${safeSegment(format)}/${name}`;
-  return `${safeSegment(hostname)}/${safeSegment(format)}/${name}`;
+function zipPath(image, name, layout, settings = {}, contentType = '') {
+  let path = name;
+  const hostname = hostnameFor(image.url);
+  const format = formatFor(image, contentType);
+  if (layout === 'domain') path = `${safeSegment(hostname)}/${name}`;
+  if (layout === 'format') path = `${safeSegment(format)}/${name}`;
+  if (layout === 'domain-format') path = `${safeSegment(hostname)}/${safeSegment(format)}/${name}`;
+  return settings.dateFolder ? `${dateStamp()}/${path}` : path;
 }
 
-function safeSegment(value) { return String(value || 'other').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').trim() || 'other'; }
+function safeSegment(value) { return String(value ?? '').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').trim() || 'other'; }
+
+function hostnameFor(url) {
+  try { return new URL(url).hostname.replace(/^www\./, '') || 'site'; } catch { return 'site'; }
+}
+
+function formatFor(image, contentType = '') {
+  const mime = String(contentType || image.mime || '').split(';')[0].trim().toLowerCase();
+  if (mime === 'image/jpeg') return 'jpeg';
+  if (mime === 'image/svg+xml') return 'svg';
+  if (mime.startsWith('image/')) return mime.slice(6) || 'other';
+  return String(image.format || 'other').toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'other';
+}
+
+function extensionFor(image, contentType = '') {
+  const mime = String(contentType || image.mime || '').split(';')[0].trim().toLowerCase();
+  return MIME_EXTENSIONS[mime] || FORMAT_EXTENSIONS[formatFor(image, contentType)] || '.jpg';
+}
+
+function readableError(error, fallback) {
+  if (error?.name === 'AbortError') return '任务已取消';
+  const message = String(error?.message || error || '').trim();
+  if (/HTTP\s+401\b/i.test(message)) return '需要登录后才能访问';
+  if (/HTTP\s+403\b/i.test(message)) return '服务器拒绝访问，可能存在防盗链';
+  if (/HTTP\s+404\b/i.test(message)) return '图片不存在或链接已失效';
+  if (/HTTP\s+429\b/i.test(message)) return '请求过于频繁，请稍后重试';
+  if (/HTTP\s+5\d\d\b/i.test(message)) return '图片服务器暂时不可用';
+  if (/Failed to fetch|NetworkError|Network request failed|Load failed|跨域/i.test(message)) return '网络请求失败或被跨域策略阻止';
+  return message || fallback;
+}
 
 function uniqueName(name, usedNames) {
   if (!usedNames.has(name)) { usedNames.add(name); return name; }

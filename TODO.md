@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录 `1.0.2` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
+本文档记录 `1.0.3` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
 
 ## 1.0.1
 
@@ -32,8 +32,8 @@
 
 ### 下载能力
 
-- [ ] 支持文件名模板和日期目录。
-- [ ] 增加真正的下载任务队列和更详细的错误原因。
+- [x] 支持文件名模板和日期目录。
+- [x] 增加真正的下载任务队列和更详细的错误原因。
 
 ## 1.2.0
 
@@ -46,7 +46,7 @@
 
 ## English
 
-This document tracks `1.0.2` and future releases. Completed items use `[x]`.
+This document tracks `1.0.3` and future releases. Completed items use `[x]`.
 
 ### 1.0.1 core experience
 
@@ -69,8 +69,8 @@ This document tracks `1.0.2` and future releases. Completed items use `[x]`.
 
 ### 1.1.0 download improvements
 
-- [ ] Add filename templates and date-based folders.
-- [ ] Add a full download queue and more detailed error reporting.
+- [x] Add filename templates and date-based folders.
+- [x] Add a full download queue and more detailed error reporting.
 
 ### 1.2.0 local library
 

@@ -125,9 +125,14 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 .cancel-button:hover { background: #e2e7e9; }
 .retry-button { color: #d95437; background: #fff0eb; }
 .retry-button:hover { background: #ffe3da; }
-.zip-options { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
-.zip-options > label { display: flex; align-items: center; gap: 5px; color: #7c878f; font-size: 9px; }
+.zip-options { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.download-settings { min-width: 0; display: flex; align-items: flex-end; flex-wrap: wrap; gap: 7px; }
+.download-settings > label { display: flex; align-items: center; gap: 5px; color: #7c878f; font-size: 9px; }
 .zip-options select { height: 25px; padding: 0 5px; border: 1px solid #e5eaed; border-radius: 7px; outline: 0; color: #596670; background: #fff; font-size: 9px; }
+.filename-setting { min-width: 105px; }
+.filename-setting input { width: 105px; height: 25px; padding: 0 6px; border: 1px solid #e5eaed; border-radius: 7px; outline: 0; color: #596670; background: #fff; font-size: 9px; }
+.filename-setting input:focus, .zip-options select:focus { border-color: #f0a08d; box-shadow: 0 0 0 3px rgba(238, 104, 72, .1); }
+.date-folder-setting { white-space: nowrap; }
 .utility-actions { display: flex; gap: 4px; }
 .utility-actions button { padding: 4px 6px; border: 1px solid #e3e8ea; border-radius: 6px; color: #68747c; background: #fff; font-size: 8px; font-weight: 800; }
 .utility-actions button:hover { color: var(--accent); border-color: #f0b3a4; background: #fffaf8; }
