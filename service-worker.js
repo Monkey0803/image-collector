@@ -8,35 +8,54 @@ const FORMAT_EXTENSIONS = {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'downloadImages') {
-    downloadImages(message.images || [], Boolean(message.saveAs)).then((result) => sendResponse(result));
+    downloadImages(message.images || [], Boolean(message.saveAs), message.jobId).then((result) => sendResponse(result));
     return true;
   }
   if (message.type === 'downloadZip') {
-    downloadZip(message.images || [], Boolean(message.saveAs)).then((result) => sendResponse(result));
+    downloadZip(message.images || [], Boolean(message.saveAs), message.jobId).then((result) => sendResponse(result));
     return true;
   }
   return false;
 });
 
-async function downloadImages(images, saveAs) {
+async function downloadImages(images, saveAs, jobId) {
   const failed = [];
   let started = 0;
+  const total = images.length;
+  sendProgress(jobId, { phase: 'starting', completed: 0, total, failed: 0, percent: 0, detail: '准备提交下载任务' });
   for (const image of images) {
+    const index = started + failed.length;
+    sendProgress(jobId, {
+      phase: 'downloading', completed: index, total, failed: failed.length, percent: progressPercent(index, total),
+      detail: `正在提交 ${index + 1}/${total}：${normalizeName(image)}`
+    });
     try {
       await chrome.downloads.download({ url: image.url, filename: normalizeName(image), saveAs, conflictAction: 'uniquify' });
       started += 1;
     } catch (error) {
       failed.push({ url: image.url, error: error.message || '下载失败' });
     }
+    const completed = started + failed.length;
+    sendProgress(jobId, {
+      phase: 'downloading', completed, total, failed: failed.length, percent: progressPercent(completed, total),
+      detail: `已处理 ${completed}/${total} 张图片`
+    });
   }
+  sendProgress(jobId, { phase: 'complete', completed: total, total, failed: failed.length, percent: 100, detail: `下载任务已提交，成功 ${started} 张` });
   return { ok: started > 0, started, failed, error: started ? '' : '没有图片能够开始下载' };
 }
 
-async function downloadZip(images, saveAs) {
+async function downloadZip(images, saveAs, jobId) {
   const entries = [];
   const failed = [];
   const usedNames = new Set();
-  for (const image of images) {
+  const total = images.length;
+  sendProgress(jobId, { phase: 'starting', completed: 0, total, failed: 0, percent: 0, detail: '准备读取图片' });
+  for (const [index, image] of images.entries()) {
+    sendProgress(jobId, {
+      phase: 'reading', completed: index, total, failed: failed.length, percent: progressPercent(index, total),
+      detail: `正在读取 ${index + 1}/${total}：${normalizeName(image)}`
+    });
     try {
       const response = await fetch(image.url, { credentials: 'omit', redirect: 'follow' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -45,16 +64,34 @@ async function downloadZip(images, saveAs) {
     } catch (error) {
       failed.push({ url: image.url, error: error.message || '读取失败' });
     }
+    const completed = index + 1;
+    sendProgress(jobId, {
+      phase: 'reading', completed, total, failed: failed.length, percent: progressPercent(completed, total),
+      detail: `已读取 ${completed}/${total} 张图片`
+    });
   }
-  if (!entries.length) return { ok: false, failed, error: '图片无法读取，可能受跨域或防盗链限制' };
+  if (!entries.length) {
+    sendProgress(jobId, { phase: 'failed', completed: total, total, failed: failed.length, percent: 100, detail: '没有可加入 ZIP 的图片' });
+    return { ok: false, failed, error: '图片无法读取，可能受跨域或防盗链限制' };
+  }
   try {
+    sendProgress(jobId, { phase: 'compressing', completed: total, total, failed: failed.length, percent: 100, detail: `正在压缩 ${entries.length} 张图片` });
     const zip = makeZip(entries);
     const dataUrl = `data:application/zip;base64,${toBase64(zip)}`;
     await chrome.downloads.download({ url: dataUrl, filename: `image_${dateStamp()}.zip`, saveAs, conflictAction: 'uniquify' });
+    sendProgress(jobId, { phase: 'complete', completed: total, total, failed: failed.length, percent: 100, detail: `ZIP 已提交下载，共 ${entries.length} 张图片` });
     return { ok: true, started: 1, failed };
   } catch (error) {
+    sendProgress(jobId, { phase: 'failed', completed: total, total, failed: failed.length, percent: 100, detail: error.message || 'ZIP 下载失败' });
     return { ok: false, failed, error: error.message || 'ZIP 下载失败' };
   }
+}
+
+function progressPercent(completed, total) { return total ? Math.round((completed / total) * 100) : 0; }
+
+function sendProgress(jobId, progress) {
+  if (!jobId) return;
+  chrome.runtime.sendMessage({ type: 'downloadProgress', jobId, ...progress }).catch(() => {});
 }
 
 function normalizeName(image, contentType = '') {

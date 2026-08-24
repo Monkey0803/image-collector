@@ -71,6 +71,15 @@ h2 { font-size: 15px; letter-spacing: -.02em; }
 input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }
 .selection-summary { padding: 4px 8px; border-radius: 99px; color: #d95b3e; background: #fff0eb; font-size: 9px; font-weight: 800; }
 .result-count { color: var(--muted); font-size: 10px; font-weight: 700; }
+.results-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; margin-bottom: 10px; }
+.search-box, .sort-control { min-width: 0; display: flex; align-items: center; border: 1px solid #e5eaed; border-radius: 9px; color: #8a959d; background: #fff; }
+.search-box { gap: 5px; padding: 0 8px; }
+.search-box span { color: #a1abb2; font-size: 16px; line-height: 1; }
+.search-box input { width: 100%; min-width: 0; height: 30px; padding: 0; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 10px; }
+.search-box input::placeholder { color: #a8b0b6; }
+.search-box:focus-within, .sort-control:focus-within { border-color: #f0a08d; box-shadow: 0 0 0 3px rgba(238, 104, 72, .1); }
+.sort-control { gap: 4px; padding-left: 8px; font-size: 9px; white-space: nowrap; }
+.sort-control select { height: 30px; max-width: 102px; padding: 0 7px 0 0; border: 0; outline: 0; color: #56636d; background: transparent; font-size: 9px; }
 .image-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-height: 304px; overflow-y: auto; padding: 2px 2px 4px 1px; scrollbar-color: #d8dee2 transparent; }
 .image-card { position: relative; min-width: 0; padding: 6px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: 0 3px 10px rgba(25, 38, 48, .025); cursor: pointer; transition: transform .16s, border-color .16s, box-shadow .16s; }
 .image-card:hover { transform: translateY(-2px); border-color: #f2b09f; box-shadow: 0 9px 18px rgba(25, 38, 48, .09); }
@@ -99,6 +108,15 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 .save-option { display: flex; align-items: center; gap: 7px; color: #64707b; font-size: 11px; }
 .download-caption-note { color: #a1aab1; font-size: 9px; }
 .help { width: 14px; height: 14px; display: inline-grid; place-items: center; border: 1px solid #cbd1d6; border-radius: 50%; color: #89939c; font-size: 9px; }
+.download-progress { margin-top: 11px; padding: 9px 10px; border: 1px solid #f4d8d0; border-radius: 10px; background: #fffaf8; }
+.progress-heading, .progress-detail { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.progress-heading { color: #73564e; font-size: 10px; font-weight: 800; }
+.progress-heading strong { color: var(--accent); font-size: 10px; }
+.progress-track { height: 5px; overflow: hidden; margin-top: 7px; border-radius: 99px; background: #f1e2de; }
+.progress-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--accent); transition: width .2s ease; }
+.progress-detail { margin-top: 6px; color: #a18b85; font-size: 9px; }
+.retry-button { padding: 3px 6px; border: 0; border-radius: 5px; color: #d95437; background: #fff0eb; font-size: 9px; font-weight: 800; }
+.retry-button:hover { background: #ffe3da; }
 .download-actions { display: grid; grid-template-columns: 1fr 1.15fr; gap: 9px; margin-top: 11px; }
 .download-actions button { height: 40px; border-radius: 10px; font-size: 11px; font-weight: 800; }
 .secondary-button { border: 1px solid #dfe3e7; color: #5e6973; background: #fff; }
