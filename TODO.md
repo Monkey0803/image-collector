@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录 `1.0.2` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
+本文档记录 `1.3.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
 
 ## 1.0.1
 
@@ -32,21 +32,32 @@
 
 ### 下载能力
 
-- [ ] 支持文件名模板和日期目录。
-- [ ] 增加真正的下载任务队列和更详细的错误原因。
+- [x] 支持文件名模板和日期目录。
+- [x] 增加真正的下载任务队列和更详细的错误原因。
 
 ## 1.2.0
 
 ### 管理能力
 
-- [ ] 收藏图片和添加本地标签。
-- [ ] 保存最近扫描记录和下载记录。
-- [ ] 使用 IndexedDB 管理大量图片元数据。
-- [ ] 增加右键菜单：扫描当前页面、下载当前图片。
+- [x] 收藏图片和添加本地标签。
+- [x] 保存最近扫描记录和下载记录。
+- [x] 使用 IndexedDB 管理大量图片元数据。
+- [x] 增加右键菜单：扫描当前页面、下载当前图片、收藏当前图片。
+
+## 1.3.0
+
+### 体验和管理能力
+
+- [x] 增加大图预览、缩放和复制原图地址。
+- [x] 支持保存常用筛选条件和批量选择预设。
+- [x] 增加独立下载任务中心，支持暂停、继续和批量重试。
+- [x] 支持自定义图片集合和本地文件夹视图。
+- [x] 增加中英文界面切换。
+- [x] 支持导入和导出收藏、标签数据。
 
 ## English
 
-This document tracks `1.0.2` and future releases. Completed items use `[x]`.
+This document tracks `1.3.0` and future releases. Completed items use `[x]`.
 
 ### 1.0.1 core experience
 
@@ -69,12 +80,21 @@ This document tracks `1.0.2` and future releases. Completed items use `[x]`.
 
 ### 1.1.0 download improvements
 
-- [ ] Add filename templates and date-based folders.
-- [ ] Add a full download queue and more detailed error reporting.
+- [x] Add filename templates and date-based folders.
+- [x] Add a full download queue and more detailed error reporting.
 
 ### 1.2.0 local library
 
-- [ ] Add local favorites and tags.
-- [ ] Store recent scans and download history.
-- [ ] Use IndexedDB for larger metadata collections.
-- [ ] Add context-menu actions for scanning pages and downloading images.
+- [x] Add local favorites and tags.
+- [x] Store recent scans and download history.
+- [x] Use IndexedDB for larger metadata collections.
+- [x] Add context-menu actions for scanning pages, downloading images, and favoriting images.
+
+### 1.3.0 experience and management
+
+- [x] Add large-image preview, zoom, and original-URL copying.
+- [x] Save reusable filters and batch-selection presets.
+- [x] Add a dedicated download task center with pause, resume, and batch retry.
+- [x] Support custom image collections and local folder views.
+- [x] Add Chinese/English interface switching.
+- [x] Import and export favorites and tag data.

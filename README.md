@@ -33,6 +33,20 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - ZIP 可按网站、格式或网站/格式建立子目录
 - 可取消图片读取、ZIP 压缩和下载任务
 - 可将当前筛选结果导出为 JSON 或 CSV 清单
+- 支持自定义文件名模板，并可使用日期、域名、格式和尺寸变量
+- 支持按 `YYYY.MM.DD` 自动创建日期目录
+- 多个下载请求会进入后台队列，按顺序执行，避免任务互相干扰
+- 对登录限制、防盗链、网络错误和服务器错误显示更具体的失败原因
+- 使用 IndexedDB 保存本地图片素材、收藏、标签和历史记录
+- 支持素材库搜索、收藏筛选和标签添加/移除
+- 记录最近扫描页面以及图片/ZIP 下载活动
+- 提供右键扫描页面、下载图片和收藏图片操作
+- 点击缩略图打开大图预览，支持缩放、复制原图地址和新标签页打开
+- 支持保存筛选预设、选择预设和反选当前结果
+- 提供下载任务中心，可暂停、继续、取消和重试失败任务
+- 支持创建自定义素材集合，并按集合浏览本地图片
+- 支持中文/英文界面切换
+- 支持收藏、标签和素材集合数据的 JSON 导入/导出
 
 ### 安装方式
 
@@ -106,7 +120,51 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 点击“下载 ZIP”，会将选中的图片合并为一个 ZIP 文件。
 - 下载面板会显示当前任务进度；部分图片失败时，可以点击“重试失败项”。
 - ZIP 分组可以选择不分组、按网站、按格式或按网站/格式。
-- 下载任务进行中可以取消图片读取、ZIP 压缩或下载任务。
+- 下载任务进行中可以取消排队、图片读取、ZIP 压缩或下载任务。
+
+文件名模板默认是 `{name}`，支持以下变量：
+
+| 变量 | 含义 |
+| --- | --- |
+| `{name}` | 原始文件名，不含扩展名 |
+| `{filename}` | 原始文件名，包含扩展名 |
+| `{domain}` | 图片域名 |
+| `{format}` | 图片格式 |
+| `{width}` / `{height}` | 图片尺寸 |
+| `{date}` | 当前日期，格式为 `YYYY.MM.DD` |
+
+例如填写 `{domain}_{date}_{name}`，会生成类似 `example.com_2026.08.24_photo.jpg` 的文件名。开启“按日期建目录”后，普通下载会保存为 `2026.08.24/example.com_2026.08.24_photo.jpg`；ZIP 内的图片也会放入对应日期目录。未知变量会被忽略，文件名中的非法字符会自动替换为下划线。
+
+多个下载请求会由后台按提交顺序排队。当前任务完成或取消后，队列中的下一个任务会自动开始；排队中的任务也可以取消。
+
+当部分图片失败时，失败列表会保留图片地址、失败阶段和可读原因，例如“需要登录后才能访问”“服务器拒绝访问，可能存在防盗链”或“图片服务器暂时不可用”。
+
+#### 素材库和历史记录
+
+点击顶部的“素材库”可以查看保存在本机的图片：
+
+- 在图片卡片上点击星标即可收藏或取消收藏。
+- 素材库默认显示收藏图片，也可以切换为全部图片。
+- 可以搜索文件名、域名、格式、描述和标签。
+- 在素材卡片下方输入标签，点击 `+` 添加；点击已有标签可以移除。
+- “历史”视图会显示最近扫描页面、下载类型、数量、时间和结果状态。
+- 清空历史只会删除扫描/下载记录，不会删除收藏图片和标签。
+
+在网页上右键点击后，可以从 Image Collector 菜单中选择“扫描当前页面”“下载当前图片”或“收藏当前图片”。扫描操作会打开扩展弹窗并扫描当前页面；右键下载和收藏不需要先打开弹窗。
+
+#### 预览、预设和任务中心
+
+- 点击任意图片缩略图可打开大图预览；预览窗口支持 `25%` 到 `400%` 缩放、复制原图地址和新标签页打开。
+- 在筛选区域点击“保存筛选”可以保存当前尺寸、格式、搜索和排序条件；在选择区域可以保存当前图片选择结果。
+- “任务”视图会列出排队中、进行中、暂停、完成和失败的下载。进行中的任务支持暂停、继续和取消，失败或部分失败任务可以重新提交。
+- 任务列表和收藏数据均保存在浏览器本地，不会上传到服务器。
+
+#### 素材集合与数据迁移
+
+- 在“素材库”中点击“新建集合”创建本地图片集合，再通过每张卡片的集合下拉框归档图片。
+- “全部集合”和“未分类”可以快速切换本地文件夹视图。
+- “导出收藏数据”会生成包含收藏、标签和集合关系的 JSON；在另一台浏览器中使用“导入数据”可以合并恢复这些内容。
+- 顶部 `EN` / `中` 按钮可切换界面语言，语言偏好会保存在本机。
 
 ZIP 文件默认命名为：
 
@@ -132,6 +190,7 @@ image_2026.08.20.zip
 | `scripting` | 在当前页面执行图片扫描逻辑 |
 | `downloads` | 下载图片和 ZIP 文件 |
 | `storage` | 保存筛选条件和保存位置设置 |
+| `contextMenus` | 提供网页和图片右键菜单操作 |
 | `<all_urls>` | 支持扫描不同网站中的网页图片及图片地址 |
 
 所有图片筛选和列表处理都在浏览器本地完成。项目没有内置服务器，也不会主动上传网页内容、图片或用户设置。
@@ -164,6 +223,7 @@ download_image/
 ├── popup.html          # 扩展弹窗的页面结构
 ├── popup.css           # 弹窗 UI 样式、布局和交互状态
 ├── popup.js            # 图片扫描、筛选、分类、选择和下载请求
+├── library.js          # IndexedDB 素材库、收藏、标签和历史记录数据层
 ├── service-worker.js   # 后台下载任务和 ZIP 文件生成
 ├── icons/
 │   ├── icon.svg        # UI 使用的矢量图标
@@ -172,7 +232,7 @@ download_image/
 │   ├── icon-48.png     # 扩展管理页图标
 │   └── icon-128.png    # 扩展详情和安装页图标
 ├── LICENSE             # MIT 开源许可证
-├── TODO.md             # 1.0.2 已完成任务和后续路线图
+├── TODO.md             # 1.3.0 已完成任务和后续路线图
 └── README.md           # 中文和英文项目文档
 ```
 
@@ -246,6 +306,19 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Organize ZIP entries by hostname, format, or hostname and format
 - Cancel image reading, ZIP compression, and download tasks
 - Export current filtered results as JSON or CSV
+- Store local image metadata, favorites, tags, scan history, and download history in IndexedDB
+- Browse a local library with favorite filtering, search, and tag editing
+- Provide context-menu actions for scanning pages, downloading images, and favoriting images
+- Open a large-image preview with zoom, original-URL copying, and new-tab opening
+- Save reusable filter presets and selection presets, and invert the current selection
+- Use a download task center to pause, resume, cancel, and retry tasks
+- Create custom local collections and browse images by collection
+- Switch the interface between Chinese and English
+- Import or export favorites, tags, and collection relationships as JSON
+- Customize filenames with template variables for names, domains, formats, dimensions, and dates
+- Create `YYYY.MM.DD` date folders for regular downloads and ZIP entries
+- Queue multiple download requests and run them in submission order
+- Report clearer causes for authentication, anti-hotlinking, network, and server failures
 
 ### Installation
 
@@ -315,7 +388,51 @@ Duplicate results are filtered automatically. Same-origin images use a small pix
 - Click **Download ZIP** to combine selected images into one ZIP archive.
 - The download panel shows task progress. If some images fail, click **Retry failed items** to retry them with the same download mode.
 - ZIP grouping can be flat, by hostname, by format, or by hostname and format.
-- Active image reading, ZIP compression, and download tasks can be cancelled.
+- Queued, active image reading, ZIP compression, and download tasks can be cancelled.
+
+The default filename template is `{name}`. Supported variables are:
+
+| Variable | Meaning |
+| --- | --- |
+| `{name}` | Original filename without its extension |
+| `{filename}` | Original filename including its extension |
+| `{domain}` | Image hostname |
+| `{format}` | Image format |
+| `{width}` / `{height}` | Image dimensions |
+| `{date}` | Current date in `YYYY.MM.DD` format |
+
+For example, `{domain}_{date}_{name}` can produce `example.com_2026.08.24_photo.jpg`. When **Create date folder** is enabled, regular downloads use a path such as `2026.08.24/example.com_2026.08.24_photo.jpg`, and ZIP entries use the same date folder. Unknown variables are omitted and illegal filename characters are replaced with underscores.
+
+Multiple download requests are processed by a background queue in submission order. The next task starts automatically when the current task completes or is cancelled, and queued tasks can also be cancelled.
+
+When some images fail, the failure list keeps the URL, failure stage, and a readable reason such as “login required”, “access denied or anti-hotlink protection”, or “image server temporarily unavailable”.
+
+#### Local library and history
+
+Click **Library** at the top to browse images saved locally:
+
+- Click the star on an image card to favorite or unfavorite it.
+- The library defaults to favorites and can be switched to all saved images.
+- Search filenames, hostnames, formats, descriptions, and tags.
+- Type a tag below a library card and click `+` to add it; click an existing tag to remove it.
+- The **History** view shows recent scans and image/ZIP downloads with counts, times, and statuses.
+- Clearing history removes scan/download activity only; favorites and tags are preserved.
+
+On a webpage, right-click to open the Image Collector menu. It provides **Scan current page**, **Download current image**, and **Favorite current image**. The scan action opens the extension popup and scans the current page; context downloads and favorites work without opening the popup first.
+
+#### Preview, presets, and task center
+
+- Click any thumbnail to open a large preview. The preview supports zoom from `25%` to `400%`, copying the original URL, and opening it in a new tab.
+- Click **Save filter** to store the current dimension, format, search, and sort settings. The selection toolbar can store the current image selection as a reusable preset.
+- The **Tasks** view lists queued, running, paused, completed, and failed downloads. Active tasks can be paused, resumed, or cancelled; failed and partial tasks can be submitted again.
+- Task records and library data stay in the browser and are not uploaded to a server.
+
+#### Collections and data migration
+
+- Click **New collection** in the library to create a local image collection, then assign images with the collection selector on each card.
+- Use **All collections** or **Uncategorized** to browse the local folder-style view.
+- **Export library** creates a JSON file containing favorites, tags, and collection relationships. **Import data** merges the file into another browser profile.
+- Use the `EN` / `中` button in the header to switch languages. The preference is stored locally.
 
 The default ZIP filename is generated in this format:
 
@@ -339,6 +456,7 @@ The setting is stored locally and reused the next time the extension is opened.
 | `scripting` | Run the image scanning logic in the current page |
 | `downloads` | Download image files and ZIP archives |
 | `storage` | Store filter and save-location preferences |
+| `contextMenus` | Provide page and image context-menu actions |
 | `<all_urls>` | Support image scanning across different websites and image hosts |
 
 Image filtering and list processing happen locally in the browser. The project does not include a backend server and does not intentionally upload webpage content, images, or user preferences.
@@ -371,6 +489,7 @@ download_image/
 ├── popup.html          # Popup page structure
 ├── popup.css           # Popup layout, styling, and interaction states
 ├── popup.js            # Scanning, filtering, categorization, selection, and messages
+├── library.js          # IndexedDB data layer for metadata, favorites, tags, and history
 ├── service-worker.js   # Background downloads and ZIP generation
 ├── icons/
 │   ├── icon.svg        # Vector icon used by the UI
@@ -379,7 +498,7 @@ download_image/
 │   ├── icon-48.png     # Extensions management icon
 │   └── icon-128.png    # Extension detail and installation icon
 ├── LICENSE             # MIT open-source license
-├── TODO.md             # 1.0.2 checklist and future roadmap
+├── TODO.md             # 1.3.0 checklist and future roadmap
 └── README.md           # Chinese and English documentation
 ```
 
