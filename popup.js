@@ -9,7 +9,11 @@ const state = {
   scanId: 0,
   searchQuery: '',
   sort: 'page',
+  originalOnly: false,
+  zipLayout: 'flat',
   duplicateCount: 0,
+  dynamicScanPasses: 0,
+  dynamicScanTimer: null,
   filterValues: {
     width: { min: null, max: null },
     height: { min: null, max: null }
@@ -17,7 +21,8 @@ const state = {
   toastTimer: null,
   downloadJobId: null,
   retryImages: [],
-  retryAsZip: false
+  retryAsZip: false,
+  cancelled: false
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -29,11 +34,12 @@ const els = {
   widthValue: $('#widthValue'), heightValue: $('#heightValue'), widthTrack: $('#widthTrack'), heightTrack: $('#heightTrack'),
   clearFilters: $('#clearFilters'), selectAll: $('#selectAll'), resultCount: $('#resultCount'),
   selectedSummary: $('#selectedSummary'), searchInput: $('#searchInput'), sortSelect: $('#sortSelect'),
+  originalOnly: $('#originalOnly'), zipLayout: $('#zipLayout'), exportJson: $('#exportJson'), exportCsv: $('#exportCsv'),
   formatTabs: [...document.querySelectorAll('[data-format]')],
   grid: $('#imageGrid'), empty: $('#emptyState'), loading: $('#loadingState'), error: $('#errorState'),
   saveAs: $('#saveAs'), download: $('#downloadButton'), zip: $('#zipButton'), selectedCount: $('#selectedCount'),
   downloadProgress: $('#downloadProgress'), progressLabel: $('#progressLabel'), progressValue: $('#progressValue'),
-  progressBar: $('#progressBar'), progressDetail: $('#progressDetail'), retryButton: $('#retryButton'),
+  progressBar: $('#progressBar'), progressDetail: $('#progressDetail'), cancelButton: $('#cancelButton'), retryButton: $('#retryButton'),
   retryCount: $('#retryCount'), toast: $('#toast')
 };
 
@@ -44,11 +50,13 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 
 async function init() {
-  const saved = await chrome.storage.local.get({ filters: {}, saveAs: true, searchQuery: '', sort: 'page' });
+  const saved = await chrome.storage.local.get({ filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, zipLayout: 'flat' });
   const savedFilters = saved.filters && typeof saved.filters === 'object' ? saved.filters : {};
   state.saveAs = typeof saved.saveAs === 'boolean' ? saved.saveAs : true;
   state.searchQuery = typeof saved.searchQuery === 'string' ? saved.searchQuery : '';
   state.sort = ['page', 'width-desc', 'height-desc', 'area-desc', 'name-asc'].includes(saved.sort) ? saved.sort : 'page';
+  state.originalOnly = Boolean(saved.originalOnly);
+  state.zipLayout = ['flat', 'domain', 'format', 'domain-format'].includes(saved.zipLayout) ? saved.zipLayout : 'flat';
   state.filterValues = {
     width: { min: normalizeLimit(savedFilters.minWidth), max: normalizeLimit(savedFilters.maxWidth) },
     height: { min: normalizeLimit(savedFilters.minHeight), max: normalizeLimit(savedFilters.maxHeight) }
@@ -60,6 +68,8 @@ async function init() {
   els.saveAs.checked = state.saveAs;
   els.searchInput.value = state.searchQuery;
   els.sortSelect.value = state.sort;
+  els.originalOnly.checked = state.originalOnly;
+  els.zipLayout.value = state.zipLayout;
   bindEvents();
   await scanPage();
 }
@@ -73,12 +83,14 @@ function bindEvents() {
     els.maxHeight.value = els.maxHeight.max;
     els.searchInput.value = '';
     els.sortSelect.value = 'page';
+    els.originalOnly.checked = false;
     state.filterValues = {
       width: { min: null, max: null },
       height: { min: null, max: null }
     };
     state.searchQuery = '';
     state.sort = 'page';
+    state.originalOnly = false;
     state.format = 'all';
     applyFilters();
   });
@@ -96,6 +108,15 @@ function bindEvents() {
     chrome.storage.local.set({ sort: state.sort });
     applyFilters();
   });
+  els.originalOnly.addEventListener('change', () => {
+    state.originalOnly = els.originalOnly.checked;
+    chrome.storage.local.set({ originalOnly: state.originalOnly });
+    applyFilters();
+  });
+  els.zipLayout.addEventListener('change', () => {
+    state.zipLayout = els.zipLayout.value;
+    chrome.storage.local.set({ zipLayout: state.zipLayout });
+  });
   els.formatTabs.forEach((tab) => tab.addEventListener('click', () => {
     state.format = tab.dataset.format || 'all';
     applyFilters();
@@ -112,26 +133,44 @@ function bindEvents() {
   els.retryButton.addEventListener('click', () => {
     if (state.retryImages.length) downloadImages([...state.retryImages], state.retryAsZip);
   });
+  els.cancelButton.addEventListener('click', async () => {
+    if (!state.downloadJobId) return;
+    state.cancelled = true;
+    els.cancelButton.hidden = true;
+    try { await chrome.runtime.sendMessage({ type: 'cancelDownload', jobId: state.downloadJobId }); } catch { /* The worker may finish at the same time. */ }
+    updateDownloadProgress({ phase: 'cancelled', percent: 100, detail: '正在取消任务…' });
+  });
+  els.exportJson.addEventListener('click', () => exportImages('json'));
+  els.exportCsv.addEventListener('click', () => exportImages('csv'));
   els.download.addEventListener('click', () => downloadSelected(false));
   els.zip.addEventListener('click', () => downloadSelected(true));
 }
 
-async function scanPage() {
+async function scanPage(options = {}) {
+  const quiet = Boolean(options?.quiet);
+  if (!quiet && state.dynamicScanTimer) {
+    clearTimeout(state.dynamicScanTimer);
+    state.dynamicScanTimer = null;
+    state.dynamicScanPasses = 0;
+  }
   const scanId = ++state.scanId;
-  setLoading(true);
+  if (!quiet) setLoading(true);
   els.refresh.disabled = true;
-  els.scanStatus.textContent = '扫描中';
+  els.scanStatus.textContent = quiet ? '更新中' : '扫描中';
   els.error.hidden = true;
-  state.images = [];
-  state.dimensionFiltered = [];
-  state.filtered = [];
-  state.format = 'all';
-  state.selected.clear();
-  state.duplicateCount = 0;
-  state.retryImages = [];
-  updateRetryUI();
-  renderFormatTabs();
-  render();
+  const previousSelectedUrls = new Set(selectedImages().map((image) => image.url));
+  if (!quiet) {
+    state.images = [];
+    state.dimensionFiltered = [];
+    state.filtered = [];
+    state.format = 'all';
+    state.selected.clear();
+    state.duplicateCount = 0;
+    state.retryImages = [];
+    updateRetryUI();
+    renderFormatTabs();
+    render();
+  }
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const tab = tabs[0];
@@ -141,37 +180,85 @@ async function scanPage() {
     els.pageTitle.textContent = tab.title || '当前页面';
     els.pageUrl.textContent = tab.url || '';
     els.pageIcon.textContent = getDomainLetter(tab.url);
-    const result = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: collectPageImages });
+    const results = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: collectPageImages });
     if (scanId !== state.scanId) return;
-    const payload = result[0]?.result || {};
-    const rawImages = Array.isArray(payload) ? payload : payload.images || [];
-    state.duplicateCount = Array.isArray(payload) ? 0 : Number(payload.duplicateCount || 0);
-    state.images = rawImages.map((image, index) => ({
+    const merged = new Map();
+    let duplicateCount = 0;
+    for (const result of results || []) {
+      const payload = result?.result || {};
+      const rawImages = Array.isArray(payload) ? payload : payload.images || [];
+      duplicateCount += Array.isArray(payload) ? 0 : Number(payload.duplicateCount || 0);
+      for (const image of rawImages) {
+        const existing = merged.get(image.url);
+        if (existing) {
+          duplicateCount += 1;
+          if (Boolean(image.original) && !Boolean(existing.original)) merged.set(image.url, image);
+        } else {
+          merged.set(image.url, image);
+        }
+      }
+    }
+    state.duplicateCount = duplicateCount;
+    state.images = [...merged.values()].map((image, index) => ({
       ...image,
       format: image.format || 'other',
       id: `${index}-${image.url}`,
       index
     }));
+    state.selected.clear();
+    state.images.forEach((image) => { if (previousSelectedUrls.has(image.url)) state.selected.add(image.id); });
     els.scanStatus.textContent = `${state.images.length} 张图片${state.duplicateCount ? ` · 去重 ${state.duplicateCount}` : ''}`;
     updateRangeLimits();
-    state.selected.clear();
     applyFilters();
+    loadImageMetadata(scanId);
   } catch (error) {
     if (scanId !== state.scanId) return;
-    state.images = [];
-    state.dimensionFiltered = [];
-    state.filtered = [];
-    state.selected.clear();
-    render();
-    els.error.hidden = false;
-    els.error.textContent = `扫描失败：${error.message || '当前页面不允许扩展访问，请切换到普通网页后重试。'}`;
+    if (!quiet) {
+      state.images = [];
+      state.dimensionFiltered = [];
+      state.filtered = [];
+      state.selected.clear();
+      render();
+      els.error.hidden = false;
+      els.error.textContent = `扫描失败：${error.message || '当前页面不允许扩展访问，请切换到普通网页后重试。'}`;
+    }
     els.scanStatus.textContent = '扫描失败';
   } finally {
     if (scanId === state.scanId) {
       setLoading(false);
       els.refresh.disabled = false;
       render();
+      scheduleDynamicRescan();
     }
+  }
+}
+
+function scheduleDynamicRescan() {
+  if (state.dynamicScanPasses >= 2 || state.dynamicScanTimer) return;
+  const delay = state.dynamicScanPasses === 0 ? 1200 : 3000;
+  state.dynamicScanPasses += 1;
+  state.dynamicScanTimer = setTimeout(() => {
+    state.dynamicScanTimer = null;
+    scanPage({ quiet: true });
+  }, delay);
+}
+
+async function loadImageMetadata(scanId) {
+  const images = state.images.slice(0, 300);
+  if (!images.length) return;
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'inspectImages', images });
+    if (scanId !== state.scanId || !Array.isArray(response?.items)) return;
+    const metadata = new Map(response.items.map((item) => [item.url, item]));
+    state.images.forEach((image) => {
+      const item = metadata.get(image.url);
+      if (!item) return;
+      image.size = Number(item.size) || 0;
+      image.mime = item.mime || '';
+    });
+    applyFilters();
+  } catch {
+    // Metadata is optional; image discovery should remain usable when HEAD is blocked.
   }
 }
 
@@ -180,8 +267,30 @@ async function collectPageImages() {
   const seenUrls = new Map();
   const originalAttributes = [
     'data-original', 'data-original-src', 'data-full', 'data-full-src', 'data-large',
-    'data-large-src', 'data-zoom', 'data-zoom-image', 'data-lazy-src', 'data-src'
+    'data-large-src', 'data-zoom', 'data-zoom-image', 'data-fallback-src', 'data-image-url',
+    'data-lazy', 'data-lazy-src', 'data-original-url', 'data-src'
   ];
+
+  const waitForPageToSettle = () => new Promise((resolve) => {
+    const root = document.documentElement;
+    if (!root || typeof MutationObserver === 'undefined') { setTimeout(resolve, 250); return; }
+    let timer = setTimeout(done, 450);
+    const observer = new MutationObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(done, 350);
+    });
+    observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: [
+      'src', 'srcset', 'poster', 'data-src', 'data-srcset', 'data-original', 'data-lazy-src', 'style', 'class'
+    ] });
+    function done() {
+      observer.disconnect();
+      clearTimeout(timer);
+      resolve();
+    }
+    setTimeout(done, 1800);
+  });
+
+  await waitForPageToSettle();
 
   const formatFromUrl = (url) => {
     let parsed;
@@ -219,6 +328,7 @@ async function collectPageImages() {
       height: Math.round(height || 0),
       source,
       alt,
+      frameUrl: location.href,
       format: formatFromUrl(url),
       original: Boolean(options.original),
       quality: Number(options.quality || 0),
@@ -255,12 +365,14 @@ async function collectPageImages() {
     image.closest('picture')?.querySelectorAll('source[srcset]').forEach((source) => {
       parseSrcset(source.getAttribute('srcset')).forEach((candidate) => push(candidate.rawUrl, 7000 + candidate.widthHint / 100, true, candidate.widthHint));
     });
-    parseSrcset(image.getAttribute('srcset') || image.srcset).forEach((candidate) => {
-      push(candidate.rawUrl, 6500 + candidate.widthHint / 100, false, candidate.widthHint);
+    [image.getAttribute('srcset'), image.srcset, image.getAttribute('data-srcset')].forEach((srcset) => {
+      parseSrcset(srcset).forEach((candidate) => {
+        push(candidate.rawUrl, 6500 + candidate.widthHint / 100, false, candidate.widthHint);
+      });
     });
     push(image.currentSrc, 6000, false);
     push(image.getAttribute('src'), 5000, false);
-    ['data-lazy-src', 'data-src'].forEach((attribute) => push(image.getAttribute(attribute), 4500, false));
+    ['data-lazy-src', 'data-src', 'data-fallback-src'].forEach((attribute) => push(image.getAttribute(attribute), 4500, false));
     candidates.sort((left, right) => right.quality - left.quality || right.widthHint - left.widthHint);
     return candidates[0] || null;
   };
@@ -311,6 +423,16 @@ async function collectPageImages() {
       element: image
     });
   }
+  for (const video of document.querySelectorAll('video[poster]')) {
+    const rect = video.getBoundingClientRect();
+    add(video.getAttribute('poster'), video.videoWidth || rect.width, video.videoHeight || rect.height, 'VIDEO', '视频封面', { quality: 5500 });
+  }
+  for (const object of document.querySelectorAll('object[data]')) {
+    const url = normalizeUrl(object.getAttribute('data'));
+    if (!url || !imageLikeUrl(url)) continue;
+    const rect = object.getBoundingClientRect();
+    add(url, rect.width, rect.height, 'OBJECT', '嵌入图片', { quality: 4000 });
+  }
   for (const element of document.querySelectorAll('*')) {
     const background = getComputedStyle(element).backgroundImage || '';
     const matches = background.matchAll(/url\((?:"|')?(.*?)(?:"|')?\)/g);
@@ -350,10 +472,11 @@ async function collectPageImages() {
 function applyFilters() {
   const minWidth = state.filterValues.width.min, maxWidth = state.filterValues.width.max;
   const minHeight = state.filterValues.height.min, maxHeight = state.filterValues.height.max;
-  state.dimensionFiltered = state.images.filter((image) =>
+  const dimensionMatched = state.images.filter((image) =>
     (minWidth === null || image.width >= minWidth) && (maxWidth === null || image.width <= maxWidth) &&
     (minHeight === null || image.height >= minHeight) && (maxHeight === null || image.height <= maxHeight)
   );
+  state.dimensionFiltered = dimensionMatched.filter((image) => !state.originalOnly || image.original);
   const formatFiltered = state.format === 'all'
     ? state.dimensionFiltered
     : state.dimensionFiltered.filter((image) => formatCategory(image.format) === state.format);
@@ -362,7 +485,7 @@ function applyFilters() {
     if (!query) return true;
     let hostname = '';
     try { hostname = new URL(image.url).hostname; } catch { /* Keep URL search available. */ }
-    return [fileName(image.url), image.url, hostname, image.alt, image.format, image.source]
+    return [fileName(image.url), image.url, hostname, image.frameUrl, image.alt, image.format, image.source, image.original ? '原图 original' : '']
       .join(' ').toLowerCase().includes(query);
   }));
   chrome.storage.local.set({ filters: {
@@ -514,9 +637,11 @@ function createCard(image) {
   const size = document.createElement('span'); size.className = 'card-size'; size.textContent = image.width && image.height ? `${image.width} × ${image.height}` : '尺寸未知';
   const sizeRow = document.createElement('div'); sizeRow.className = 'card-size-row';
   const format = document.createElement('span'); format.className = 'format-badge'; format.textContent = image.original ? `${formatLabel(image.format)} · 原图` : formatLabel(image.format);
+  const info = document.createElement('span'); info.className = 'card-info'; info.textContent = image.size ? formatBytes(image.size) : image.mime ? image.mime.replace(/^image\//, '') : '';
+  info.title = image.mime ? image.mime : '';
   const name = document.createElement('span'); name.className = 'card-name'; name.textContent = fileName(image.url); name.title = image.url;
   sizeRow.append(size, format);
-  meta.append(sizeRow, name);
+  meta.append(sizeRow, info, name);
   const single = document.createElement('button'); single.type = 'button'; single.className = 'single-download'; single.title = '下载这张图片'; single.setAttribute('aria-label', '下载这张图片'); single.textContent = '↓';
   single.addEventListener('click', (event) => { event.stopPropagation(); downloadImages([image], false); });
   card.append(checkbox, wrap, meta, single);
@@ -533,17 +658,23 @@ async function downloadImages(images, asZip) {
   state.downloadJobId = jobId;
   state.retryImages = [];
   state.retryAsZip = asZip;
+  state.cancelled = false;
   updateRetryUI();
   els.download.disabled = true;
   els.zip.disabled = true;
   updateDownloadProgress({ phase: 'starting', completed: 0, total: images.length, failed: 0, percent: 0, detail: asZip ? '准备生成 ZIP…' : '准备下载图片…' });
   try {
-    const response = await chrome.runtime.sendMessage({ type: asZip ? 'downloadZip' : 'downloadImages', images, saveAs: state.saveAs, jobId });
+    const response = await chrome.runtime.sendMessage({ type: asZip ? 'downloadZip' : 'downloadImages', images, saveAs: state.saveAs, zipLayout: state.zipLayout, jobId });
     const failed = Array.isArray(response?.failed) ? response.failed : [];
     const byUrl = new Map(images.map((image) => [image.url, image]));
     state.retryImages = failed.map((item) => byUrl.get(item.url)).filter(Boolean);
     state.retryAsZip = asZip;
     updateRetryUI();
+    if (response?.cancelled) {
+      updateDownloadProgress({ phase: 'cancelled', completed: images.length, total: images.length, failed: state.retryImages.length, percent: 100, detail: '任务已取消' });
+      showToast('下载任务已取消');
+      return;
+    }
     if (!response?.ok) throw new Error(response?.error || '下载失败');
     if (failed.length) showToast(`已开始下载，${failed.length} 张图片失败，可点击重试`);
     else showToast(asZip ? 'ZIP 已开始下载' : '下载已开始');
@@ -562,14 +693,58 @@ function updateDownloadProgress(progress) {
   const percent = Math.max(0, Math.min(100, Number(progress.percent) || 0));
   els.progressBar.style.width = `${percent}%`;
   els.progressValue.textContent = `${percent}%`;
-  els.progressLabel.textContent = progress.phase === 'compressing' ? '正在压缩' : progress.phase === 'failed' ? '任务失败' : progress.phase === 'complete' ? '任务完成' : '下载进度';
+  els.progressLabel.textContent = progress.phase === 'compressing' ? '正在压缩' : progress.phase === 'failed' ? '任务失败' : progress.phase === 'cancelled' ? '任务已取消' : progress.phase === 'complete' ? '任务完成' : '下载进度';
   els.progressDetail.textContent = progress.detail || `已处理 ${progress.completed || 0}/${progress.total || 0}`;
+  els.cancelButton.hidden = ['complete', 'failed', 'cancelled'].includes(progress.phase);
 }
 
 function updateRetryUI() {
   const count = state.retryImages.length;
   els.retryCount.textContent = count;
   els.retryButton.hidden = count === 0;
+}
+
+function exportImages(type) {
+  if (!state.filtered.length) {
+    showToast('当前没有可导出的图片');
+    return;
+  }
+  const records = state.filtered.map((image) => ({
+    name: fileName(image.url), url: image.url, width: image.width || 0, height: image.height || 0,
+    format: image.format || 'other', mime: image.mime || '', size: image.size || 0,
+    source: image.source || '', frameUrl: image.frameUrl || ''
+  }));
+  const isJson = type === 'json';
+  const content = isJson ? JSON.stringify(records, null, 2) : toCsv(records);
+  const blob = new Blob([content], { type: isJson ? 'application/json;charset=utf-8' : 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  chrome.downloads.download({
+    url,
+    filename: `image-list-${dateStamp()}.${isJson ? 'json' : 'csv'}`,
+    saveAs: state.saveAs,
+    conflictAction: 'uniquify'
+  }).then(() => showToast(`${isJson ? 'JSON' : 'CSV'} 清单已开始下载`)).catch((error) => showToast(error.message || '清单导出失败'));
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+function toCsv(records) {
+  const headers = ['name', 'url', 'width', 'height', 'format', 'mime', 'size', 'source', 'frameUrl'];
+  return [headers, ...records.map((record) => headers.map((header) => record[header] ?? ''))]
+    .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+}
+
+function formatBytes(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function dateStamp() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${now.getFullYear()}.${pad(now.getMonth() + 1)}.${pad(now.getDate())}`;
 }
 
 function setLoading(loading) { els.loading.hidden = !loading; if (loading) { els.grid.replaceChildren(); els.empty.hidden = true; } }

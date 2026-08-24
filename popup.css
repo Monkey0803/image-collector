@@ -64,6 +64,8 @@ h2 { font-size: 15px; letter-spacing: -.02em; }
 .format-tab:hover { color: #43505a; background: rgba(255,255,255,.65); }
 .format-tab.active { color: #fff; background: var(--accent); box-shadow: 0 4px 9px rgba(238, 104, 72, .2); }
 .format-tab.active strong { color: rgba(255,255,255,.82); }
+.original-filter { display: flex; align-items: center; gap: 7px; margin-top: 12px; color: #5d6973; font-size: 10px; font-weight: 800; }
+.original-filter small { margin-left: auto; color: #a1aab1; font-size: 9px; font-weight: 500; }
 .results-section { margin-top: 19px; }
 .results-heading { margin-bottom: 11px; }
 .results-title { display: flex; align-items: center; gap: 9px; }
@@ -92,6 +94,8 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 .card-size-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-width: 0; }
 .card-size { display: block; color: var(--ink); font-size: 10px; font-weight: 800; }
 .format-badge { flex: 0 0 auto; padding: 2px 4px; border-radius: 4px; color: #8b969d; background: #f0f3f4; font-size: 7px; font-weight: 800; letter-spacing: .03em; }
+.card-info { display: block; min-height: 11px; overflow: hidden; color: #a0aab1; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.card-info:empty { display: none; }
 .card-name { display: block; overflow: hidden; margin-top: 3px; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .single-download { position: absolute; right: 7px; bottom: 7px; width: 24px; height: 24px; padding: 0; border: 1px solid #e9edef; border-radius: 7px; color: #7b858e; background: rgba(255,255,255,.94); font-size: 14px; transition: color .15s, background .15s; }
 .single-download:hover { color: var(--accent); background: #fff0eb; }
@@ -115,8 +119,18 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 .progress-track { height: 5px; overflow: hidden; margin-top: 7px; border-radius: 99px; background: #f1e2de; }
 .progress-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--accent); transition: width .2s ease; }
 .progress-detail { margin-top: 6px; color: #a18b85; font-size: 9px; }
-.retry-button { padding: 3px 6px; border: 0; border-radius: 5px; color: #d95437; background: #fff0eb; font-size: 9px; font-weight: 800; }
+.progress-actions { display: flex; align-items: center; gap: 5px; }
+.cancel-button, .retry-button { padding: 3px 6px; border: 0; border-radius: 5px; font-size: 9px; font-weight: 800; }
+.cancel-button { color: #6e7a83; background: #eef1f2; }
+.cancel-button:hover { background: #e2e7e9; }
+.retry-button { color: #d95437; background: #fff0eb; }
 .retry-button:hover { background: #ffe3da; }
+.zip-options { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.zip-options > label { display: flex; align-items: center; gap: 5px; color: #7c878f; font-size: 9px; }
+.zip-options select { height: 25px; padding: 0 5px; border: 1px solid #e5eaed; border-radius: 7px; outline: 0; color: #596670; background: #fff; font-size: 9px; }
+.utility-actions { display: flex; gap: 4px; }
+.utility-actions button { padding: 4px 6px; border: 1px solid #e3e8ea; border-radius: 6px; color: #68747c; background: #fff; font-size: 8px; font-weight: 800; }
+.utility-actions button:hover { color: var(--accent); border-color: #f0b3a4; background: #fffaf8; }
 .download-actions { display: grid; grid-template-columns: 1fr 1.15fr; gap: 9px; margin-top: 11px; }
 .download-actions button { height: 40px; border-radius: 10px; font-size: 11px; font-weight: 800; }
 .secondary-button { border: 1px solid #dfe3e7; color: #5e6973; background: #fff; }
