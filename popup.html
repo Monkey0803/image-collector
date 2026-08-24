@@ -34,6 +34,7 @@
         <button id="libraryViewButton" class="view-tab" type="button" aria-selected="false">素材库 <span id="favoriteCount">0</span></button>
         <button id="historyViewButton" class="view-tab" type="button" aria-selected="false">历史</button>
         <button id="taskViewButton" class="view-tab" type="button" aria-selected="false">任务</button>
+        <button id="settingsViewButton" class="view-tab" type="button" aria-selected="false">设置</button>
       </nav>
 
       <div id="pageView">
@@ -77,6 +78,10 @@
           </div>
         </div>
         <label class="original-filter"><input id="originalOnly" type="checkbox" /><span>仅显示原图候选</span><small>优先使用页面提供的高清地址</small></label>
+        <div class="scan-options">
+          <label><span>扫描上限</span><select id="scanLimit" aria-label="最大扫描图片数量"><option value="200">200 张</option><option value="500" selected>500 张</option><option value="1000">1000 张</option><option value="0">不限</option></select></label>
+          <label><input id="autoScroll" type="checkbox" /><span>自动滚动加载懒加载图片</span></label>
+        </div>
       </section>
 
       <section class="results-section">
@@ -188,6 +193,16 @@
           <button id="importLibrary" class="subtle-button" type="button">导入数据</button>
           <input id="importLibraryFile" type="file" accept="application/json,.json" hidden />
         </div>
+        <div id="libraryBatchToolbar" class="library-batch-toolbar" hidden>
+          <label><input id="selectAllLibrary" type="checkbox" /><span>全选</span></label><span id="librarySelectedSummary">已选 0</span>
+          <button id="bulkFavorite" class="subtle-button" type="button">批量收藏</button><button id="bulkTag" class="subtle-button" type="button">添加标签</button><button id="bulkCollection" class="subtle-button" type="button">归档到集合</button><button id="bulkDelete" class="subtle-button danger" type="button">删除</button>
+        </div>
+        <div class="library-filter-row">
+          <select id="libraryFormat" aria-label="按格式筛选"><option value="all">全部格式</option><option value="jpeg">JPEG</option><option value="png">PNG</option><option value="webp">WEBP</option><option value="avif">AVIF</option><option value="other">其它</option></select>
+          <input id="libraryMinWidth" type="number" min="0" step="10" placeholder="最小宽度" aria-label="素材库最小宽度" />
+          <input id="libraryMinHeight" type="number" min="0" step="10" placeholder="最小高度" aria-label="素材库最小高度" />
+          <select id="librarySort" aria-label="素材库排序"><option value="updated">最近更新</option><option value="width">宽度</option><option value="height">高度</option><option value="size">文件大小</option></select>
+        </div>
         <p id="librarySummary" class="library-summary">正在读取素材库…</p>
         <div id="libraryGrid" class="image-grid library-grid"></div>
         <div id="libraryEmpty" class="empty-state" hidden>
@@ -234,6 +249,12 @@
           <strong>暂时没有下载任务</strong>
           <span>发起图片或 ZIP 下载后，任务会显示在这里。</span>
         </div>
+      </section>
+      <section id="settingsView" class="history-view settings-view" hidden aria-label="扩展设置">
+        <div class="section-heading"><div><p class="eyebrow">PREFERENCES</p><h2>设置与存储</h2></div><button id="refreshStorage" class="text-button" type="button">刷新</button></div>
+        <div id="storageStats" class="storage-stats">正在读取本地存储…</div>
+        <div class="settings-actions"><button id="clearLibrary" class="subtle-button danger" type="button">清空素材库</button><button id="resetSettings" class="subtle-button" type="button">重置设置</button></div>
+        <p class="settings-note">清空素材库会删除图片、收藏、标签和集合，但不会影响当前网页。</p>
       </section>
       <div id="previewModal" class="preview-modal" hidden role="dialog" aria-modal="true" aria-labelledby="previewTitle">
         <div class="preview-backdrop" data-close-preview></div>

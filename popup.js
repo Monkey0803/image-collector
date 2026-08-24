@@ -20,6 +20,8 @@ const state = {
   libraryResults: [],
   duplicateCount: 0,
   dynamicScanPasses: 0,
+  scanLimit: 500,
+  autoScroll: false,
   dynamicScanTimer: null,
   filterValues: {
     width: { min: null, max: null },
@@ -37,7 +39,8 @@ const state = {
   collections: [],
   preview: null,
   previewZoom: 1,
-  taskRecords: []
+  taskRecords: [],
+  librarySelected: new Set(), libraryFormat: 'all', libraryMinWidth: '', libraryMinHeight: '', librarySort: 'updated', storageStats: null
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -50,12 +53,12 @@ const els = {
   clearFilters: $('#clearFilters'), selectAll: $('#selectAll'), resultCount: $('#resultCount'),
   selectedSummary: $('#selectedSummary'), searchInput: $('#searchInput'), sortSelect: $('#sortSelect'),
   originalOnly: $('#originalOnly'), zipLayout: $('#zipLayout'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'),
-  pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'), taskViewButton: $('#taskViewButton'),
+  pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'), taskViewButton: $('#taskViewButton'), settingsViewButton: $('#settingsViewButton'),
   libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryScope: $('#libraryScope'),
-  librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'),
+  librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'), libraryBatchToolbar: $('#libraryBatchToolbar'), selectAllLibrary: $('#selectAllLibrary'), librarySelectedSummary: $('#librarySelectedSummary'), bulkFavorite: $('#bulkFavorite'), bulkTag: $('#bulkTag'), bulkCollection: $('#bulkCollection'), bulkDelete: $('#bulkDelete'), libraryFormat: $('#libraryFormat'), libraryMinWidth: $('#libraryMinWidth'), libraryMinHeight: $('#libraryMinHeight'), librarySort: $('#librarySort'),
   historyView: $('#historyView'), clearHistory: $('#clearHistory'), refreshHistory: $('#refreshHistory'), scanHistory: $('#scanHistory'),
   downloadHistory: $('#downloadHistory'), historyEmpty: $('#historyEmpty'),
-  taskView: $('#taskView'), refreshTasks: $('#refreshTasks'), retryAllTasks: $('#retryAllTasks'), taskSummary: $('#taskSummary'), taskList: $('#taskList'), taskEmpty: $('#taskEmpty'),
+  taskView: $('#taskView'), refreshTasks: $('#refreshTasks'), retryAllTasks: $('#retryAllTasks'), taskSummary: $('#taskSummary'), taskList: $('#taskList'), taskEmpty: $('#taskEmpty'), settingsView: $('#settingsView'), settingsViewButton: $('#settingsViewButton'), refreshStorage: $('#refreshStorage'), storageStats: $('#storageStats'), clearLibrary: $('#clearLibrary'), resetSettings: $('#resetSettings'),
   exportJson: $('#exportJson'), exportCsv: $('#exportCsv'),
   formatTabs: [...document.querySelectorAll('[data-format]')],
   grid: $('#imageGrid'), empty: $('#emptyState'), loading: $('#loadingState'), error: $('#errorState'),
@@ -73,7 +76,7 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 
 async function init() {
-  const saved = await chrome.storage.local.get({ filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false, language: 'zh', filterPresets: [], selectionPresets: [] });
+  const saved = await chrome.storage.local.get({ filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false, language: 'zh', filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false });
   const savedFilters = saved.filters && typeof saved.filters === 'object' ? saved.filters : {};
   state.saveAs = typeof saved.saveAs === 'boolean' ? saved.saveAs : true;
   state.searchQuery = typeof saved.searchQuery === 'string' ? saved.searchQuery : '';
@@ -85,6 +88,8 @@ async function init() {
   state.language = saved.language === 'en' ? 'en' : 'zh';
   state.filterPresets = Array.isArray(saved.filterPresets) ? saved.filterPresets : [];
   state.selectionPresets = Array.isArray(saved.selectionPresets) ? saved.selectionPresets : [];
+  state.scanLimit = [0, 200, 500, 1000].includes(Number(saved.scanLimit)) ? Number(saved.scanLimit) : 500;
+  state.autoScroll = Boolean(saved.autoScroll);
   state.filterValues = {
     width: { min: normalizeLimit(savedFilters.minWidth), max: normalizeLimit(savedFilters.maxWidth) },
     height: { min: normalizeLimit(savedFilters.minHeight), max: normalizeLimit(savedFilters.maxHeight) }
@@ -100,6 +105,7 @@ async function init() {
   els.zipLayout.value = state.zipLayout;
   els.filenameTemplate.value = state.filenameTemplate;
   els.dateFolder.checked = state.dateFolder;
+  els.scanLimit.value = String(state.scanLimit); els.autoScroll.checked = state.autoScroll;
   renderPresets();
   applyLanguage();
   await refreshLibraryData();
@@ -112,6 +118,7 @@ function bindEvents() {
   els.libraryViewButton.addEventListener('click', () => switchView('library'));
   els.historyViewButton.addEventListener('click', () => switchView('history'));
   els.taskViewButton.addEventListener('click', () => switchView('tasks'));
+  els.settingsViewButton.addEventListener('click', () => switchView('settings'));
   els.language.addEventListener('click', async () => {
     state.language = state.language === 'zh' ? 'en' : 'zh';
     await chrome.storage.local.set({ language: state.language });
@@ -120,6 +127,7 @@ function bindEvents() {
     renderLibrary();
     loadHistory();
     loadTasks();
+    if (state.view === 'settings') loadStorageStats();
   });
   els.refreshLibrary.addEventListener('click', refreshLibraryData);
   els.libraryScope.addEventListener('change', () => {
@@ -130,6 +138,20 @@ function bindEvents() {
     state.libraryCollection = els.libraryCollection.value;
     refreshLibraryData();
   });
+  const syncLibraryFilters = () => {
+    state.libraryFormat = els.libraryFormat.value; state.libraryMinWidth = els.libraryMinWidth.value; state.libraryMinHeight = els.libraryMinHeight.value; state.librarySort = els.librarySort.value; refreshLibraryData();
+  };
+  [els.libraryFormat, els.libraryMinWidth, els.libraryMinHeight, els.librarySort].forEach((control) => control.addEventListener('input', syncLibraryFilters));
+  els.librarySort.addEventListener('change', syncLibraryFilters);
+  els.selectAllLibrary.addEventListener('change', () => {
+    if (els.selectAllLibrary.checked) state.libraryResults.forEach((record) => state.librarySelected.add(record.url));
+    else state.libraryResults.forEach((record) => state.librarySelected.delete(record.url));
+    renderLibrary();
+  });
+  els.bulkFavorite.addEventListener('click', () => bulkUpdateLibrary('favorite'));
+  els.bulkTag.addEventListener('click', () => bulkUpdateLibrary('tag'));
+  els.bulkCollection.addEventListener('click', () => bulkUpdateLibrary('collection'));
+  els.bulkDelete.addEventListener('click', () => bulkUpdateLibrary('delete'));
   els.librarySearch.addEventListener('input', () => {
     state.librarySearch = els.librarySearch.value.trim();
     refreshLibraryData();
@@ -137,6 +159,11 @@ function bindEvents() {
   els.refreshHistory.addEventListener('click', loadHistory);
   els.refreshTasks.addEventListener('click', loadTasks);
   els.retryAllTasks.addEventListener('click', retryAllTasks);
+  els.refreshStorage.addEventListener('click', loadStorageStats);
+  els.clearLibrary.addEventListener('click', clearLocalLibrary);
+  els.resetSettings.addEventListener('click', resetExtensionSettings);
+  els.scanLimit.addEventListener('change', async () => { state.scanLimit = Number(els.scanLimit.value) || 0; await chrome.storage.local.set({ scanLimit: state.scanLimit }); });
+  els.autoScroll.addEventListener('change', async () => { state.autoScroll = els.autoScroll.checked; await chrome.storage.local.set({ autoScroll: state.autoScroll }); });
   els.newCollection.addEventListener('click', createNewCollection);
   els.exportLibrary.addEventListener('click', exportLibraryData);
   els.importLibrary.addEventListener('click', () => els.importLibraryFile.click());
@@ -244,6 +271,14 @@ function bindEvents() {
   els.zoomOut.addEventListener('click', () => changePreviewZoom(-.25));
   els.zoomReset.addEventListener('click', () => { state.previewZoom = 1; updatePreviewZoom(); });
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !els.previewModal.hidden) closePreview(); });
+  document.addEventListener('keydown', (event) => {
+    if (event.target.matches('input, textarea, select')) return;
+    const key = event.key.toLowerCase();
+    if ((event.metaKey || event.ctrlKey) && key === 'a') { event.preventDefault(); els.selectAll.click(); return; }
+    if (key === 'i') { event.preventDefault(); els.invertSelection.click(); return; }
+    if (key === '/') { event.preventDefault(); els.searchInput.focus(); return; }
+    if (key === 'r') { event.preventDefault(); scanPage(); }
+  });
 }
 
 async function refreshLibraryData() {
@@ -255,15 +290,26 @@ async function refreshLibraryData() {
       if (state.libraryScope === 'favorites' && !record.favorite) return false;
       if (state.libraryCollection === '__uncategorized' && record.collectionIds?.length) return false;
       if (state.libraryCollection && state.libraryCollection !== '__uncategorized' && !record.collectionIds?.includes(state.libraryCollection)) return false;
+      if (state.libraryFormat !== 'all' && formatCategory(record.format) !== state.libraryFormat) return false;
+      if (state.libraryMinWidth && record.width < Number(state.libraryMinWidth)) return false;
+      if (state.libraryMinHeight && record.height < Number(state.libraryMinHeight)) return false;
       if (!state.librarySearch) return true;
       const query = state.librarySearch.toLowerCase();
       return [record.url, record.domain, record.format, record.alt, ...record.tags]
         .join(' ').toLowerCase().includes(query);
+    }).sort((left, right) => {
+      if (state.librarySort === 'width') return (right.width || 0) - (left.width || 0);
+      if (state.librarySort === 'height') return (right.height || 0) - (left.height || 0);
+      if (state.librarySort === 'size') return (right.size || 0) - (left.size || 0);
+      return (right.updatedAt || 0) - (left.updatedAt || 0);
     });
+    const visibleUrls = new Set(state.libraryResults.map((record) => record.url));
+    state.librarySelected.forEach((url) => { if (!visibleUrls.has(url)) state.librarySelected.delete(url); });
     els.favoriteCount.textContent = records.filter((record) => record.favorite).length;
     els.libraryScope.value = state.libraryScope;
     renderCollectionOptions();
     els.libraryCollection.value = state.libraryCollection;
+    els.libraryFormat.value = state.libraryFormat; els.libraryMinWidth.value = state.libraryMinWidth; els.libraryMinHeight.value = state.libraryMinHeight; els.librarySort.value = state.librarySort;
     els.librarySearch.value = state.librarySearch;
     renderLibrary();
     if (state.view === 'page') render();
@@ -296,17 +342,20 @@ function switchView(view) {
   const isPage = view === 'page';
   const isLibrary = view === 'library';
   const isTasks = view === 'tasks';
+  const isSettings = view === 'settings';
   els.pageView.hidden = !isPage;
   els.libraryView.hidden = !isLibrary;
-  els.historyView.hidden = isPage || isLibrary || isTasks;
+  els.historyView.hidden = isPage || isLibrary || isTasks || isSettings;
   els.taskView.hidden = !isTasks;
-  [[els.pageViewButton, isPage], [els.libraryViewButton, isLibrary], [els.historyViewButton, view === 'history'], [els.taskViewButton, isTasks]].forEach(([button, active]) => {
+  els.settingsView.hidden = !isSettings;
+  [[els.pageViewButton, isPage], [els.libraryViewButton, isLibrary], [els.historyViewButton, view === 'history'], [els.taskViewButton, isTasks], [els.settingsViewButton, isSettings]].forEach(([button, active]) => {
     button.classList.toggle('active', active);
     button.setAttribute('aria-selected', active ? 'true' : 'false');
   });
   if (isLibrary) refreshLibraryData();
   if (view === 'history') loadHistory();
   if (isTasks) loadTasks();
+  if (isSettings) loadStorageStats();
 }
 
 async function persistScanRecord(scanId) {
@@ -325,6 +374,9 @@ async function persistScanRecord(scanId) {
 function createLibraryCard(record) {
   const card = document.createElement('article');
   card.className = 'library-card';
+  const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.className = 'library-card-check'; checkbox.checked = state.librarySelected.has(record.url); checkbox.setAttribute('aria-label', `选择 ${fileName(record.url)}`);
+  checkbox.addEventListener('click', (event) => event.stopPropagation());
+  checkbox.addEventListener('change', () => { if (checkbox.checked) state.librarySelected.add(record.url); else state.librarySelected.delete(record.url); renderLibrary(); });
   const wrap = document.createElement('div'); wrap.className = 'thumbnail-wrap';
   const thumbnail = document.createElement('img'); thumbnail.className = 'thumbnail'; thumbnail.src = record.url; thumbnail.alt = record.alt || '网页图片'; thumbnail.loading = 'lazy';
   thumbnail.addEventListener('error', () => { wrap.textContent = '预览不可用'; wrap.style.color = '#9ba4ac'; wrap.style.fontSize = '10px'; });
@@ -352,7 +404,7 @@ function createLibraryCard(record) {
     tags.append(chip);
   });
   const collectionSelect = document.createElement('select'); collectionSelect.className = 'card-collection'; collectionSelect.title = '选择集合'; collectionSelect.setAttribute('aria-label', '选择集合');
-  const noCollection = document.createElement('option'); noCollection.value = ''; noCollection.textContent = '未分类'; collectionSelect.append(noCollection);
+  const noCollection = document.createElement('option'); noCollection.value = ''; noCollection.textContent = t('uncategorized'); collectionSelect.append(noCollection);
   state.collections.forEach((collection) => { const option = document.createElement('option'); option.value = collection.id; option.textContent = collection.name; collectionSelect.append(option); });
   collectionSelect.value = record.collectionIds?.[0] || '';
   collectionSelect.addEventListener('change', async () => {
@@ -369,7 +421,7 @@ function createLibraryCard(record) {
   input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); addTag(); } });
   add.addEventListener('click', addTag);
   editor.append(input, add);
-  card.append(wrap, actions, meta, tags, collectionSelect, editor);
+  card.append(checkbox, wrap, actions, meta, tags, collectionSelect, editor);
   return card;
 }
 
@@ -378,6 +430,10 @@ function renderLibrary() {
   els.libraryGrid.replaceChildren();
   const results = state.libraryResults;
   els.librarySummary.textContent = `${results.length} 张图片${state.libraryScope === 'favorites' ? ' · 收藏' : ''}`;
+  const selectedCount = state.librarySelected.size;
+  els.libraryBatchToolbar.hidden = results.length === 0;
+  els.librarySelectedSummary.textContent = `${t('selected')} ${selectedCount}`;
+  els.selectAllLibrary.checked = results.length > 0 && results.every((record) => state.librarySelected.has(record.url));
   els.libraryEmpty.hidden = results.length !== 0;
   results.forEach((record) => els.libraryGrid.append(createLibraryCard(record)));
 }
@@ -406,6 +462,53 @@ async function setImageCollections(record, collectionIds) {
     await refreshLibraryData();
     showToast(t('collectionUpdated'));
   } catch { showToast(t('collectionUpdateFailed')); }
+}
+
+async function bulkUpdateLibrary(action) {
+  const urls = [...state.librarySelected];
+  if (!urls.length) { showToast(t('selectBeforeAction')); return; }
+  try {
+    if (action === 'favorite') {
+      for (const url of urls) await ImageCollectorDB.setFavorite(url, true);
+      showToast(t('bulkFavoriteDone'));
+    } else if (action === 'tag') {
+      const tag = window.prompt(t('bulkTagPrompt'));
+      if (!tag?.trim()) return;
+      for (const url of urls) { const record = await ImageCollectorDB.getImage(url); await ImageCollectorDB.setTags(url, [...(record?.tags || []), tag]); }
+      showToast(t('bulkTagDone'));
+    } else if (action === 'collection') {
+      if (!state.collections.length) { showToast(t('createCollectionFirst')); return; }
+      const names = state.collections.map((collection, index) => `${index + 1}. ${collection.name}`).join('\n');
+      const choice = Number(window.prompt(`${t('bulkCollectionPrompt')}\n${names}`));
+      const collection = state.collections[choice - 1]; if (!collection) return;
+      for (const url of urls) await ImageCollectorDB.setImageCollections(url, [collection.id]);
+      showToast(t('bulkCollectionDone'));
+    } else if (action === 'delete') {
+      if (!window.confirm(t('bulkDeleteConfirm'))) return;
+      await ImageCollectorDB.deleteImages(urls); state.librarySelected.clear(); showToast(t('bulkDeleteDone'));
+    }
+    await refreshLibraryData();
+  } catch { showToast(t('bulkActionFailed')); }
+}
+
+async function loadStorageStats() {
+  try {
+    state.storageStats = await ImageCollectorDB.getStorageStats();
+    const stats = state.storageStats;
+    els.storageStats.textContent = `${stats.images} ${t('images')} · ${stats.favorites} ${t('favorites')} · ${stats.collections} ${t('collections')} · ${formatBytes(stats.bytes)}`;
+  } catch { els.storageStats.textContent = t('storageUnavailable'); }
+}
+
+async function clearLocalLibrary() {
+  if (!window.confirm(t('clearLibraryConfirm'))) return;
+  try { await ImageCollectorDB.clearLibrary(); state.librarySelected.clear(); await refreshLibraryData(); await loadStorageStats(); showToast(t('libraryCleared')); } catch { showToast(t('clearLibraryFailed')); }
+}
+
+async function resetExtensionSettings() {
+  if (!window.confirm(t('resetSettingsConfirm'))) return;
+  await chrome.storage.local.clear();
+  showToast(t('settingsReset'));
+  setTimeout(() => window.location.reload(), 250);
 }
 
 async function createNewCollection() {
@@ -622,7 +725,7 @@ async function scanPage(options = {}) {
     els.pageTitle.textContent = tab.title || '当前页面';
     els.pageUrl.textContent = tab.url || '';
     els.pageIcon.textContent = getDomainLetter(tab.url);
-    const results = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: collectPageImages });
+    const results = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: collectPageImages, args: [{ limit: state.scanLimit, autoScroll: state.autoScroll }] });
     if (scanId !== state.scanId) return;
     const merged = new Map();
     let duplicateCount = 0;
@@ -711,7 +814,7 @@ async function loadImageMetadata(scanId) {
   }
 }
 
-async function collectPageImages() {
+async function collectPageImages(options = {}) {
   const found = [];
   const seenUrls = new Map();
   const originalAttributes = [
@@ -739,6 +842,18 @@ async function collectPageImages() {
     setTimeout(done, 1800);
   });
 
+  if (options.autoScroll) {
+    const originalY = window.scrollY;
+    let y = 0;
+    for (let pass = 0; pass < 40; pass += 1) {
+      const height = Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0);
+      if (y > height) break;
+      window.scrollTo(0, y);
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      y += Math.max(window.innerHeight || 800, 800);
+    }
+    window.scrollTo(0, originalY);
+  }
   await waitForPageToSettle();
 
   const formatFromUrl = (url) => {
@@ -915,7 +1030,8 @@ async function collectPageImages() {
     const existingScore = existing.quality + (existing.width * existing.height) / 1000000;
     if (entryScore > existingScore) unique.set(key, entry);
   }
-  return { images: [...unique.values()].map(({ contentKey, ...image }) => image), duplicateCount };
+  const images = [...unique.values()].map(({ contentKey, ...image }) => image);
+  return { images: options.limit ? images.slice(0, Number(options.limit)) : images, duplicateCount };
 }
 
 function applyFilters() {
@@ -1275,22 +1391,22 @@ const TRANSLATIONS = {
   zh: {
     page: '当前页面', library: '素材库', history: '历史', tasks: '任务', filterPreset: '筛选预设', selectionPreset: '选择预设', clear: '清除', width: '宽度', height: '高度', format: '格式', formatHint: '按文件类型查看', originalOnly: '仅显示原图候选', originalHint: '优先使用页面提供的高清地址', selectAll: '全选当前结果', sort: '排序', pageOrder: '页面顺序', widthDesc: '宽度：从大到小', heightDesc: '高度：从大到小', areaDesc: '尺寸：从大到小', nameAsc: '文件名：A–Z', searchPage: '搜索文件名、域名或 URL', noResults: '没有符合条件的图片', noResultsHint: '尝试放宽尺寸筛选，或重新扫描当前页面。', scanning: '正在扫描当前页面…', saveLocation: '下载时选择保存位置', downloadSupport: '支持普通文件与 ZIP', zipLayout: 'ZIP 分组', noGrouping: '不分组', bySite: '按网站', byFormat: '按格式', bySiteFormat: '按网站 / 格式', filenameTemplate: '文件名模板', dateFolder: '按日期建目录', json: '导出 JSON', csv: '导出 CSV', downloadSelected: '下载选中', zip: '下载 ZIP', zipNote: 'ZIP 会将当前选中的图片合并为一个文件，适合批量保存。',
     saveFilter: '保存筛选', deletePreset: '删除预设', saveSelection: '保存选择', invert: '反选', allCollections: '全部集合', uncategorized: '未分类',
-    newCollection: '新建集合', exportLibrary: '导出收藏数据', importLibrary: '导入数据', taskCount: '个任务', activeTasks: '进行中', imageDownload: '图片下载', libraryTitle: '本地素材库', refresh: '刷新', allImages: '全部图片', librarySearch: '搜索图片、域名或标签', libraryEmpty: '素材库还是空的', libraryEmptyHint: '在当前页面收藏图片，或从右键菜单收藏网页图片。', historyTitle: '最近活动', clearHistory: '清空历史', recentScans: '最近扫描', downloads: '下载记录', historyEmpty: '暂时没有历史记录', historyEmptyHint: '扫描网页或下载图片后，记录会显示在这里。',
+    newCollection: '新建集合', exportLibrary: '导出收藏数据', importLibrary: '导入数据', taskCount: '个任务', activeTasks: '进行中', imageDownload: '图片下载', libraryTitle: '本地素材库', refresh: '刷新', allImages: '全部图片', librarySearch: '搜索图片、域名或标签', libraryMinWidth: '最小宽度', libraryMinHeight: '最小高度', libraryEmpty: '素材库还是空的', libraryEmptyHint: '在当前页面收藏图片，或从右键菜单收藏网页图片。', historyTitle: '最近活动', clearHistory: '清空历史', recentScans: '最近扫描', downloads: '下载记录', historyEmpty: '暂时没有历史记录', historyEmptyHint: '扫描网页或下载图片后，记录会显示在这里。', settings: '设置', settingsNote: '清空素材库会删除图片、收藏、标签和集合，但不会影响当前网页。', selected: '已选', images: '张图片', favorites: '收藏', collections: '个集合', storageUnavailable: '本地存储暂时不可用',
     pause: '暂停', resume: '继续', cancel: '取消', retry: '重试', queued: '排队中', running: '进行中', paused: '已暂停', completed: '已完成', partial: '部分失败', failed: '失败', cancelled: '已取消',
     preview: '图片预览', copyUrl: '复制原图地址', openUrl: '在新标签页打开', reset: '重置', original: '原图', unknownSize: '尺寸未知', imagePreview: '图片预览',
     copied: '原图地址已复制', copyFailed: '复制失败，请检查浏览器权限', collectionUpdated: '集合已更新', collectionUpdateFailed: '集合更新失败', collectionCreated: '集合已创建', collectionCreateFailed: '集合创建失败',
     libraryExported: '素材库数据已导出', libraryExportFailed: '素材库导出失败', libraryImported: '素材库数据已导入', libraryImportFailed: '导入失败，请选择有效的 JSON 文件', taskActionFailed: '任务操作失败', noFailedTasks: '没有可重试的失败任务',
-    filterPresetPrompt: '请输入筛选预设名称', selectionPresetPrompt: '请输入选择预设名称', newCollectionPrompt: '请输入集合名称', presetSaved: '预设已保存', presetDeleted: '预设已删除', selectBeforeSave: '请先选择图片'
+    filterPresetPrompt: '请输入筛选预设名称', selectionPresetPrompt: '请输入选择预设名称', newCollectionPrompt: '请输入集合名称', presetSaved: '预设已保存', presetDeleted: '预设已删除', selectBeforeSave: '请先选择图片', selectBeforeAction: '请先选择素材', bulkFavoriteDone: '已批量收藏', bulkTagPrompt: '请输入要添加的标签', bulkTagDone: '标签已批量添加', bulkCollectionPrompt: '请输入集合序号', createCollectionFirst: '请先创建集合', bulkCollectionDone: '已批量归档', bulkDeleteConfirm: '确定删除选中的素材吗？', bulkDeleteDone: '素材已删除', bulkActionFailed: '批量操作失败', clearLibraryConfirm: '确定清空整个素材库吗？此操作不可撤销。', libraryCleared: '素材库已清空', clearLibraryFailed: '素材库清理失败', resetSettingsConfirm: '确定重置所有扩展设置吗？', settingsReset: '设置已重置'
   },
   en: {
     page: 'Current', library: 'Library', history: 'History', tasks: 'Tasks', filterPreset: 'Filter preset', selectionPreset: 'Selection preset', clear: 'Clear', width: 'Width', height: 'Height', format: 'Format', formatHint: 'Filter by file type', originalOnly: 'Original candidates only', originalHint: 'Prefer high-resolution addresses from the page', selectAll: 'Select all results', sort: 'Sort', pageOrder: 'Page order', widthDesc: 'Width: largest first', heightDesc: 'Height: largest first', areaDesc: 'Area: largest first', nameAsc: 'Filename: A–Z', searchPage: 'Search filename, hostname or URL', noResults: 'No matching images', noResultsHint: 'Try widening the size range or scan the page again.', scanning: 'Scanning current page…', saveLocation: 'Ask where to save downloads', downloadSupport: 'Files and ZIP supported', zipLayout: 'ZIP folders', noGrouping: 'No folders', bySite: 'By site', byFormat: 'By format', bySiteFormat: 'By site / format', filenameTemplate: 'Filename template', dateFolder: 'Create date folder', json: 'Export JSON', csv: 'Export CSV', downloadSelected: 'Download selected', zip: 'Download ZIP', zipNote: 'Selected images will be combined into one ZIP archive.',
     saveFilter: 'Save filter', deletePreset: 'Delete preset', saveSelection: 'Save selection', invert: 'Invert', allCollections: 'All collections', uncategorized: 'Uncategorized',
-    newCollection: 'New collection', exportLibrary: 'Export library', importLibrary: 'Import data', taskCount: 'tasks', activeTasks: 'active', imageDownload: 'Image download', libraryTitle: 'Local library', refresh: 'Refresh', allImages: 'All images', librarySearch: 'Search images, sites or tags', libraryEmpty: 'Your library is empty', libraryEmptyHint: 'Favorite an image on this page or use the context menu to save one.', historyTitle: 'Recent activity', clearHistory: 'Clear history', recentScans: 'Recent scans', downloads: 'Downloads', historyEmpty: 'No activity yet', historyEmptyHint: 'Scan a page or download an image to see activity here.',
+    newCollection: 'New collection', exportLibrary: 'Export library', importLibrary: 'Import data', taskCount: 'tasks', activeTasks: 'active', imageDownload: 'Image download', libraryTitle: 'Local library', refresh: 'Refresh', allImages: 'All images', librarySearch: 'Search images, sites or tags', libraryMinWidth: 'Min width', libraryMinHeight: 'Min height', libraryEmpty: 'Your library is empty', libraryEmptyHint: 'Favorite an image on this page or use the context menu to save one.', historyTitle: 'Recent activity', clearHistory: 'Clear history', recentScans: 'Recent scans', downloads: 'Downloads', historyEmpty: 'No activity yet', historyEmptyHint: 'Scan a page or download an image to see activity here.', settings: 'Settings', settingsNote: 'Clearing the library removes images, favorites, tags, and collections, but does not affect the current webpage.', selected: 'Selected', images: 'images', favorites: 'favorites', collections: 'collections', storageUnavailable: 'Local storage is unavailable',
     pause: 'Pause', resume: 'Resume', cancel: 'Cancel', retry: 'Retry', queued: 'Queued', running: 'Running', paused: 'Paused', completed: 'Completed', partial: 'Partial', failed: 'Failed', cancelled: 'Cancelled',
     preview: 'Image preview', copyUrl: 'Copy original URL', openUrl: 'Open in new tab', reset: 'Reset', original: 'Original', unknownSize: 'Unknown size', imagePreview: 'Image preview',
     copied: 'Original URL copied', copyFailed: 'Copy failed; check browser permission', collectionUpdated: 'Collection updated', collectionUpdateFailed: 'Collection update failed', collectionCreated: 'Collection created', collectionCreateFailed: 'Collection creation failed',
     libraryExported: 'Library data exported', libraryExportFailed: 'Library export failed', libraryImported: 'Library data imported', libraryImportFailed: 'Import failed; choose a valid JSON file', taskActionFailed: 'Task action failed', noFailedTasks: 'No failed tasks to retry',
-    filterPresetPrompt: 'Filter preset name', selectionPresetPrompt: 'Selection preset name', newCollectionPrompt: 'Collection name', presetSaved: 'Preset saved', presetDeleted: 'Preset deleted', selectBeforeSave: 'Select images first'
+    filterPresetPrompt: 'Filter preset name', selectionPresetPrompt: 'Selection preset name', newCollectionPrompt: 'Collection name', presetSaved: 'Preset saved', presetDeleted: 'Preset deleted', selectBeforeSave: 'Select images first', selectBeforeAction: 'Select images first', bulkFavoriteDone: 'Images favorited', bulkTagPrompt: 'Tag to add', bulkTagDone: 'Tags added', bulkCollectionPrompt: 'Collection number', createCollectionFirst: 'Create a collection first', bulkCollectionDone: 'Images archived', bulkDeleteConfirm: 'Delete the selected images? This cannot be undone.', bulkDeleteDone: 'Images deleted', bulkActionFailed: 'Bulk action failed', clearLibraryConfirm: 'Clear the entire library? This cannot be undone.', libraryCleared: 'Library cleared', clearLibraryFailed: 'Could not clear library', resetSettingsConfirm: 'Reset all extension settings?', settingsReset: 'Settings reset'
   }
 };
 
@@ -1303,7 +1419,7 @@ function applyLanguage() {
   const favoriteCount = els.favoriteCount.textContent;
   els.libraryViewButton.innerHTML = `${t('library')} <span id="favoriteCount">${favoriteCount}</span>`;
   els.favoriteCount = $('#favoriteCount');
-  els.historyViewButton.textContent = t('history'); els.taskViewButton.textContent = t('tasks');
+  els.historyViewButton.textContent = t('history'); els.taskViewButton.textContent = t('tasks'); els.settingsViewButton.textContent = t('settings');
   els.filterPreset.options[0].textContent = t('filterPreset'); els.selectionPreset.options[0].textContent = t('selectionPreset');
   els.saveFilterPreset.textContent = t('saveFilter'); els.deleteFilterPreset.textContent = t('deletePreset'); els.saveSelectionPreset.textContent = t('saveSelection'); els.invertSelection.textContent = t('invert');
   els.newCollection.textContent = t('newCollection'); els.exportLibrary.textContent = t('exportLibrary'); els.importLibrary.textContent = t('importLibrary');
@@ -1336,6 +1452,8 @@ function applyLanguage() {
   const libraryTitle = document.querySelector('#libraryView h2'); if (libraryTitle) libraryTitle.textContent = t('libraryTitle');
   if (els.refreshLibrary) els.refreshLibrary.textContent = t('refresh');
   if (els.librarySearch) els.librarySearch.placeholder = t('librarySearch');
+  if (els.libraryMinWidth) els.libraryMinWidth.placeholder = t('libraryMinWidth');
+  if (els.libraryMinHeight) els.libraryMinHeight.placeholder = t('libraryMinHeight');
   const libraryEmptyTitle = document.querySelector('#libraryEmpty strong'); if (libraryEmptyTitle) libraryEmptyTitle.textContent = t('libraryEmpty');
   const libraryEmptyHint = document.querySelector('#libraryEmpty span'); if (libraryEmptyHint) libraryEmptyHint.textContent = t('libraryEmptyHint');
   const allImagesOption = [...els.libraryScope.options].find((option) => option.value === 'all'); if (allImagesOption) allImagesOption.textContent = t('allImages');
@@ -1348,6 +1466,17 @@ function applyLanguage() {
   const taskTitle = document.querySelector('#taskView h2'); if (taskTitle) taskTitle.textContent = state.language === 'en' ? 'Download task center' : '下载任务中心';
   if (els.refreshTasks) els.refreshTasks.textContent = t('refresh');
   if (els.retryAllTasks) els.retryAllTasks.textContent = state.language === 'en' ? 'Retry failed' : '重试失败任务';
+  const settingsTitle = document.querySelector('#settingsView h2'); if (settingsTitle) settingsTitle.textContent = state.language === 'en' ? 'Settings & storage' : '设置与存储';
+  if (els.refreshStorage) els.refreshStorage.textContent = t('refresh');
+  if (els.clearLibrary) els.clearLibrary.textContent = state.language === 'en' ? 'Clear library' : '清空素材库';
+  if (els.resetSettings) els.resetSettings.textContent = state.language === 'en' ? 'Reset settings' : '重置设置';
+  const settingsNote = document.querySelector('.settings-note'); if (settingsNote) settingsNote.textContent = t('settingsNote');
+  const scanLabel = document.querySelector('.scan-options label:first-child > span'); if (scanLabel) scanLabel.textContent = state.language === 'en' ? 'Scan limit' : '扫描上限';
+  const scrollLabel = document.querySelector('.scan-options label:nth-child(2) > span'); if (scrollLabel) scrollLabel.textContent = state.language === 'en' ? 'Auto-scroll for lazy images' : '自动滚动加载懒加载图片';
+  const scanOptions = state.language === 'en' ? ['200 images', '500 images', '1000 images', 'Unlimited'] : ['200 张', '500 张', '1000 张', '不限']; [...els.scanLimit.options].forEach((option, index) => { option.textContent = scanOptions[index]; });
+  const libraryFormatOptions = state.language === 'en' ? ['All formats', 'JPEG', 'PNG', 'WEBP', 'AVIF', 'Other'] : ['全部格式', 'JPEG', 'PNG', 'WEBP', 'AVIF', '其它']; [...els.libraryFormat.options].forEach((option, index) => { option.textContent = libraryFormatOptions[index]; });
+  const librarySortOptions = state.language === 'en' ? ['Recently updated', 'Width', 'Height', 'File size'] : ['最近更新', '宽度', '高度', '文件大小']; [...els.librarySort.options].forEach((option, index) => { option.textContent = librarySortOptions[index]; });
+  els.selectAllLibrary.nextElementSibling.textContent = t('selectAll'); els.bulkFavorite.textContent = state.language === 'en' ? 'Favorite' : '批量收藏'; els.bulkTag.textContent = state.language === 'en' ? 'Add tag' : '添加标签'; els.bulkCollection.textContent = state.language === 'en' ? 'Archive' : '归档到集合'; els.bulkDelete.textContent = state.language === 'en' ? 'Delete' : '删除';
 }
 
 function setLoading(loading) { els.loading.hidden = !loading; if (loading) { els.grid.replaceChildren(); els.empty.hidden = true; } }
