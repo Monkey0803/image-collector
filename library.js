@@ -305,6 +305,38 @@
 
   function setImageCollections(url, collectionIds) { return updateImage(url, { collectionIds: cleanCollectionIds(collectionIds) }); }
 
+  async function deleteImages(urls) {
+    const ids = [...new Set((Array.isArray(urls) ? urls : []).map(imageId).filter(Boolean))];
+    if (!ids.length) return 0;
+    const db = await openDatabase();
+    const transaction = db.transaction(IMAGE_STORE, 'readwrite');
+    const store = transaction.objectStore(IMAGE_STORE);
+    ids.forEach((id) => store.delete(id));
+    await transactionDone(transaction);
+    return ids.length;
+  }
+
+  async function getStorageStats() {
+    const [images, collections, scans, downloads] = await Promise.all([listImages(), listCollections(), listScans(100000), listDownloads(100000)]);
+    const bytes = new Blob([JSON.stringify({ images, collections, scans, downloads })]).size;
+    return {
+      images: images.length,
+      favorites: images.filter((image) => image.favorite).length,
+      collections: collections.length,
+      scans: scans.length,
+      downloads: downloads.length,
+      bytes
+    };
+  }
+
+  async function clearLibrary() {
+    const db = await openDatabase();
+    const transaction = db.transaction([IMAGE_STORE, COLLECTION_STORE], 'readwrite');
+    transaction.objectStore(IMAGE_STORE).clear();
+    transaction.objectStore(COLLECTION_STORE).clear();
+    await transactionDone(transaction);
+  }
+
   async function exportLibrary() {
     const [images, collections] = await Promise.all([listImages(), listCollections()]);
     return { version: 1, exportedAt: new Date().toISOString(), collections, images };
@@ -361,6 +393,9 @@
     createCollection,
     listCollections,
     setImageCollections,
+    deleteImages,
+    getStorageStats,
+    clearLibrary,
     exportLibrary,
     importLibrary,
     countFavorites,

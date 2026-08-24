@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录 `1.3.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
+本文档记录 `1.4.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
 
 ## 1.0.1
 
@@ -55,9 +55,19 @@
 - [x] 增加中英文界面切换。
 - [x] 支持导入和导出收藏、标签数据。
 
+## 1.4.0
+
+### 批量工作流与可控采集
+
+- [x] 素材库支持多选、批量收藏、批量标签、批量归档和删除。
+- [x] 素材库支持按尺寸、文件大小、格式和更新时间筛选排序。
+- [x] 扫描支持最大图片数量和自动滚动加载懒加载图片。
+- [x] 增加本地存储统计、清理素材和重置设置入口。
+- [x] 增加键盘快捷键，支持全选、反选、聚焦搜索和开始扫描。
+
 ## English
 
-This document tracks `1.3.0` and future releases. Completed items use `[x]`.
+This document tracks `1.4.0` and future releases. Completed items use `[x]`.
 
 ### 1.0.1 core experience
 
@@ -98,3 +108,11 @@ This document tracks `1.3.0` and future releases. Completed items use `[x]`.
 - [x] Support custom image collections and local folder views.
 - [x] Add Chinese/English interface switching.
 - [x] Import and export favorites and tag data.
+
+### 1.4.0 batch workflows and controlled scanning
+
+- [x] Add multi-select, bulk favorite, bulk tagging, bulk collection assignment, and deletion in the library.
+- [x] Filter and sort the library by dimensions, file size, format, and update time.
+- [x] Add a maximum image count and automatic scrolling option for lazy-loaded pages.
+- [x] Add local storage statistics, library cleanup, and settings reset controls.
+- [x] Add keyboard shortcuts for select all, invert selection, search focus, and rescanning.
