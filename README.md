@@ -37,6 +37,10 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 支持按 `YYYY.MM.DD` 自动创建日期目录
 - 多个下载请求会进入后台队列，按顺序执行，避免任务互相干扰
 - 对登录限制、防盗链、网络错误和服务器错误显示更具体的失败原因
+- 使用 IndexedDB 保存本地图片素材、收藏、标签和历史记录
+- 支持素材库搜索、收藏筛选和标签添加/移除
+- 记录最近扫描页面以及图片/ZIP 下载活动
+- 提供右键扫描页面、下载图片和收藏图片操作
 
 ### 安装方式
 
@@ -129,6 +133,19 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 
 当部分图片失败时，失败列表会保留图片地址、失败阶段和可读原因，例如“需要登录后才能访问”“服务器拒绝访问，可能存在防盗链”或“图片服务器暂时不可用”。
 
+#### 素材库和历史记录
+
+点击顶部的“素材库”可以查看保存在本机的图片：
+
+- 在图片卡片上点击星标即可收藏或取消收藏。
+- 素材库默认显示收藏图片，也可以切换为全部图片。
+- 可以搜索文件名、域名、格式、描述和标签。
+- 在素材卡片下方输入标签，点击 `+` 添加；点击已有标签可以移除。
+- “历史”视图会显示最近扫描页面、下载类型、数量、时间和结果状态。
+- 清空历史只会删除扫描/下载记录，不会删除收藏图片和标签。
+
+在网页上右键点击后，可以从 Image Collector 菜单中选择“扫描当前页面”“下载当前图片”或“收藏当前图片”。扫描操作会打开扩展弹窗并扫描当前页面；右键下载和收藏不需要先打开弹窗。
+
 ZIP 文件默认命名为：
 
 ```text
@@ -153,6 +170,7 @@ image_2026.08.20.zip
 | `scripting` | 在当前页面执行图片扫描逻辑 |
 | `downloads` | 下载图片和 ZIP 文件 |
 | `storage` | 保存筛选条件和保存位置设置 |
+| `contextMenus` | 提供网页和图片右键菜单操作 |
 | `<all_urls>` | 支持扫描不同网站中的网页图片及图片地址 |
 
 所有图片筛选和列表处理都在浏览器本地完成。项目没有内置服务器，也不会主动上传网页内容、图片或用户设置。
@@ -185,6 +203,7 @@ download_image/
 ├── popup.html          # 扩展弹窗的页面结构
 ├── popup.css           # 弹窗 UI 样式、布局和交互状态
 ├── popup.js            # 图片扫描、筛选、分类、选择和下载请求
+├── library.js          # IndexedDB 素材库、收藏、标签和历史记录数据层
 ├── service-worker.js   # 后台下载任务和 ZIP 文件生成
 ├── icons/
 │   ├── icon.svg        # UI 使用的矢量图标
@@ -193,7 +212,7 @@ download_image/
 │   ├── icon-48.png     # 扩展管理页图标
 │   └── icon-128.png    # 扩展详情和安装页图标
 ├── LICENSE             # MIT 开源许可证
-├── TODO.md             # 1.0.3 已完成任务和后续路线图
+├── TODO.md             # 1.2.0 已完成任务和后续路线图
 └── README.md           # 中文和英文项目文档
 ```
 
@@ -267,6 +286,9 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Organize ZIP entries by hostname, format, or hostname and format
 - Cancel image reading, ZIP compression, and download tasks
 - Export current filtered results as JSON or CSV
+- Store local image metadata, favorites, tags, scan history, and download history in IndexedDB
+- Browse a local library with favorite filtering, search, and tag editing
+- Provide context-menu actions for scanning pages, downloading images, and favoriting images
 - Customize filenames with template variables for names, domains, formats, dimensions, and dates
 - Create `YYYY.MM.DD` date folders for regular downloads and ZIP entries
 - Queue multiple download requests and run them in submission order
@@ -359,6 +381,19 @@ Multiple download requests are processed by a background queue in submission ord
 
 When some images fail, the failure list keeps the URL, failure stage, and a readable reason such as “login required”, “access denied or anti-hotlink protection”, or “image server temporarily unavailable”.
 
+#### Local library and history
+
+Click **Library** at the top to browse images saved locally:
+
+- Click the star on an image card to favorite or unfavorite it.
+- The library defaults to favorites and can be switched to all saved images.
+- Search filenames, hostnames, formats, descriptions, and tags.
+- Type a tag below a library card and click `+` to add it; click an existing tag to remove it.
+- The **History** view shows recent scans and image/ZIP downloads with counts, times, and statuses.
+- Clearing history removes scan/download activity only; favorites and tags are preserved.
+
+On a webpage, right-click to open the Image Collector menu. It provides **Scan current page**, **Download current image**, and **Favorite current image**. The scan action opens the extension popup and scans the current page; context downloads and favorites work without opening the popup first.
+
 The default ZIP filename is generated in this format:
 
 ```text
@@ -381,6 +416,7 @@ The setting is stored locally and reused the next time the extension is opened.
 | `scripting` | Run the image scanning logic in the current page |
 | `downloads` | Download image files and ZIP archives |
 | `storage` | Store filter and save-location preferences |
+| `contextMenus` | Provide page and image context-menu actions |
 | `<all_urls>` | Support image scanning across different websites and image hosts |
 
 Image filtering and list processing happen locally in the browser. The project does not include a backend server and does not intentionally upload webpage content, images, or user preferences.
@@ -413,6 +449,7 @@ download_image/
 ├── popup.html          # Popup page structure
 ├── popup.css           # Popup layout, styling, and interaction states
 ├── popup.js            # Scanning, filtering, categorization, selection, and messages
+├── library.js          # IndexedDB data layer for metadata, favorites, tags, and history
 ├── service-worker.js   # Background downloads and ZIP generation
 ├── icons/
 │   ├── icon.svg        # Vector icon used by the UI
@@ -421,7 +458,7 @@ download_image/
 │   ├── icon-48.png     # Extensions management icon
 │   └── icon-128.png    # Extension detail and installation icon
 ├── LICENSE             # MIT open-source license
-├── TODO.md             # 1.0.3 checklist and future roadmap
+├── TODO.md             # 1.2.0 checklist and future roadmap
 └── README.md           # Chinese and English documentation
 ```
 

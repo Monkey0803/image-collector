@@ -28,6 +28,14 @@
         </div>
       </section>
 
+      <nav class="view-switcher" aria-label="视图切换">
+        <button id="pageViewButton" class="view-tab active" type="button" aria-selected="true">当前页面</button>
+        <button id="libraryViewButton" class="view-tab" type="button" aria-selected="false">素材库 <span id="favoriteCount">0</span></button>
+        <button id="historyViewButton" class="view-tab" type="button" aria-selected="false">历史</button>
+      </nav>
+
+      <div id="pageView">
+
       <section class="filter-panel" aria-label="图片筛选">
         <div class="section-heading">
           <div>
@@ -141,8 +149,60 @@
         </div>
         <p class="download-note">ZIP 会将当前选中的图片合并为一个文件，适合批量保存。</p>
       </section>
+      </div>
+
+      <section id="libraryView" class="library-view" hidden aria-label="本地素材库">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">LIBRARY</p>
+            <h2>本地素材库</h2>
+          </div>
+          <button id="refreshLibrary" class="text-button" type="button">刷新</button>
+        </div>
+        <div class="library-controls">
+          <select id="libraryScope" aria-label="素材库筛选范围">
+            <option value="favorites">我的收藏</option>
+            <option value="all">全部图片</option>
+          </select>
+          <label class="search-box" aria-label="搜索素材库">
+            <span aria-hidden="true">⌕</span>
+            <input id="librarySearch" type="search" placeholder="搜索图片、域名或标签" autocomplete="off" />
+          </label>
+        </div>
+        <p id="librarySummary" class="library-summary">正在读取素材库…</p>
+        <div id="libraryGrid" class="image-grid library-grid"></div>
+        <div id="libraryEmpty" class="empty-state" hidden>
+          <div class="empty-icon">☆</div>
+          <strong>素材库还是空的</strong>
+          <span>在当前页面收藏图片，或从右键菜单收藏网页图片。</span>
+        </div>
+      </section>
+
+      <section id="historyView" class="history-view" hidden aria-label="扫描和下载历史">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">ACTIVITY</p>
+            <h2>最近活动</h2>
+          </div>
+          <button id="clearHistory" class="text-button" type="button">清空历史</button>
+        </div>
+        <div class="history-block">
+          <div class="history-block-heading"><strong>最近扫描</strong><button id="refreshHistory" class="subtle-button" type="button">刷新</button></div>
+          <div id="scanHistory" class="history-list"></div>
+        </div>
+        <div class="history-block">
+          <div class="history-block-heading"><strong>下载记录</strong></div>
+          <div id="downloadHistory" class="history-list"></div>
+        </div>
+        <div id="historyEmpty" class="empty-state" hidden>
+          <div class="empty-icon">◷</div>
+          <strong>暂时没有历史记录</strong>
+          <span>扫描网页或下载图片后，记录会显示在这里。</span>
+        </div>
+      </section>
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
     </main>
+    <script src="library.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

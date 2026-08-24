@@ -1,3 +1,5 @@
+importScripts('library.js');
+
 const MIME_EXTENSIONS = {
   'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp',
   'image/svg+xml': '.svg', 'image/avif': '.avif', 'image/bmp': '.bmp', 'image/x-icon': '.ico'
@@ -12,12 +14,14 @@ let queueRunning = false;
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'downloadImages') {
     const jobId = message.jobId || createJobId();
-    enqueueJob(jobId, message.images || [], () => downloadImages(message.images || [], Boolean(message.saveAs), jobId, message)).then((result) => sendResponse(result));
+    const images = Array.isArray(message.images) ? message.images : [];
+    enqueueJob(jobId, images, () => runDownloadJob('images', images, Boolean(message.saveAs), jobId, message), 'images').then((result) => sendResponse(result));
     return true;
   }
   if (message.type === 'downloadZip') {
     const jobId = message.jobId || createJobId();
-    enqueueJob(jobId, message.images || [], () => downloadZip(message.images || [], Boolean(message.saveAs), jobId, message)).then((result) => sendResponse(result));
+    const images = Array.isArray(message.images) ? message.images : [];
+    enqueueJob(jobId, images, () => runDownloadJob('zip', images, Boolean(message.saveAs), jobId, message), 'zip').then((result) => sendResponse(result));
     return true;
   }
   if (message.type === 'inspectImages') {
@@ -31,6 +35,98 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   return false;
 });
+
+const CONTEXT_MENU_IDS = {
+  root: 'image-collector-root',
+  scan: 'image-collector-scan-page',
+  download: 'image-collector-download-image',
+  favorite: 'image-collector-favorite-image'
+};
+
+chrome.runtime.onInstalled.addListener(createContextMenus);
+chrome.runtime.onStartup.addListener(createContextMenus);
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === CONTEXT_MENU_IDS.scan) {
+    openCollectorPopup(tab);
+    return;
+  }
+  if (info.menuItemId === CONTEXT_MENU_IDS.download) {
+    handleContextDownload(info, tab).catch(() => {});
+    return;
+  }
+  if (info.menuItemId === CONTEXT_MENU_IDS.favorite) handleContextFavorite(info, tab).catch(() => {});
+});
+
+function createContextMenus() {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({ id: CONTEXT_MENU_IDS.root, title: 'Image Collector', contexts: ['page', 'image'] });
+    chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.scan, title: '扫描当前页面', contexts: ['page'] });
+    chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.download, title: '下载当前图片', contexts: ['image'] });
+    chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.favorite, title: '收藏当前图片', contexts: ['image'] });
+  });
+}
+
+function openCollectorPopup(tab) {
+  if (!chrome.action?.openPopup) return;
+  const opening = chrome.action.openPopup();
+  if (opening?.catch) opening.catch(() => {});
+}
+
+function contextImage(info, tab) {
+  const url = info.srcUrl || info.linkUrl || '';
+  if (!url) return null;
+  return {
+    url,
+    displayUrl: url,
+    source: 'CONTEXT',
+    frameUrl: tab?.url || '',
+    format: formatFromUrl(url)
+  };
+}
+
+async function handleContextDownload(info, tab) {
+  const image = contextImage(info, tab);
+  if (!image) return;
+  const settings = await chrome.storage.local.get({ saveAs: true, zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false });
+  const jobId = createJobId();
+  enqueueJob(jobId, [image], () => runDownloadJob('images', [image], Boolean(settings.saveAs), jobId, settings), 'images');
+}
+
+async function handleContextFavorite(info, tab) {
+  const image = contextImage(info, tab);
+  if (!image) return;
+  try {
+    await ImageCollectorDB.upsertImages([image]);
+    await ImageCollectorDB.setFavorite(image.url, true);
+  } catch {
+    // The context action should not interrupt the page when local storage is unavailable.
+  }
+}
+
+async function runDownloadJob(kind, images, saveAs, jobId, settings) {
+  const result = kind === 'zip'
+    ? await downloadZip(images, saveAs, jobId, settings)
+    : await downloadImages(images, saveAs, jobId, settings);
+  await saveDownloadRecord(kind, images, result);
+  return result;
+}
+
+async function saveDownloadRecord(kind, images, result) {
+  try {
+    await ImageCollectorDB.saveDownload({
+      kind,
+      status: result.cancelled ? 'cancelled' : result.ok && result.failed?.length ? 'partial' : result.ok ? 'started' : 'failed',
+      urls: images.map((image) => image.url),
+      count: images.length,
+      started: result.started || 0,
+      failed: Array.isArray(result.failed) ? result.failed.length : 0,
+      error: result.error || '',
+      filename: kind === 'zip' ? `image_${dateStamp()}.zip` : ''
+    });
+  } catch {
+    // Downloading remains usable even if IndexedDB is unavailable or full.
+  }
+}
 
 async function downloadImages(images, saveAs, jobId, settings = {}) {
   const failed = [];
@@ -152,9 +248,9 @@ function createJobId() {
   return `${Date.now()}-${suffix}`;
 }
 
-function enqueueJob(jobId, images, task) {
+function enqueueJob(jobId, images, task, kind = 'images') {
   const job = beginJob(jobId);
-  const item = { jobId, images, task, resolve: null };
+  const item = { jobId, images, task, kind, resolve: null };
   const position = downloadQueue.length + (queueRunning ? 1 : 0);
   job.queueItem = item;
   sendProgress(jobId, {
@@ -175,9 +271,11 @@ async function processQueue() {
       const item = downloadQueue.shift();
       const job = activeJobs.get(item.jobId);
       if (!job || job.cancelled) {
-        item.resolve(finishDownloadJob(item.jobId, {
+        const result = finishDownloadJob(item.jobId, {
           ok: false, failed: [], cancelled: true, error: '下载任务已取消'
-        }, item.images.length, 0));
+        }, item.images.length, 0);
+        saveDownloadRecord(item.kind, item.images, result);
+        item.resolve(result);
         continue;
       }
       job.queueItem = null;
@@ -218,9 +316,11 @@ function cancelDownload(jobId) {
     if (index >= 0) downloadQueue.splice(index, 1);
     const item = job.queueItem;
     job.queueItem = null;
-    item.resolve(finishDownloadJob(jobId, {
+    const result = finishDownloadJob(jobId, {
       ok: false, failed: [], cancelled: true, error: '下载任务已取消'
-    }, item.images.length, 0));
+    }, item.images.length, 0);
+    saveDownloadRecord(item.kind, item.images, result);
+    item.resolve(result);
     updateQueueProgress();
     processQueue();
     return;
@@ -278,6 +378,17 @@ function zipPath(image, name, layout, settings = {}, contentType = '') {
 }
 
 function safeSegment(value) { return String(value ?? '').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').trim() || 'other'; }
+
+function formatFromUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const queryHint = parsed.searchParams.get('format') || parsed.searchParams.get('fm') || '';
+    const extension = (queryHint || parsed.pathname.split('.').pop() || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (extension === 'jpg' || extension === 'jpeg') return 'jpeg';
+    if (['png', 'gif', 'webp', 'avif', 'svg'].includes(extension)) return extension;
+  } catch { /* Keep the fallback format. */ }
+  return 'other';
+}
 
 function hostnameFor(url) {
   try { return new URL(url).hostname.replace(/^www\./, '') || 'site'; } catch { return 'site'; }

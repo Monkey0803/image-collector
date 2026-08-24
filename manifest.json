@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Image Collector",
-  "version": "1.0.3",
+  "version": "1.2.0",
   "description": "识别当前网页图片，按尺寸筛选并下载为文件或 ZIP。",
   "permissions": [
     "activeTab",
     "scripting",
     "downloads",
-    "storage"
+    "storage",
+    "contextMenus"
   ],
   "host_permissions": [
     "<all_urls>"

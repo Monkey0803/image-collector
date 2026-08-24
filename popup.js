@@ -13,6 +13,11 @@ const state = {
   zipLayout: 'flat',
   filenameTemplate: '{name}',
   dateFolder: false,
+  view: 'page',
+  libraryScope: 'favorites',
+  librarySearch: '',
+  libraryRecords: new Map(),
+  libraryResults: [],
   duplicateCount: 0,
   dynamicScanPasses: 0,
   dynamicScanTimer: null,
@@ -37,6 +42,11 @@ const els = {
   clearFilters: $('#clearFilters'), selectAll: $('#selectAll'), resultCount: $('#resultCount'),
   selectedSummary: $('#selectedSummary'), searchInput: $('#searchInput'), sortSelect: $('#sortSelect'),
   originalOnly: $('#originalOnly'), zipLayout: $('#zipLayout'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'),
+  pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'),
+  libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryScope: $('#libraryScope'),
+  librarySearch: $('#librarySearch'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'),
+  historyView: $('#historyView'), clearHistory: $('#clearHistory'), refreshHistory: $('#refreshHistory'), scanHistory: $('#scanHistory'),
+  downloadHistory: $('#downloadHistory'), historyEmpty: $('#historyEmpty'),
   exportJson: $('#exportJson'), exportCsv: $('#exportCsv'),
   formatTabs: [...document.querySelectorAll('[data-format]')],
   grid: $('#imageGrid'), empty: $('#emptyState'), loading: $('#loadingState'), error: $('#errorState'),
@@ -77,11 +87,33 @@ async function init() {
   els.zipLayout.value = state.zipLayout;
   els.filenameTemplate.value = state.filenameTemplate;
   els.dateFolder.checked = state.dateFolder;
+  await refreshLibraryData();
   bindEvents();
   await scanPage();
 }
 
 function bindEvents() {
+  els.pageViewButton.addEventListener('click', () => switchView('page'));
+  els.libraryViewButton.addEventListener('click', () => switchView('library'));
+  els.historyViewButton.addEventListener('click', () => switchView('history'));
+  els.refreshLibrary.addEventListener('click', refreshLibraryData);
+  els.libraryScope.addEventListener('change', () => {
+    state.libraryScope = els.libraryScope.value;
+    refreshLibraryData();
+  });
+  els.librarySearch.addEventListener('input', () => {
+    state.librarySearch = els.librarySearch.value.trim();
+    refreshLibraryData();
+  });
+  els.refreshHistory.addEventListener('click', loadHistory);
+  els.clearHistory.addEventListener('click', async () => {
+    if (!window.confirm('确定清空所有扫描和下载历史吗？')) return;
+    try {
+      await ImageCollectorDB.clearHistory();
+      await loadHistory();
+      showToast('历史记录已清空');
+    } catch { showToast('历史记录清理失败'); }
+  });
   els.refresh.addEventListener('click', scanPage);
   els.clearFilters.addEventListener('click', () => {
     els.minWidth.value = 0;
@@ -162,6 +194,171 @@ function bindEvents() {
   els.zip.addEventListener('click', () => downloadSelected(true));
 }
 
+async function refreshLibraryData() {
+  try {
+    const records = await ImageCollectorDB.listImages();
+    state.libraryRecords = new Map(records.map((record) => [record.url, record]));
+    state.libraryResults = records.filter((record) => {
+      if (state.libraryScope === 'favorites' && !record.favorite) return false;
+      if (!state.librarySearch) return true;
+      const query = state.librarySearch.toLowerCase();
+      return [record.url, record.domain, record.format, record.alt, ...record.tags]
+        .join(' ').toLowerCase().includes(query);
+    });
+    els.favoriteCount.textContent = records.filter((record) => record.favorite).length;
+    els.libraryScope.value = state.libraryScope;
+    els.librarySearch.value = state.librarySearch;
+    renderLibrary();
+    if (state.view === 'page') render();
+  } catch {
+    state.libraryRecords = new Map();
+    state.libraryResults = [];
+    els.favoriteCount.textContent = '0';
+    if (state.view === 'library') {
+      els.librarySummary.textContent = '本地素材库暂时不可用';
+      els.libraryGrid.replaceChildren();
+      els.libraryEmpty.hidden = false;
+    }
+  }
+}
+
+function switchView(view) {
+  state.view = view;
+  const isPage = view === 'page';
+  const isLibrary = view === 'library';
+  els.pageView.hidden = !isPage;
+  els.libraryView.hidden = !isLibrary;
+  els.historyView.hidden = isPage || isLibrary;
+  [[els.pageViewButton, isPage], [els.libraryViewButton, isLibrary], [els.historyViewButton, view === 'history']].forEach(([button, active]) => {
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  if (isLibrary) refreshLibraryData();
+  if (view === 'history') loadHistory();
+}
+
+async function persistScanRecord(scanId) {
+  try {
+    await ImageCollectorDB.saveScan(state.images, {
+      pageUrl: els.pageUrl.textContent,
+      pageTitle: els.pageTitle.textContent,
+      duplicateCount: state.duplicateCount
+    });
+    if (scanId === state.scanId) await refreshLibraryData();
+  } catch {
+    // Scanning remains available when IndexedDB is blocked or unavailable.
+  }
+}
+
+function createLibraryCard(record) {
+  const card = document.createElement('article');
+  card.className = 'library-card';
+  const wrap = document.createElement('div'); wrap.className = 'thumbnail-wrap';
+  const thumbnail = document.createElement('img'); thumbnail.className = 'thumbnail'; thumbnail.src = record.url; thumbnail.alt = record.alt || '网页图片'; thumbnail.loading = 'lazy';
+  thumbnail.addEventListener('error', () => { wrap.textContent = '预览不可用'; wrap.style.color = '#9ba4ac'; wrap.style.fontSize = '10px'; });
+  wrap.append(thumbnail);
+  const actions = document.createElement('div'); actions.className = 'library-card-actions';
+  const favorite = document.createElement('button'); favorite.type = 'button'; favorite.className = `library-favorite${record.favorite ? ' active' : ''}`; favorite.textContent = record.favorite ? '★' : '☆'; favorite.title = record.favorite ? '取消收藏' : '收藏'; favorite.setAttribute('aria-label', favorite.title); favorite.setAttribute('aria-pressed', record.favorite ? 'true' : 'false');
+  favorite.addEventListener('click', async () => { await toggleFavorite(record); });
+  const download = document.createElement('button'); download.type = 'button'; download.textContent = '↓'; download.title = '下载图片'; download.setAttribute('aria-label', '下载图片');
+  download.addEventListener('click', () => downloadImages([record], false));
+  actions.append(favorite, download);
+  const meta = document.createElement('div'); meta.className = 'card-meta';
+  const sizeRow = document.createElement('div'); sizeRow.className = 'card-size-row';
+  const size = document.createElement('span'); size.className = 'card-size'; size.textContent = record.width && record.height ? `${record.width} × ${record.height}` : '尺寸未知';
+  const format = document.createElement('span'); format.className = 'format-badge'; format.textContent = formatLabel(record.format);
+  sizeRow.append(size, format);
+  const name = document.createElement('span'); name.className = 'card-name'; name.textContent = fileName(record.url); name.title = record.url;
+  meta.append(sizeRow, name);
+  const tags = document.createElement('div'); tags.className = 'tag-list';
+  record.tags.forEach((tag) => {
+    const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'tag-chip'; chip.textContent = tag; chip.title = `移除标签 ${tag}`;
+    chip.addEventListener('click', async () => {
+      await setImageTags(record, record.tags.filter((item) => item !== tag));
+    });
+    tags.append(chip);
+  });
+  const editor = document.createElement('label'); editor.className = 'tag-editor'; editor.title = '添加标签';
+  const input = document.createElement('input'); input.type = 'text'; input.maxLength = 30; input.placeholder = '添加标签'; input.setAttribute('aria-label', '添加标签');
+  const add = document.createElement('button'); add.type = 'button'; add.textContent = '+'; add.setAttribute('aria-label', '添加标签');
+  const addTag = async () => {
+    const tag = input.value.trim();
+    if (!tag) return;
+    await setImageTags(record, [...record.tags, tag]);
+  };
+  input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); addTag(); } });
+  add.addEventListener('click', addTag);
+  editor.append(input, add);
+  card.append(wrap, actions, meta, tags, editor);
+  return card;
+}
+
+function renderLibrary() {
+  if (!els.libraryGrid) return;
+  els.libraryGrid.replaceChildren();
+  const results = state.libraryResults;
+  els.librarySummary.textContent = `${results.length} 张图片${state.libraryScope === 'favorites' ? ' · 收藏' : ''}`;
+  els.libraryEmpty.hidden = results.length !== 0;
+  results.forEach((record) => els.libraryGrid.append(createLibraryCard(record)));
+}
+
+async function toggleFavorite(image) {
+  try {
+    const record = await ImageCollectorDB.toggleFavorite(image.url);
+    state.libraryRecords.set(record.url, record);
+    await refreshLibraryData();
+    showToast(record.favorite ? '已加入收藏' : '已取消收藏');
+  } catch { showToast('收藏操作失败'); }
+}
+
+async function setImageTags(record, tags) {
+  try {
+    const updated = await ImageCollectorDB.setTags(record.url, tags);
+    state.libraryRecords.set(updated.url, updated);
+    await refreshLibraryData();
+    showToast('标签已更新');
+  } catch { showToast('标签保存失败'); }
+}
+
+async function loadHistory() {
+  try {
+    const [scans, downloads] = await Promise.all([ImageCollectorDB.listScans(30), ImageCollectorDB.listDownloads(30)]);
+    renderHistory(scans, downloads);
+  } catch {
+    els.scanHistory.replaceChildren();
+    els.downloadHistory.replaceChildren();
+    els.historyEmpty.hidden = false;
+  }
+}
+
+function renderHistory(scans, downloads) {
+  els.scanHistory.replaceChildren();
+  els.downloadHistory.replaceChildren();
+  scans.forEach((scan) => {
+    const item = document.createElement('div'); item.className = 'history-item';
+    const icon = document.createElement('span'); icon.className = 'history-item-icon'; icon.textContent = '⌕';
+    const copy = document.createElement('div'); copy.className = 'history-item-copy';
+    const title = document.createElement('strong'); title.textContent = scan.pageTitle || '未命名页面'; title.title = scan.pageUrl || '';
+    const detail = document.createElement('span'); detail.textContent = `${formatDateTime(scan.createdAt)} · ${scan.count} 张图片${scan.duplicateCount ? ` · 去重 ${scan.duplicateCount}` : ''}`;
+    copy.append(title, detail); item.append(icon, copy); els.scanHistory.append(item);
+  });
+  downloads.forEach((download) => {
+    const item = document.createElement('div'); item.className = 'history-item';
+    const icon = document.createElement('span'); icon.className = 'history-item-icon'; icon.textContent = download.kind === 'zip' ? '▣' : '↓';
+    const copy = document.createElement('div'); copy.className = 'history-item-copy';
+    const title = document.createElement('strong'); title.textContent = download.kind === 'zip' ? '下载 ZIP' : '下载图片';
+    const status = download.status === 'cancelled' ? '已取消' : download.status === 'failed' ? '失败' : download.status === 'partial' ? `部分失败 ${download.failed}` : '已提交';
+    const detail = document.createElement('span'); detail.textContent = `${formatDateTime(download.createdAt)} · ${download.count} 项 · ${status}${download.error ? ` · ${download.error}` : ''}`;
+    copy.append(title, detail); item.append(icon, copy); els.downloadHistory.append(item);
+  });
+  els.historyEmpty.hidden = scans.length !== 0 || downloads.length !== 0;
+}
+
+function formatDateTime(timestamp) {
+  if (!timestamp) return '时间未知';
+  return new Date(timestamp).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
 async function scanPage(options = {}) {
   const quiet = Boolean(options?.quiet);
   if (!quiet && state.dynamicScanTimer) {
@@ -226,6 +423,7 @@ async function scanPage(options = {}) {
     els.scanStatus.textContent = `${state.images.length} 张图片${state.duplicateCount ? ` · 去重 ${state.duplicateCount}` : ''}`;
     updateRangeLimits();
     applyFilters();
+    if (!quiet) persistScanRecord(scanId);
     loadImageMetadata(scanId);
   } catch (error) {
     if (scanId !== state.scanId) return;
@@ -273,6 +471,12 @@ async function loadImageMetadata(scanId) {
       image.mime = item.mime || '';
     });
     applyFilters();
+    try {
+      await ImageCollectorDB.upsertImages(state.images);
+      await refreshLibraryData();
+    } catch {
+      // Metadata persistence is optional and must not affect the image grid.
+    }
   } catch {
     // Metadata is optional; image discovery should remain usable when HEAD is blocked.
   }
@@ -645,6 +849,9 @@ function createCard(image) {
     event.preventDefault();
     checkbox.click();
   });
+  const savedRecord = state.libraryRecords.get(image.url);
+  const favorite = document.createElement('button'); favorite.type = 'button'; favorite.className = `card-favorite${savedRecord?.favorite ? ' active' : ''}`; favorite.textContent = savedRecord?.favorite ? '★' : '☆'; favorite.title = savedRecord?.favorite ? '取消收藏' : '收藏图片'; favorite.setAttribute('aria-label', favorite.title); favorite.setAttribute('aria-pressed', savedRecord?.favorite ? 'true' : 'false');
+  favorite.addEventListener('click', (event) => { event.stopPropagation(); toggleFavorite(image); });
   const wrap = document.createElement('div'); wrap.className = 'thumbnail-wrap';
   const thumbnail = document.createElement('img'); thumbnail.className = 'thumbnail'; thumbnail.src = image.url; thumbnail.alt = image.alt || '网页图片'; thumbnail.loading = 'lazy';
   thumbnail.addEventListener('error', () => { wrap.textContent = '预览不可用'; wrap.style.color = '#9ba4ac'; wrap.style.fontSize = '10px'; });
@@ -660,7 +867,7 @@ function createCard(image) {
   meta.append(sizeRow, info, name);
   const single = document.createElement('button'); single.type = 'button'; single.className = 'single-download'; single.title = '下载这张图片'; single.setAttribute('aria-label', '下载这张图片'); single.textContent = '↓';
   single.addEventListener('click', (event) => { event.stopPropagation(); downloadImages([image], false); });
-  card.append(checkbox, wrap, meta, single);
+  card.append(checkbox, favorite, wrap, meta, single);
   return card;
 }
 
