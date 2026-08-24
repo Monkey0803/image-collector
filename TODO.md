@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录 `1.5.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
+本文档记录 `1.6.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
 
 ## 1.0.1
 
@@ -73,9 +73,20 @@
 - [x] 支持按最小/最大宽高和文件大小范围筛选素材库。
 - [x] 支持将当前素材库筛选结果导出为 JSON 或 CSV。
 
+## 1.6.0
+
+### 国际化与性能优化
+
+- [x] 完善弹窗、卡片、历史、任务中心、错误提示和右键菜单的中英文翻译。
+- [x] 根据浏览器语言自动选择初始界面语言，并保留手动切换和本地偏好。
+- [x] 优化页面图片扫描：限制 CSS 候选和像素指纹计算数量，并分批探测原图尺寸。
+- [x] 优化素材库筛选和渲染：合并高频筛选刷新并使用 `DocumentFragment` 批量渲染。
+- [x] 优化 IndexedDB 批量读写和图片元数据探测，减少重复事务和 HEAD 请求。
+- [x] 增加必要的性能回归检查，确保扫描、筛选和下载行为保持可用。
+
 ## English
 
-This document tracks `1.5.0` and future releases. Completed items use `[x]`.
+This document tracks `1.6.0` and future releases. Completed items use `[x]`.
 
 ### 1.0.1 core experience
 
@@ -130,3 +141,12 @@ This document tracks `1.5.0` and future releases. Completed items use `[x]`.
 - [x] Download selected images or create a ZIP from the current library results.
 - [x] Filter library images by minimum/maximum dimensions and file-size range.
 - [x] Export the current library results as JSON or CSV.
+
+### 1.6.0 internationalization and performance
+
+- [x] Complete Chinese and English translations for the popup, cards, history, task center, errors, and context menus.
+- [x] Select the initial language from the browser locale while preserving manual switching and the local preference.
+- [x] Optimize page scanning by limiting CSS candidates and pixel fingerprints and probing original dimensions in batches.
+- [x] Optimize library filtering and rendering with coalesced refreshes and batched `DocumentFragment` rendering.
+- [x] Optimize IndexedDB bulk reads/writes and image metadata inspection to reduce transactions and duplicate HEAD requests.
+- [x] Add the necessary performance regression checks while preserving scan, filter, and download behavior.

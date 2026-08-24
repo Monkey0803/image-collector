@@ -188,6 +188,13 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 素材库筛选面板支持最小/最大宽度、最小/最大高度，以及最小/最大文件大小（KB）。未知文件大小的图片不会匹配最小文件大小条件，但会保留在最大文件大小条件中。
 - “导出筛选 JSON”和“导出筛选 CSV”只导出当前素材库筛选结果，不会修改素材库；“导出收藏数据”仍用于完整备份收藏、标签和集合关系。
 
+#### 1.6.0 国际化与性能优化
+
+- 弹窗、图片卡片、历史记录、任务中心、错误提示和右键菜单现在完整支持中文与英文。
+- 未设置语言偏好时，扩展会根据浏览器语言自动选择初始语言；用户仍可通过右上角按钮手动切换，选择会保存在本机。
+- 页面扫描会限制 CSS 背景图候选和像素指纹计算，并分批探测原图尺寸，减少大型页面打开扩展时的卡顿。
+- 素材库筛选输入会合并短时间内的连续刷新，图片卡片使用批量 DOM 渲染；IndexedDB 和文件元数据探测也会复用批量操作与缓存。
+
 ZIP 文件默认命名为：
 
 ```text
@@ -254,7 +261,7 @@ download_image/
 │   ├── icon-48.png     # 扩展管理页图标
 │   └── icon-128.png    # 扩展详情和安装页图标
 ├── LICENSE             # MIT 开源许可证
-├── TODO.md             # 1.5.0 已完成任务和后续路线图
+├── TODO.md             # 1.6.0 已完成任务和后续路线图
 └── README.md           # 中文和英文项目文档
 ```
 
@@ -478,6 +485,13 @@ On a webpage, right-click to open the Image Collector menu. It provides **Scan c
 - The library filter panel supports minimum/maximum width, minimum/maximum height, and minimum/maximum file size in KB. Images without a known size do not match a minimum-size filter, but remain eligible for a maximum-size filter.
 - **Export filtered JSON** and **Export filtered CSV** export only the current library results without changing the library. **Export library** remains the full backup for favorites, tags, and collection relationships.
 
+#### 1.6.0 internationalization and performance
+
+- The popup, image cards, history, task center, errors, and context menus now have complete Chinese and English translations.
+- When no language preference is stored, the extension chooses an initial language from the browser locale. Users can still switch manually from the header, and the preference is stored locally.
+- Page scanning limits CSS background candidates and pixel fingerprint work and probes original dimensions in batches, reducing stalls on large pages.
+- Library filter input coalesces rapid refreshes, image cards render in batches, and IndexedDB plus file metadata inspection reuse bulk operations and cache entries.
+
 The default ZIP filename is generated in this format:
 
 ```text
@@ -542,7 +556,7 @@ download_image/
 │   ├── icon-48.png     # Extensions management icon
 │   └── icon-128.png    # Extension detail and installation icon
 ├── LICENSE             # MIT open-source license
-├── TODO.md             # 1.5.0 checklist and future roadmap
+├── TODO.md             # 1.6.0 checklist and future roadmap
 └── README.md           # Chinese and English documentation
 ```
 

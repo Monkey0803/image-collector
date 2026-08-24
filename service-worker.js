@@ -10,18 +10,54 @@ const FORMAT_EXTENSIONS = {
 const activeJobs = new Map();
 const downloadQueue = [];
 let queueRunning = false;
+const metadataCache = new Map();
+const METADATA_CACHE_TTL = 5 * 60 * 1000;
+
+const WORKER_TRANSLATIONS = {
+  zh: {
+    scan: '扫描当前页面', downloadImage: '下载当前图片', favoriteImage: '收藏当前图片',
+    queued: '等待下载队列', queueAhead: '已加入下载队列，前方 {count} 个任务', queueStarting: '正在启动下载任务',
+    prepareDownload: '准备提交下载任务', cancelTask: '下载任务已取消', submitting: '正在提交 {current}/{total}：{name}', processed: '已处理 {count}/{total} 张图片', submitted: '下载任务已提交，成功 {count} 张', noStart: '没有图片能够开始下载',
+    prepareRead: '准备读取图片', reading: '正在读取 {current}/{total}：{name}', readCount: '已读取 {count}/{total} 张图片', noZipImages: '没有可加入 ZIP 的图片', cannotRead: '图片无法读取，可能受跨域或防盗链限制', compressing: '正在压缩 {count} 张图片', zipSubmitted: 'ZIP 已提交下载，共 {count} 张图片', zipFailed: 'ZIP 下载失败',
+    taskComplete: '任务完成', taskFailed: '下载任务失败', paused: '任务已暂停，当前项目完成后等待继续', resumed: '任务继续执行',
+    downloadFailed: '下载失败', readFailed: '读取失败', queueFailed: '下载任务失败',
+    loginRequired: '需要登录后才能访问', forbidden: '服务器拒绝访问，可能存在防盗链', notFound: '图片不存在或链接已失效', tooMany: '请求过于频繁，请稍后重试', serverError: '图片服务器暂时不可用', networkError: '网络请求失败或被跨域策略阻止'
+  },
+  en: {
+    scan: 'Scan current page', downloadImage: 'Download this image', favoriteImage: 'Favorite this image',
+    queued: 'Download queue', queueAhead: 'Added to queue; {count} task(s) ahead', queueStarting: 'Starting download task',
+    prepareDownload: 'Preparing download tasks', cancelTask: 'Download task cancelled', submitting: 'Submitting {current}/{total}: {name}', processed: 'Processed {count}/{total} image(s)', submitted: 'Download tasks submitted; {count} succeeded', noStart: 'No image could be started',
+    prepareRead: 'Preparing to read images', reading: 'Reading {current}/{total}: {name}', readCount: 'Read {count}/{total} image(s)', noZipImages: 'No images could be added to the ZIP', cannotRead: 'Images could not be read; cross-origin or hotlink protection may be blocking access', compressing: 'Compressing {count} image(s)', zipSubmitted: 'ZIP download submitted with {count} image(s)', zipFailed: 'ZIP download failed',
+    taskComplete: 'Task complete', taskFailed: 'Download task failed', paused: 'Task paused; it will continue after the current item', resumed: 'Task resumed',
+    downloadFailed: 'Download failed', readFailed: 'Read failed', queueFailed: 'Download task failed',
+    loginRequired: 'Sign-in is required to access this image', forbidden: 'The server rejected the request; hotlink protection may be enabled', notFound: 'The image does not exist or the link has expired', tooMany: 'Too many requests; try again later', serverError: 'The image server is temporarily unavailable', networkError: 'The network request failed or was blocked by cross-origin policy'
+  }
+};
+
+function normalizeLanguage(language) { return language === 'en' ? 'en' : 'zh'; }
+function workerText(language, key, values = {}) {
+  const text = WORKER_TRANSLATIONS[normalizeLanguage(language)][key] || WORKER_TRANSLATIONS.zh[key] || key;
+  return text.replace(/\{(\w+)\}/g, (_match, name) => String(values[name] ?? ''));
+}
+async function getLanguage() {
+  try {
+    const saved = await chrome.storage.local.get({ language: null });
+    if (saved.language === 'en' || saved.language === 'zh') return saved.language;
+    return String(navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+  } catch { return String(navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en'; }
+}
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'downloadImages') {
     const jobId = message.jobId || createJobId();
     const images = Array.isArray(message.images) ? message.images : [];
-    enqueueJob(jobId, images, () => runDownloadJob('images', images, Boolean(message.saveAs), jobId, message), 'images').then((result) => sendResponse(result));
+    enqueueJob(jobId, images, () => runDownloadJob('images', images, Boolean(message.saveAs), jobId, message), 'images', message.language).then((result) => sendResponse(result));
     return true;
   }
   if (message.type === 'downloadZip') {
     const jobId = message.jobId || createJobId();
     const images = Array.isArray(message.images) ? message.images : [];
-    enqueueJob(jobId, images, () => runDownloadJob('zip', images, Boolean(message.saveAs), jobId, message), 'zip').then((result) => sendResponse(result));
+    enqueueJob(jobId, images, () => runDownloadJob('zip', images, Boolean(message.saveAs), jobId, message), 'zip', message.language).then((result) => sendResponse(result));
     return true;
   }
   if (message.type === 'inspectImages') {
@@ -43,6 +79,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ ok: true });
     return true;
   }
+  if (message.type === 'languageChanged') {
+    createContextMenus();
+    sendResponse({ ok: true });
+    return true;
+  }
   return false;
 });
 
@@ -53,8 +94,8 @@ const CONTEXT_MENU_IDS = {
   favorite: 'image-collector-favorite-image'
 };
 
-chrome.runtime.onInstalled.addListener(createContextMenus);
-chrome.runtime.onStartup.addListener(createContextMenus);
+chrome.runtime.onInstalled.addListener(() => createContextMenus());
+chrome.runtime.onStartup.addListener(() => createContextMenus());
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === CONTEXT_MENU_IDS.scan) {
     openCollectorPopup(tab);
@@ -67,12 +108,13 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === CONTEXT_MENU_IDS.favorite) handleContextFavorite(info, tab).catch(() => {});
 });
 
-function createContextMenus() {
+async function createContextMenus() {
+  const language = await getLanguage();
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({ id: CONTEXT_MENU_IDS.root, title: 'Image Collector', contexts: ['page', 'image'] });
-    chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.scan, title: '扫描当前页面', contexts: ['page'] });
-    chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.download, title: '下载当前图片', contexts: ['image'] });
-    chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.favorite, title: '收藏当前图片', contexts: ['image'] });
+    chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.scan, title: workerText(language, 'scan'), contexts: ['page'] });
+    chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.download, title: workerText(language, 'downloadImage'), contexts: ['image'] });
+    chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.favorite, title: workerText(language, 'favoriteImage'), contexts: ['image'] });
   });
 }
 
@@ -97,9 +139,10 @@ function contextImage(info, tab) {
 async function handleContextDownload(info, tab) {
   const image = contextImage(info, tab);
   if (!image) return;
-  const settings = await chrome.storage.local.get({ saveAs: true, zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false });
+  const settings = await chrome.storage.local.get({ saveAs: true, zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false, language: null });
+  settings.language = settings.language || await getLanguage();
   const jobId = createJobId();
-  enqueueJob(jobId, [image], () => runDownloadJob('images', [image], Boolean(settings.saveAs), jobId, settings), 'images');
+  enqueueJob(jobId, [image], () => runDownloadJob('images', [image], Boolean(settings.saveAs), jobId, settings), 'images', settings.language);
 }
 
 async function handleContextFavorite(info, tab) {
@@ -114,14 +157,15 @@ async function handleContextFavorite(info, tab) {
 }
 
 async function runDownloadJob(kind, images, saveAs, jobId, settings) {
+  const language = normalizeLanguage(settings.language || await getLanguage());
   const result = kind === 'zip'
     ? await downloadZip(images, saveAs, jobId, settings)
     : await downloadImages(images, saveAs, jobId, settings);
-  await saveDownloadRecord(kind, images, result, jobId);
+  await saveDownloadRecord(kind, images, result, jobId, language);
   return result;
 }
 
-async function saveDownloadRecord(kind, images, result, jobId = '') {
+async function saveDownloadRecord(kind, images, result, jobId = '', language = 'zh') {
   try {
     const record = {
       id: jobId || undefined,
@@ -136,7 +180,7 @@ async function saveDownloadRecord(kind, images, result, jobId = '') {
       filename: kind === 'zip' ? `image_${dateStamp()}.zip` : '',
       phase: result.cancelled ? 'cancelled' : result.ok ? 'complete' : 'failed',
       percent: 100,
-      detail: result.error || (result.cancelled ? '任务已取消' : '任务完成'),
+      detail: result.error || (result.cancelled ? workerText(language, 'cancelTask') : workerText(language, 'taskComplete')),
       paused: false,
       completedAt: Date.now()
     };
@@ -148,57 +192,59 @@ async function saveDownloadRecord(kind, images, result, jobId = '') {
 }
 
 async function downloadImages(images, saveAs, jobId, settings = {}) {
+  const language = normalizeLanguage(settings.language || await getLanguage());
   const failed = [];
   let started = 0;
   const total = images.length;
   const job = getJob(jobId);
   await waitForResume(job);
-  sendProgress(jobId, { phase: 'starting', completed: 0, total, failed: 0, percent: 0, detail: '准备提交下载任务' });
+  sendProgress(jobId, { phase: 'starting', completed: 0, total, failed: 0, percent: 0, detail: workerText(language, 'prepareDownload') });
   for (const [index, image] of images.entries()) {
     await waitForResume(job);
-    if (job.cancelled) return finishDownloadJob(jobId, { ok: started > 0, started, failed, cancelled: true, error: '下载任务已取消' }, total, failed.length);
+    if (job.cancelled) return finishDownloadJob(jobId, { ok: started > 0, started, failed, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
     sendProgress(jobId, {
       phase: 'downloading', completed: index, total, failed: failed.length, percent: progressPercent(index, total),
-      detail: `正在提交 ${index + 1}/${total}：${normalizeName(image, '', settings)}`
+      detail: workerText(language, 'submitting', { current: index + 1, total, name: normalizeName(image, '', settings) })
     });
     try {
       const downloadId = await chrome.downloads.download({ url: image.url, filename: normalizeName(image, '', settings), saveAs, conflictAction: 'uniquify' });
       job.downloadIds.add(downloadId);
       if (job.cancelled) {
         await chrome.downloads.cancel(downloadId).catch(() => {});
-        return finishDownloadJob(jobId, { ok: started > 0, started, failed, cancelled: true, error: '下载任务已取消' }, total, failed.length);
+        return finishDownloadJob(jobId, { ok: started > 0, started, failed, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
       }
       started += 1;
     } catch (error) {
-      if (job.cancelled) return finishDownloadJob(jobId, { ok: started > 0, started, failed, cancelled: true, error: '下载任务已取消' }, total, failed.length);
-      failed.push({ url: image.url, error: readableError(error, '下载失败'), stage: 'download' });
+      if (job.cancelled) return finishDownloadJob(jobId, { ok: started > 0, started, failed, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
+      failed.push({ url: image.url, error: readableError(error, workerText(language, 'downloadFailed'), language), stage: 'download' });
     }
     const completed = started + failed.length;
     sendProgress(jobId, {
       phase: 'downloading', completed, total, failed: failed.length, percent: progressPercent(completed, total),
-      detail: `已处理 ${completed}/${total} 张图片`
+      detail: workerText(language, 'processed', { count: completed, total })
     });
   }
-  sendProgress(jobId, { phase: 'complete', completed: total, total, failed: failed.length, percent: 100, detail: `下载任务已提交，成功 ${started} 张` });
-  return finishJob(jobId, { ok: started > 0, started, failed, error: started ? '' : '没有图片能够开始下载' });
+  sendProgress(jobId, { phase: 'complete', completed: total, total, failed: failed.length, percent: 100, detail: workerText(language, 'submitted', { count: started }) });
+  return finishJob(jobId, { ok: started > 0, started, failed, error: started ? '' : workerText(language, 'noStart') });
 }
 
 async function downloadZip(images, saveAs, jobId, settings = {}) {
+  const language = normalizeLanguage(settings.language || await getLanguage());
   const entries = [];
   const failed = [];
   const usedNames = new Set();
   const total = images.length;
   const job = getJob(jobId);
   await waitForResume(job);
-  sendProgress(jobId, { phase: 'starting', completed: 0, total, failed: 0, percent: 0, detail: '准备读取图片' });
+  sendProgress(jobId, { phase: 'starting', completed: 0, total, failed: 0, percent: 0, detail: workerText(language, 'prepareRead') });
   for (const [index, image] of images.entries()) {
     await waitForResume(job);
-    if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, cancelled: true, error: 'ZIP 任务已取消' }, total, failed.length);
+    if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
     const controller = new AbortController();
     job.controllers.add(controller);
     sendProgress(jobId, {
       phase: 'reading', completed: index, total, failed: failed.length, percent: progressPercent(index, total),
-      detail: `正在读取 ${index + 1}/${total}：${normalizeName(image)}`
+      detail: workerText(language, 'reading', { current: index + 1, total, name: normalizeName(image, '', settings) })
     });
     try {
       const response = await fetch(image.url, { credentials: 'omit', redirect: 'follow', signal: controller.signal });
@@ -208,56 +254,62 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
       const name = uniqueName(zipPath(image, filename, settings.zipLayout || 'flat', settings, contentType), usedNames);
       entries.push({ name, data: new Uint8Array(await response.arrayBuffer()) });
     } catch (error) {
-      if (!job.cancelled) failed.push({ url: image.url, error: readableError(error, '读取失败'), stage: 'read' });
+      if (!job.cancelled) failed.push({ url: image.url, error: readableError(error, workerText(language, 'readFailed'), language), stage: 'read' });
     } finally {
       job.controllers.delete(controller);
     }
     const completed = index + 1;
     sendProgress(jobId, {
       phase: 'reading', completed, total, failed: failed.length, percent: progressPercent(completed, total),
-      detail: `已读取 ${completed}/${total} 张图片`
+      detail: workerText(language, 'readCount', { count: completed, total })
     });
   }
-  if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, cancelled: true, error: 'ZIP 任务已取消' }, total, failed.length);
+  if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
   if (!entries.length) {
-    sendProgress(jobId, { phase: 'failed', completed: total, total, failed: failed.length, percent: 100, detail: '没有可加入 ZIP 的图片' });
-    return finishJob(jobId, { ok: false, failed, error: '图片无法读取，可能受跨域或防盗链限制' });
+    sendProgress(jobId, { phase: 'failed', completed: total, total, failed: failed.length, percent: 100, detail: workerText(language, 'noZipImages') });
+    return finishJob(jobId, { ok: false, failed, error: workerText(language, 'cannotRead') });
   }
-  if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, cancelled: true, error: 'ZIP 任务已取消' }, total, failed.length);
+  if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
   try {
-    sendProgress(jobId, { phase: 'compressing', completed: total, total, failed: failed.length, percent: 100, detail: `正在压缩 ${entries.length} 张图片` });
+    sendProgress(jobId, { phase: 'compressing', completed: total, total, failed: failed.length, percent: 100, detail: workerText(language, 'compressing', { count: entries.length }) });
     const zip = makeZip(entries);
     const dataUrl = `data:application/zip;base64,${toBase64(zip)}`;
     const downloadId = await chrome.downloads.download({ url: dataUrl, filename: `image_${dateStamp()}.zip`, saveAs, conflictAction: 'uniquify' });
     job.downloadIds.add(downloadId);
-    sendProgress(jobId, { phase: 'complete', completed: total, total, failed: failed.length, percent: 100, detail: `ZIP 已提交下载，共 ${entries.length} 张图片` });
+    sendProgress(jobId, { phase: 'complete', completed: total, total, failed: failed.length, percent: 100, detail: workerText(language, 'zipSubmitted', { count: entries.length }) });
     return finishJob(jobId, { ok: true, started: 1, failed });
   } catch (error) {
-    const reason = readableError(error, 'ZIP 下载失败');
+    const reason = readableError(error, workerText(language, 'zipFailed'), language);
     sendProgress(jobId, { phase: 'failed', completed: total, total, failed: failed.length, percent: 100, detail: reason });
     return finishJob(jobId, { ok: false, failed, error: reason });
   }
 }
 
 async function inspectImages(images) {
-  const items = [];
+  const source = [...new Map(images.slice(0, 300).filter((image) => image?.url).map((image) => [image.url, image])).values()];
   const inspectOne = async (image) => {
+    const cached = metadataCache.get(image.url);
+    if (cached && Date.now() - cached.timestamp < METADATA_CACHE_TTL) return cached.item;
     try {
       const response = await fetch(image.url, { method: 'HEAD', credentials: 'omit', redirect: 'follow' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const contentLength = Number(response.headers.get('content-length')) || 0;
-      return { url: image.url, size: contentLength, mime: (response.headers.get('content-type') || '').split(';')[0] };
+      const item = { url: image.url, size: contentLength, mime: (response.headers.get('content-type') || '').split(';')[0] };
+      metadataCache.set(image.url, { item, timestamp: Date.now() });
+      return item;
     } catch {
-      return { url: image.url, size: 0, mime: '' };
+      const item = { url: image.url, size: 0, mime: '' };
+      metadataCache.set(image.url, { item, timestamp: Date.now() });
+      return item;
     }
   };
-  const source = images.slice(0, 300);
-  for (let index = 0; index < source.length; index += 6) items.push(...await Promise.all(source.slice(index, index + 6).map(inspectOne)));
+  const items = [];
+  for (let index = 0; index < source.length; index += 8) items.push(...await Promise.all(source.slice(index, index + 8).map(inspectOne)));
   return { ok: true, items };
 }
 
-function beginJob(jobId) {
-  const job = { cancelled: false, paused: false, resumeResolvers: new Set(), downloadIds: new Set(), controllers: new Set() };
+function beginJob(jobId, language = 'zh') {
+  const job = { cancelled: false, paused: false, language: normalizeLanguage(language), resumeResolvers: new Set(), downloadIds: new Set(), controllers: new Set() };
   if (jobId) activeJobs.set(jobId, job);
   return job;
 }
@@ -271,18 +323,19 @@ function createJobId() {
   return `${Date.now()}-${suffix}`;
 }
 
-function enqueueJob(jobId, images, task, kind = 'images') {
-  const job = beginJob(jobId);
-  const item = { jobId, images, task, kind, resolve: null };
+function enqueueJob(jobId, images, task, kind = 'images', language = 'zh') {
+  const normalizedLanguage = normalizeLanguage(language);
+  const job = beginJob(jobId, normalizedLanguage);
+  const item = { jobId, images, task, kind, language: normalizedLanguage, resolve: null };
   const position = downloadQueue.length + (queueRunning ? 1 : 0);
   job.queueItem = item;
   ImageCollectorDB.saveDownload({
     id: jobId, jobId, kind, status: 'queued', urls: images.map((image) => image.url), count: images.length,
-    phase: 'queued', percent: 0, detail: '等待下载队列', paused: false
+    phase: 'queued', percent: 0, detail: workerText(normalizedLanguage, 'queued'), paused: false
   }).catch(() => {}).finally(() => processQueue());
   sendProgress(jobId, {
     phase: 'queued', completed: 0, total: images.length, failed: 0, percent: 0,
-    detail: position ? `已加入下载队列，前方 ${position} 个任务` : '正在启动下载任务'
+    detail: position ? workerText(normalizedLanguage, 'queueAhead', { count: position }) : workerText(normalizedLanguage, 'queueStarting')
   });
   const promise = new Promise((resolve) => { item.resolve = resolve; });
   downloadQueue.push(item);
@@ -298,9 +351,9 @@ async function processQueue() {
       const job = activeJobs.get(item.jobId);
       if (!job || job.cancelled) {
         const result = finishDownloadJob(item.jobId, {
-          ok: false, failed: [], cancelled: true, error: '下载任务已取消'
-        }, item.images.length, 0);
-        saveDownloadRecord(item.kind, item.images, result, item.jobId);
+          ok: false, failed: [], cancelled: true, error: workerText(item.language, 'cancelTask')
+        }, item.images.length, 0, item.language);
+        saveDownloadRecord(item.kind, item.images, result, item.jobId, item.language);
         item.resolve(result);
         continue;
       }
@@ -310,9 +363,9 @@ async function processQueue() {
         item.resolve(await item.task());
       } catch (error) {
         const result = finishJob(item.jobId, {
-          ok: false, failed: [], error: readableError(error, '下载任务失败')
+          ok: false, failed: [], error: readableError(error, workerText(item.language, 'queueFailed'), item.language)
         });
-        await saveDownloadRecord(item.kind, item.images, result, item.jobId);
+        await saveDownloadRecord(item.kind, item.images, result, item.jobId, item.language);
         item.resolve(result);
       }
     }
@@ -330,7 +383,7 @@ function updateQueueProgress() {
     const ahead = index + (queueRunning ? 1 : 0);
     sendProgress(item.jobId, {
       phase: 'queued', completed: 0, total: item.images.length, failed: 0, percent: 0,
-      detail: ahead ? `等待下载队列，前方 ${ahead} 个任务` : '正在启动下载任务'
+      detail: ahead ? workerText(job.language, 'queueAhead', { count: ahead }) : workerText(job.language, 'queueStarting')
     });
   });
 }
@@ -345,9 +398,9 @@ function cancelDownload(jobId) {
     const item = job.queueItem;
     job.queueItem = null;
     const result = finishDownloadJob(jobId, {
-      ok: false, failed: [], cancelled: true, error: '下载任务已取消'
-    }, item.images.length, 0);
-    saveDownloadRecord(item.kind, item.images, result, item.jobId);
+      ok: false, failed: [], cancelled: true, error: workerText(job.language, 'cancelTask')
+    }, item.images.length, 0, job.language);
+    saveDownloadRecord(item.kind, item.images, result, item.jobId, job.language);
     item.resolve(result);
     updateQueueProgress();
     processQueue();
@@ -357,14 +410,14 @@ function cancelDownload(jobId) {
   job.downloadIds.forEach((downloadId) => chrome.downloads.cancel(downloadId).catch(() => {}));
   job.resumeResolvers.forEach((resolve) => resolve());
   job.resumeResolvers.clear();
-  sendProgress(jobId, { phase: 'cancelled', percent: 100, detail: '任务已取消' });
+  sendProgress(jobId, { phase: 'cancelled', percent: 100, detail: workerText(job.language, 'cancelTask') });
 }
 
 function pauseDownload(jobId) {
   const job = activeJobs.get(jobId);
   if (!job || job.cancelled) return;
   job.paused = true;
-  sendProgress(jobId, { phase: 'paused', detail: '任务已暂停，当前项目完成后等待继续' });
+  sendProgress(jobId, { phase: 'paused', detail: workerText(job.language, 'paused') });
 }
 
 function resumeDownload(jobId) {
@@ -373,7 +426,7 @@ function resumeDownload(jobId) {
   job.paused = false;
   job.resumeResolvers.forEach((resolve) => resolve());
   job.resumeResolvers.clear();
-  sendProgress(jobId, { phase: 'resumed', detail: '任务继续执行' });
+  sendProgress(jobId, { phase: 'resumed', detail: workerText(job.language, 'resumed') });
 }
 
 function waitForResume(job) {
@@ -386,8 +439,8 @@ function finishJob(jobId, result) {
   return result;
 }
 
-function finishDownloadJob(jobId, result, total, failed) {
-  sendProgress(jobId, { phase: 'cancelled', completed: total, total, failed, percent: 100, detail: '任务已取消' });
+function finishDownloadJob(jobId, result, total, failed, language = 'zh') {
+  sendProgress(jobId, { phase: 'cancelled', completed: total, total, failed, percent: 100, detail: workerText(language, 'cancelTask') });
   return finishJob(jobId, result);
 }
 
@@ -467,15 +520,15 @@ function extensionFor(image, contentType = '') {
   return MIME_EXTENSIONS[mime] || FORMAT_EXTENSIONS[formatFor(image, contentType)] || '.jpg';
 }
 
-function readableError(error, fallback) {
-  if (error?.name === 'AbortError') return '任务已取消';
+function readableError(error, fallback, language = 'zh') {
+  if (error?.name === 'AbortError') return workerText(language, 'cancelTask');
   const message = String(error?.message || error || '').trim();
-  if (/HTTP\s+401\b/i.test(message)) return '需要登录后才能访问';
-  if (/HTTP\s+403\b/i.test(message)) return '服务器拒绝访问，可能存在防盗链';
-  if (/HTTP\s+404\b/i.test(message)) return '图片不存在或链接已失效';
-  if (/HTTP\s+429\b/i.test(message)) return '请求过于频繁，请稍后重试';
-  if (/HTTP\s+5\d\d\b/i.test(message)) return '图片服务器暂时不可用';
-  if (/Failed to fetch|NetworkError|Network request failed|Load failed|跨域/i.test(message)) return '网络请求失败或被跨域策略阻止';
+  if (/HTTP\s+401\b/i.test(message)) return workerText(language, 'loginRequired');
+  if (/HTTP\s+403\b/i.test(message)) return workerText(language, 'forbidden');
+  if (/HTTP\s+404\b/i.test(message)) return workerText(language, 'notFound');
+  if (/HTTP\s+429\b/i.test(message)) return workerText(language, 'tooMany');
+  if (/HTTP\s+5\d\d\b/i.test(message)) return workerText(language, 'serverError');
+  if (/Failed to fetch|NetworkError|Network request failed|Load failed|跨域/i.test(message)) return workerText(language, 'networkError');
   return message || fallback;
 }
 

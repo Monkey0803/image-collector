@@ -112,7 +112,12 @@
   async function upsertImages(images) {
     const incoming = (Array.isArray(images) ? images : []).map(normalizeImage).filter(Boolean);
     if (!incoming.length) return [];
-    const existing = await Promise.all(incoming.map((image) => getImage(image.url)));
+    const db = await openDatabase();
+    const readTransaction = db.transaction(IMAGE_STORE, 'readonly');
+    const readStore = readTransaction.objectStore(IMAGE_STORE);
+    const readDone = transactionDone(readTransaction);
+    const existing = await Promise.all(incoming.map((image) => requestValue(readStore.get(image.id))));
+    await readDone;
     const records = incoming.map((image, index) => {
       const previous = existing[index];
       return {
@@ -132,7 +137,6 @@
         createdAt: previous?.createdAt || Date.now()
       };
     });
-    const db = await openDatabase();
     const transaction = db.transaction(IMAGE_STORE, 'readwrite');
     const store = transaction.objectStore(IMAGE_STORE);
     records.forEach((record) => store.put(record));
@@ -161,7 +165,11 @@
   async function listImages(options = {}) {
     const db = await openDatabase();
     const transaction = db.transaction(IMAGE_STORE, 'readonly');
-    const records = await requestValue(transaction.objectStore(IMAGE_STORE).getAll());
+    const store = transaction.objectStore(IMAGE_STORE);
+    const source = options.favoriteOnly && global.IDBKeyRange
+      ? store.index('byFavorite').getAll(global.IDBKeyRange.only(true))
+      : store.getAll();
+    const records = await requestValue(source);
     const query = String(options.query || '').trim().toLowerCase();
     const tag = String(options.tag || '').trim().toLowerCase();
     const filtered = records.filter((record) => {
@@ -190,10 +198,14 @@
 
   async function getScanImages(scanId) {
     const db = await openDatabase();
-    const transaction = db.transaction(SCAN_STORE, 'readonly');
-    const scan = await requestValue(transaction.objectStore(SCAN_STORE).get(scanId));
+    const scanTransaction = db.transaction(SCAN_STORE, 'readonly');
+    const scan = await requestValue(scanTransaction.objectStore(SCAN_STORE).get(scanId));
     if (!scan) return [];
-    return Promise.all(scan.imageIds.map((id) => getImage(id))).then((records) => records.filter(Boolean));
+    const transaction = db.transaction(IMAGE_STORE, 'readonly');
+    const done = transactionDone(transaction);
+    const records = await Promise.all(scan.imageIds.map((id) => requestValue(transaction.objectStore(IMAGE_STORE).get(id))));
+    await done;
+    return records.filter(Boolean);
   }
 
   async function updateImage(url, updates = {}) {
@@ -305,6 +317,31 @@
 
   function setImageCollections(url, collectionIds) { return updateImage(url, { collectionIds: cleanCollectionIds(collectionIds) }); }
 
+  async function bulkUpdateImages(urls, updates = {}) {
+    const ids = [...new Set((Array.isArray(urls) ? urls : []).map(imageId).filter(Boolean))];
+    if (!ids.length) return [];
+    const db = await openDatabase();
+    const readTransaction = db.transaction(IMAGE_STORE, 'readonly');
+    const readStore = readTransaction.objectStore(IMAGE_STORE);
+    const readDone = transactionDone(readTransaction);
+    const records = await Promise.all(ids.map((id) => requestValue(readStore.get(id))));
+    await readDone;
+    const updated = records.filter(Boolean).map((previous) => {
+      const changes = typeof updates === 'function' ? updates(previous) : updates;
+      const record = { ...previous, ...(changes || {}), id: previous.id, url: previous.url, updatedAt: Date.now() };
+      record.favorite = changes?.favorite === undefined ? Boolean(previous.favorite) : Boolean(changes.favorite);
+      record.tags = changes?.tags === undefined ? cleanTags(previous.tags) : cleanTags(changes.tags);
+      record.collectionIds = changes?.collectionIds === undefined ? cleanCollectionIds(previous.collectionIds) : cleanCollectionIds(changes.collectionIds);
+      return record;
+    });
+    if (!updated.length) return [];
+    const transaction = db.transaction(IMAGE_STORE, 'readwrite');
+    const store = transaction.objectStore(IMAGE_STORE);
+    updated.forEach((record) => store.put(record));
+    await transactionDone(transaction);
+    return updated;
+  }
+
   async function deleteImages(urls) {
     const ids = [...new Set((Array.isArray(urls) ? urls : []).map(imageId).filter(Boolean))];
     if (!ids.length) return 0;
@@ -317,16 +354,40 @@
   }
 
   async function getStorageStats() {
-    const [images, collections, scans, downloads] = await Promise.all([listImages(), listCollections(), listScans(100000), listDownloads(100000)]);
-    const bytes = new Blob([JSON.stringify({ images, collections, scans, downloads })]).size;
+    const [images, collections, scans, downloads] = await Promise.all([
+      measureStore(IMAGE_STORE, (stats, record) => { if (record.favorite) stats.favorites += 1; }),
+      measureStore(COLLECTION_STORE),
+      measureStore(SCAN_STORE),
+      measureStore(DOWNLOAD_STORE)
+    ]);
     return {
-      images: images.length,
-      favorites: images.filter((image) => image.favorite).length,
-      collections: collections.length,
-      scans: scans.length,
-      downloads: downloads.length,
-      bytes
+      images: images.count,
+      favorites: images.favorites,
+      collections: collections.count,
+      scans: scans.count,
+      downloads: downloads.count,
+      bytes: images.bytes + collections.bytes + scans.bytes + downloads.bytes
     };
+  }
+
+  function measureStore(storeName, onRecord = () => {}) {
+    return openDatabase().then((db) => new Promise((resolve, reject) => {
+        const transaction = db.transaction(storeName, 'readonly');
+        const stats = { count: 0, favorites: 0, bytes: 0 };
+        const encoder = new TextEncoder();
+        const request = transaction.objectStore(storeName).openCursor();
+        request.onsuccess = () => {
+          const cursor = request.result;
+          if (!cursor) return;
+          stats.count += 1;
+          onRecord(stats, cursor.value);
+          stats.bytes += encoder.encode(JSON.stringify(cursor.value)).byteLength;
+          cursor.continue();
+        };
+        request.onerror = () => reject(request.error || new Error('本地数据读取失败'));
+        transaction.onerror = () => reject(transaction.error || new Error('本地数据读取失败'));
+        transaction.oncomplete = () => resolve(stats);
+      }));
   }
 
   async function clearLibrary() {
@@ -393,6 +454,7 @@
     createCollection,
     listCollections,
     setImageCollections,
+    bulkUpdateImages,
     deleteImages,
     getStorageStats,
     clearLibrary,
