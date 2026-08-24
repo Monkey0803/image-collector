@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录 `1.4.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
+本文档记录 `1.5.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
 
 ## 1.0.1
 
@@ -65,9 +65,17 @@
 - [x] 增加本地存储统计、清理素材和重置设置入口。
 - [x] 增加键盘快捷键，支持全选、反选、聚焦搜索和开始扫描。
 
+## 1.5.0
+
+### 素材库工作流增强
+
+- [x] 支持在素材库当前筛选结果中批量下载图片或生成 ZIP。
+- [x] 支持按最小/最大宽高和文件大小范围筛选素材库。
+- [x] 支持将当前素材库筛选结果导出为 JSON 或 CSV。
+
 ## English
 
-This document tracks `1.4.0` and future releases. Completed items use `[x]`.
+This document tracks `1.5.0` and future releases. Completed items use `[x]`.
 
 ### 1.0.1 core experience
 
@@ -116,3 +124,9 @@ This document tracks `1.4.0` and future releases. Completed items use `[x]`.
 - [x] Add a maximum image count and automatic scrolling option for lazy-loaded pages.
 - [x] Add local storage statistics, library cleanup, and settings reset controls.
 - [x] Add keyboard shortcuts for select all, invert selection, search focus, and rescanning.
+
+### 1.5.0 library workflow improvements
+
+- [x] Download selected images or create a ZIP from the current library results.
+- [x] Filter library images by minimum/maximum dimensions and file-size range.
+- [x] Export the current library results as JSON or CSV.

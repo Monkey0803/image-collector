@@ -40,7 +40,7 @@ const state = {
   preview: null,
   previewZoom: 1,
   taskRecords: [],
-  librarySelected: new Set(), libraryFormat: 'all', libraryMinWidth: '', libraryMinHeight: '', librarySort: 'updated', storageStats: null
+  librarySelected: new Set(), libraryFormat: 'all', libraryMinWidth: '', libraryMaxWidth: '', libraryMinHeight: '', libraryMaxHeight: '', libraryMinSize: '', libraryMaxSize: '', librarySort: 'updated', storageStats: null
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -55,7 +55,7 @@ const els = {
   originalOnly: $('#originalOnly'), zipLayout: $('#zipLayout'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'),
   pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'), taskViewButton: $('#taskViewButton'), settingsViewButton: $('#settingsViewButton'),
   libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryScope: $('#libraryScope'),
-  librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'), libraryBatchToolbar: $('#libraryBatchToolbar'), selectAllLibrary: $('#selectAllLibrary'), librarySelectedSummary: $('#librarySelectedSummary'), bulkFavorite: $('#bulkFavorite'), bulkTag: $('#bulkTag'), bulkCollection: $('#bulkCollection'), bulkDelete: $('#bulkDelete'), libraryFormat: $('#libraryFormat'), libraryMinWidth: $('#libraryMinWidth'), libraryMinHeight: $('#libraryMinHeight'), librarySort: $('#librarySort'),
+  librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), exportLibraryResultsJson: $('#exportLibraryResultsJson'), exportLibraryResultsCsv: $('#exportLibraryResultsCsv'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'), libraryBatchToolbar: $('#libraryBatchToolbar'), selectAllLibrary: $('#selectAllLibrary'), librarySelectedSummary: $('#librarySelectedSummary'), bulkFavorite: $('#bulkFavorite'), bulkTag: $('#bulkTag'), bulkCollection: $('#bulkCollection'), bulkDelete: $('#bulkDelete'), libraryDownloadSelected: $('#libraryDownloadSelected'), libraryZipSelected: $('#libraryZipSelected'), libraryFormat: $('#libraryFormat'), libraryMinWidth: $('#libraryMinWidth'), libraryMaxWidth: $('#libraryMaxWidth'), libraryMinHeight: $('#libraryMinHeight'), libraryMaxHeight: $('#libraryMaxHeight'), libraryMinSize: $('#libraryMinSize'), libraryMaxSize: $('#libraryMaxSize'), librarySort: $('#librarySort'),
   historyView: $('#historyView'), clearHistory: $('#clearHistory'), refreshHistory: $('#refreshHistory'), scanHistory: $('#scanHistory'),
   downloadHistory: $('#downloadHistory'), historyEmpty: $('#historyEmpty'),
   taskView: $('#taskView'), refreshTasks: $('#refreshTasks'), retryAllTasks: $('#retryAllTasks'), taskSummary: $('#taskSummary'), taskList: $('#taskList'), taskEmpty: $('#taskEmpty'), settingsView: $('#settingsView'), settingsViewButton: $('#settingsViewButton'), refreshStorage: $('#refreshStorage'), storageStats: $('#storageStats'), clearLibrary: $('#clearLibrary'), resetSettings: $('#resetSettings'),
@@ -139,9 +139,9 @@ function bindEvents() {
     refreshLibraryData();
   });
   const syncLibraryFilters = () => {
-    state.libraryFormat = els.libraryFormat.value; state.libraryMinWidth = els.libraryMinWidth.value; state.libraryMinHeight = els.libraryMinHeight.value; state.librarySort = els.librarySort.value; refreshLibraryData();
+    state.libraryFormat = els.libraryFormat.value; state.libraryMinWidth = els.libraryMinWidth.value; state.libraryMaxWidth = els.libraryMaxWidth.value; state.libraryMinHeight = els.libraryMinHeight.value; state.libraryMaxHeight = els.libraryMaxHeight.value; state.libraryMinSize = els.libraryMinSize.value; state.libraryMaxSize = els.libraryMaxSize.value; state.librarySort = els.librarySort.value; refreshLibraryData();
   };
-  [els.libraryFormat, els.libraryMinWidth, els.libraryMinHeight, els.librarySort].forEach((control) => control.addEventListener('input', syncLibraryFilters));
+  [els.libraryFormat, els.libraryMinWidth, els.libraryMaxWidth, els.libraryMinHeight, els.libraryMaxHeight, els.libraryMinSize, els.libraryMaxSize, els.librarySort].forEach((control) => control.addEventListener('input', syncLibraryFilters));
   els.librarySort.addEventListener('change', syncLibraryFilters);
   els.selectAllLibrary.addEventListener('change', () => {
     if (els.selectAllLibrary.checked) state.libraryResults.forEach((record) => state.librarySelected.add(record.url));
@@ -152,6 +152,10 @@ function bindEvents() {
   els.bulkTag.addEventListener('click', () => bulkUpdateLibrary('tag'));
   els.bulkCollection.addEventListener('click', () => bulkUpdateLibrary('collection'));
   els.bulkDelete.addEventListener('click', () => bulkUpdateLibrary('delete'));
+  els.libraryDownloadSelected.addEventListener('click', () => downloadImages(selectedLibraryImages(), false));
+  els.libraryZipSelected.addEventListener('click', () => downloadImages(selectedLibraryImages(), true));
+  els.exportLibraryResultsJson.addEventListener('click', () => exportLibraryResults('json'));
+  els.exportLibraryResultsCsv.addEventListener('click', () => exportLibraryResults('csv'));
   els.librarySearch.addEventListener('input', () => {
     state.librarySearch = els.librarySearch.value.trim();
     refreshLibraryData();
@@ -292,7 +296,12 @@ async function refreshLibraryData() {
       if (state.libraryCollection && state.libraryCollection !== '__uncategorized' && !record.collectionIds?.includes(state.libraryCollection)) return false;
       if (state.libraryFormat !== 'all' && formatCategory(record.format) !== state.libraryFormat) return false;
       if (state.libraryMinWidth && record.width < Number(state.libraryMinWidth)) return false;
+      if (state.libraryMaxWidth && record.width && record.width > Number(state.libraryMaxWidth)) return false;
       if (state.libraryMinHeight && record.height < Number(state.libraryMinHeight)) return false;
+      if (state.libraryMaxHeight && record.height && record.height > Number(state.libraryMaxHeight)) return false;
+      const size = Number(record.size) || 0;
+      if (state.libraryMinSize && (!size || size < Number(state.libraryMinSize) * 1024)) return false;
+      if (state.libraryMaxSize && size && size > Number(state.libraryMaxSize) * 1024) return false;
       if (!state.librarySearch) return true;
       const query = state.librarySearch.toLowerCase();
       return [record.url, record.domain, record.format, record.alt, ...record.tags]
@@ -309,7 +318,7 @@ async function refreshLibraryData() {
     els.libraryScope.value = state.libraryScope;
     renderCollectionOptions();
     els.libraryCollection.value = state.libraryCollection;
-    els.libraryFormat.value = state.libraryFormat; els.libraryMinWidth.value = state.libraryMinWidth; els.libraryMinHeight.value = state.libraryMinHeight; els.librarySort.value = state.librarySort;
+    els.libraryFormat.value = state.libraryFormat; els.libraryMinWidth.value = state.libraryMinWidth; els.libraryMaxWidth.value = state.libraryMaxWidth; els.libraryMinHeight.value = state.libraryMinHeight; els.libraryMaxHeight.value = state.libraryMaxHeight; els.libraryMinSize.value = state.libraryMinSize; els.libraryMaxSize.value = state.libraryMaxSize; els.librarySort.value = state.librarySort;
     els.librarySearch.value = state.librarySearch;
     renderLibrary();
     if (state.view === 'page') render();
@@ -434,6 +443,8 @@ function renderLibrary() {
   els.libraryBatchToolbar.hidden = results.length === 0;
   els.librarySelectedSummary.textContent = `${t('selected')} ${selectedCount}`;
   els.selectAllLibrary.checked = results.length > 0 && results.every((record) => state.librarySelected.has(record.url));
+  els.libraryDownloadSelected.disabled = selectedCount === 0;
+  els.libraryZipSelected.disabled = selectedCount === 0;
   els.libraryEmpty.hidden = results.length !== 0;
   results.forEach((record) => els.libraryGrid.append(createLibraryCard(record)));
 }
@@ -528,6 +539,20 @@ async function exportLibraryData() {
     downloadTextFile(JSON.stringify(data, null, 2), `image-collector-library-${dateStamp()}.json`, 'application/json');
     showToast(t('libraryExported'));
   } catch { showToast(t('libraryExportFailed')); }
+}
+
+function exportLibraryResults(type) {
+  if (!state.libraryResults.length) { showToast(t('libraryResultsEmpty')); return; }
+  const records = state.libraryResults.map((record) => ({
+    name: fileName(record.url), url: record.url, width: record.width || 0, height: record.height || 0,
+    format: record.format || 'other', mime: record.mime || '', size: record.size || 0,
+    source: record.source || '', frameUrl: record.frameUrl || '', favorite: Boolean(record.favorite),
+    tags: record.tags || [], collectionIds: record.collectionIds || [], updatedAt: record.updatedAt || 0
+  }));
+  const isJson = type === 'json';
+  const content = isJson ? JSON.stringify(records, null, 2) : toCsv(records);
+  downloadTextFile(content, `image-collector-filtered-${dateStamp()}.${isJson ? 'json' : 'csv'}`, isJson ? 'application/json' : 'text/csv');
+  showToast(t('libraryResultsExported'));
 }
 
 function importLibraryData(event) {
@@ -1282,6 +1307,7 @@ function createCard(image) {
 }
 
 function selectedImages() { return state.images.filter((image) => state.selected.has(image.id)); }
+function selectedLibraryImages() { return [...state.librarySelected].map((url) => state.libraryRecords.get(url)).filter(Boolean); }
 function downloadSelected(asZip) { downloadImages(selectedImages(), asZip); }
 function formatLabel(format) { return format === 'other' ? '其它' : (format || 'other').toUpperCase(); }
 
@@ -1392,6 +1418,7 @@ const TRANSLATIONS = {
     page: '当前页面', library: '素材库', history: '历史', tasks: '任务', filterPreset: '筛选预设', selectionPreset: '选择预设', clear: '清除', width: '宽度', height: '高度', format: '格式', formatHint: '按文件类型查看', originalOnly: '仅显示原图候选', originalHint: '优先使用页面提供的高清地址', selectAll: '全选当前结果', sort: '排序', pageOrder: '页面顺序', widthDesc: '宽度：从大到小', heightDesc: '高度：从大到小', areaDesc: '尺寸：从大到小', nameAsc: '文件名：A–Z', searchPage: '搜索文件名、域名或 URL', noResults: '没有符合条件的图片', noResultsHint: '尝试放宽尺寸筛选，或重新扫描当前页面。', scanning: '正在扫描当前页面…', saveLocation: '下载时选择保存位置', downloadSupport: '支持普通文件与 ZIP', zipLayout: 'ZIP 分组', noGrouping: '不分组', bySite: '按网站', byFormat: '按格式', bySiteFormat: '按网站 / 格式', filenameTemplate: '文件名模板', dateFolder: '按日期建目录', json: '导出 JSON', csv: '导出 CSV', downloadSelected: '下载选中', zip: '下载 ZIP', zipNote: 'ZIP 会将当前选中的图片合并为一个文件，适合批量保存。',
     saveFilter: '保存筛选', deletePreset: '删除预设', saveSelection: '保存选择', invert: '反选', allCollections: '全部集合', uncategorized: '未分类',
     newCollection: '新建集合', exportLibrary: '导出收藏数据', importLibrary: '导入数据', taskCount: '个任务', activeTasks: '进行中', imageDownload: '图片下载', libraryTitle: '本地素材库', refresh: '刷新', allImages: '全部图片', librarySearch: '搜索图片、域名或标签', libraryMinWidth: '最小宽度', libraryMinHeight: '最小高度', libraryEmpty: '素材库还是空的', libraryEmptyHint: '在当前页面收藏图片，或从右键菜单收藏网页图片。', historyTitle: '最近活动', clearHistory: '清空历史', recentScans: '最近扫描', downloads: '下载记录', historyEmpty: '暂时没有历史记录', historyEmptyHint: '扫描网页或下载图片后，记录会显示在这里。', settings: '设置', settingsNote: '清空素材库会删除图片、收藏、标签和集合，但不会影响当前网页。', selected: '已选', images: '张图片', favorites: '收藏', collections: '个集合', storageUnavailable: '本地存储暂时不可用',
+    exportFilteredJson: '导出筛选 JSON', exportFilteredCsv: '导出筛选 CSV', libraryDownloadSelected: '下载选中', libraryZipSelected: '下载 ZIP', libraryMaxWidth: '最大宽度', libraryMaxHeight: '最大高度', libraryMinSize: '最小 KB', libraryMaxSize: '最大 KB', libraryResultsEmpty: '当前筛选结果为空', libraryResultsExported: '筛选结果已导出', items: '项',
     pause: '暂停', resume: '继续', cancel: '取消', retry: '重试', queued: '排队中', running: '进行中', paused: '已暂停', completed: '已完成', partial: '部分失败', failed: '失败', cancelled: '已取消',
     preview: '图片预览', copyUrl: '复制原图地址', openUrl: '在新标签页打开', reset: '重置', original: '原图', unknownSize: '尺寸未知', imagePreview: '图片预览',
     copied: '原图地址已复制', copyFailed: '复制失败，请检查浏览器权限', collectionUpdated: '集合已更新', collectionUpdateFailed: '集合更新失败', collectionCreated: '集合已创建', collectionCreateFailed: '集合创建失败',
@@ -1402,6 +1429,7 @@ const TRANSLATIONS = {
     page: 'Current', library: 'Library', history: 'History', tasks: 'Tasks', filterPreset: 'Filter preset', selectionPreset: 'Selection preset', clear: 'Clear', width: 'Width', height: 'Height', format: 'Format', formatHint: 'Filter by file type', originalOnly: 'Original candidates only', originalHint: 'Prefer high-resolution addresses from the page', selectAll: 'Select all results', sort: 'Sort', pageOrder: 'Page order', widthDesc: 'Width: largest first', heightDesc: 'Height: largest first', areaDesc: 'Area: largest first', nameAsc: 'Filename: A–Z', searchPage: 'Search filename, hostname or URL', noResults: 'No matching images', noResultsHint: 'Try widening the size range or scan the page again.', scanning: 'Scanning current page…', saveLocation: 'Ask where to save downloads', downloadSupport: 'Files and ZIP supported', zipLayout: 'ZIP folders', noGrouping: 'No folders', bySite: 'By site', byFormat: 'By format', bySiteFormat: 'By site / format', filenameTemplate: 'Filename template', dateFolder: 'Create date folder', json: 'Export JSON', csv: 'Export CSV', downloadSelected: 'Download selected', zip: 'Download ZIP', zipNote: 'Selected images will be combined into one ZIP archive.',
     saveFilter: 'Save filter', deletePreset: 'Delete preset', saveSelection: 'Save selection', invert: 'Invert', allCollections: 'All collections', uncategorized: 'Uncategorized',
     newCollection: 'New collection', exportLibrary: 'Export library', importLibrary: 'Import data', taskCount: 'tasks', activeTasks: 'active', imageDownload: 'Image download', libraryTitle: 'Local library', refresh: 'Refresh', allImages: 'All images', librarySearch: 'Search images, sites or tags', libraryMinWidth: 'Min width', libraryMinHeight: 'Min height', libraryEmpty: 'Your library is empty', libraryEmptyHint: 'Favorite an image on this page or use the context menu to save one.', historyTitle: 'Recent activity', clearHistory: 'Clear history', recentScans: 'Recent scans', downloads: 'Downloads', historyEmpty: 'No activity yet', historyEmptyHint: 'Scan a page or download an image to see activity here.', settings: 'Settings', settingsNote: 'Clearing the library removes images, favorites, tags, and collections, but does not affect the current webpage.', selected: 'Selected', images: 'images', favorites: 'favorites', collections: 'collections', storageUnavailable: 'Local storage is unavailable',
+    exportFilteredJson: 'Export filtered JSON', exportFilteredCsv: 'Export filtered CSV', libraryDownloadSelected: 'Download selected', libraryZipSelected: 'Download ZIP', libraryMaxWidth: 'Max width', libraryMaxHeight: 'Max height', libraryMinSize: 'Min KB', libraryMaxSize: 'Max KB', libraryResultsEmpty: 'No filtered images', libraryResultsExported: 'Filtered results exported', items: 'items',
     pause: 'Pause', resume: 'Resume', cancel: 'Cancel', retry: 'Retry', queued: 'Queued', running: 'Running', paused: 'Paused', completed: 'Completed', partial: 'Partial', failed: 'Failed', cancelled: 'Cancelled',
     preview: 'Image preview', copyUrl: 'Copy original URL', openUrl: 'Open in new tab', reset: 'Reset', original: 'Original', unknownSize: 'Unknown size', imagePreview: 'Image preview',
     copied: 'Original URL copied', copyFailed: 'Copy failed; check browser permission', collectionUpdated: 'Collection updated', collectionUpdateFailed: 'Collection update failed', collectionCreated: 'Collection created', collectionCreateFailed: 'Collection creation failed',
@@ -1422,7 +1450,7 @@ function applyLanguage() {
   els.historyViewButton.textContent = t('history'); els.taskViewButton.textContent = t('tasks'); els.settingsViewButton.textContent = t('settings');
   els.filterPreset.options[0].textContent = t('filterPreset'); els.selectionPreset.options[0].textContent = t('selectionPreset');
   els.saveFilterPreset.textContent = t('saveFilter'); els.deleteFilterPreset.textContent = t('deletePreset'); els.saveSelectionPreset.textContent = t('saveSelection'); els.invertSelection.textContent = t('invert');
-  els.newCollection.textContent = t('newCollection'); els.exportLibrary.textContent = t('exportLibrary'); els.importLibrary.textContent = t('importLibrary');
+  els.newCollection.textContent = t('newCollection'); els.exportLibrary.textContent = t('exportLibrary'); els.exportLibraryResultsJson.textContent = t('exportFilteredJson'); els.exportLibraryResultsCsv.textContent = t('exportFilteredCsv'); els.importLibrary.textContent = t('importLibrary');
   els.previewTitle.textContent = state.preview ? fileName(state.preview.url) : t('preview'); els.copyImageUrl.textContent = t('copyUrl'); els.openImageUrl.textContent = t('openUrl'); els.zoomReset.textContent = t('reset');
   document.querySelector('.filter-panel h2').textContent = state.language === 'en' ? 'Filter by size' : '按尺寸筛选';
   els.clearFilters.textContent = t('clear');
@@ -1453,7 +1481,11 @@ function applyLanguage() {
   if (els.refreshLibrary) els.refreshLibrary.textContent = t('refresh');
   if (els.librarySearch) els.librarySearch.placeholder = t('librarySearch');
   if (els.libraryMinWidth) els.libraryMinWidth.placeholder = t('libraryMinWidth');
+  if (els.libraryMaxWidth) els.libraryMaxWidth.placeholder = t('libraryMaxWidth');
   if (els.libraryMinHeight) els.libraryMinHeight.placeholder = t('libraryMinHeight');
+  if (els.libraryMaxHeight) els.libraryMaxHeight.placeholder = t('libraryMaxHeight');
+  if (els.libraryMinSize) els.libraryMinSize.placeholder = t('libraryMinSize');
+  if (els.libraryMaxSize) els.libraryMaxSize.placeholder = t('libraryMaxSize');
   const libraryEmptyTitle = document.querySelector('#libraryEmpty strong'); if (libraryEmptyTitle) libraryEmptyTitle.textContent = t('libraryEmpty');
   const libraryEmptyHint = document.querySelector('#libraryEmpty span'); if (libraryEmptyHint) libraryEmptyHint.textContent = t('libraryEmptyHint');
   const allImagesOption = [...els.libraryScope.options].find((option) => option.value === 'all'); if (allImagesOption) allImagesOption.textContent = t('allImages');
@@ -1476,7 +1508,7 @@ function applyLanguage() {
   const scanOptions = state.language === 'en' ? ['200 images', '500 images', '1000 images', 'Unlimited'] : ['200 张', '500 张', '1000 张', '不限']; [...els.scanLimit.options].forEach((option, index) => { option.textContent = scanOptions[index]; });
   const libraryFormatOptions = state.language === 'en' ? ['All formats', 'JPEG', 'PNG', 'WEBP', 'AVIF', 'Other'] : ['全部格式', 'JPEG', 'PNG', 'WEBP', 'AVIF', '其它']; [...els.libraryFormat.options].forEach((option, index) => { option.textContent = libraryFormatOptions[index]; });
   const librarySortOptions = state.language === 'en' ? ['Recently updated', 'Width', 'Height', 'File size'] : ['最近更新', '宽度', '高度', '文件大小']; [...els.librarySort.options].forEach((option, index) => { option.textContent = librarySortOptions[index]; });
-  els.selectAllLibrary.nextElementSibling.textContent = t('selectAll'); els.bulkFavorite.textContent = state.language === 'en' ? 'Favorite' : '批量收藏'; els.bulkTag.textContent = state.language === 'en' ? 'Add tag' : '添加标签'; els.bulkCollection.textContent = state.language === 'en' ? 'Archive' : '归档到集合'; els.bulkDelete.textContent = state.language === 'en' ? 'Delete' : '删除';
+  els.selectAllLibrary.nextElementSibling.textContent = t('selectAll'); els.bulkFavorite.textContent = state.language === 'en' ? 'Favorite' : '批量收藏'; els.bulkTag.textContent = state.language === 'en' ? 'Add tag' : '添加标签'; els.bulkCollection.textContent = state.language === 'en' ? 'Archive' : '归档到集合'; els.bulkDelete.textContent = state.language === 'en' ? 'Delete' : '删除'; els.libraryDownloadSelected.textContent = t('libraryDownloadSelected'); els.libraryZipSelected.textContent = t('libraryZipSelected');
 }
 
 function setLoading(loading) { els.loading.hidden = !loading; if (loading) { els.grid.replaceChildren(); els.empty.hidden = true; } }

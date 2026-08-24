@@ -52,6 +52,9 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 支持设置扫描上限，以及自动滚动加载懒加载图片
 - 提供本地存储统计、清空素材库和重置扩展设置
 - 支持快捷键：`⌘/Ctrl+A` 全选、`I` 反选、`/` 聚焦搜索、`R` 重新扫描
+- 支持在素材库当前筛选结果中批量下载图片或生成 ZIP
+- 素材库支持最小/最大宽高和文件大小范围筛选
+- 支持将当前素材库筛选结果导出为 JSON 或 CSV
 
 ### 安装方式
 
@@ -179,6 +182,12 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - “设置”视图显示本地素材统计，可清空素材库或重置扩展偏好。
 - 常用键盘操作可以减少鼠标往返：`⌘/Ctrl+A` 全选当前页面结果，`I` 反选，`/` 聚焦搜索，`R` 重新扫描。
 
+#### 1.5.0 素材库工作流增强
+
+- 在素材库当前筛选结果中勾选图片后，可以直接批量下载图片或生成 ZIP；下载设置沿用当前页面的保存位置、文件名和 ZIP 分组配置。
+- 素材库筛选面板支持最小/最大宽度、最小/最大高度，以及最小/最大文件大小（KB）。未知文件大小的图片不会匹配最小文件大小条件，但会保留在最大文件大小条件中。
+- “导出筛选 JSON”和“导出筛选 CSV”只导出当前素材库筛选结果，不会修改素材库；“导出收藏数据”仍用于完整备份收藏、标签和集合关系。
+
 ZIP 文件默认命名为：
 
 ```text
@@ -245,7 +254,7 @@ download_image/
 │   ├── icon-48.png     # 扩展管理页图标
 │   └── icon-128.png    # 扩展详情和安装页图标
 ├── LICENSE             # MIT 开源许可证
-├── TODO.md             # 1.4.0 已完成任务和后续路线图
+├── TODO.md             # 1.5.0 已完成任务和后续路线图
 └── README.md           # 中文和英文项目文档
 ```
 
@@ -333,6 +342,9 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Set a scan limit and automatically scroll pages to trigger lazy-loaded images
 - View local storage statistics, clear the library, or reset extension settings
 - Use keyboard shortcuts: `Cmd/Ctrl+A` select all, `I` invert, `/` focus search, `R` rescan
+- Download selected images or create a ZIP from the current library results
+- Filter library images by minimum/maximum dimensions and file-size range
+- Export the current library results as JSON or CSV
 - Customize filenames with template variables for names, domains, formats, dimensions, and dates
 - Create `YYYY.MM.DD` date folders for regular downloads and ZIP entries
 - Queue multiple download requests and run them in submission order
@@ -460,6 +472,12 @@ On a webpage, right-click to open the Image Collector menu. It provides **Scan c
 - The **Settings** view shows local storage statistics and provides actions to clear the library or reset extension preferences.
 - Keyboard shortcuts reduce mouse travel: `Cmd/Ctrl+A` selects current results, `I` inverts, `/` focuses search, and `R` rescans.
 
+#### 1.5.0 library workflow improvements
+
+- Select images in the current library results to download them individually or create a ZIP. The current page download settings are reused for save location, filename template, and ZIP grouping.
+- The library filter panel supports minimum/maximum width, minimum/maximum height, and minimum/maximum file size in KB. Images without a known size do not match a minimum-size filter, but remain eligible for a maximum-size filter.
+- **Export filtered JSON** and **Export filtered CSV** export only the current library results without changing the library. **Export library** remains the full backup for favorites, tags, and collection relationships.
+
 The default ZIP filename is generated in this format:
 
 ```text
@@ -524,7 +542,7 @@ download_image/
 │   ├── icon-48.png     # Extensions management icon
 │   └── icon-128.png    # Extension detail and installation icon
 ├── LICENSE             # MIT open-source license
-├── TODO.md             # 1.4.0 checklist and future roadmap
+├── TODO.md             # 1.5.0 checklist and future roadmap
 └── README.md           # Chinese and English documentation
 ```
 

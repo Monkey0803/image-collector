@@ -190,17 +190,23 @@
         <div class="library-tools">
           <button id="newCollection" class="subtle-button" type="button">新建集合</button>
           <button id="exportLibrary" class="subtle-button" type="button">导出收藏数据</button>
+          <button id="exportLibraryResultsJson" class="subtle-button" type="button">导出筛选 JSON</button>
+          <button id="exportLibraryResultsCsv" class="subtle-button" type="button">导出筛选 CSV</button>
           <button id="importLibrary" class="subtle-button" type="button">导入数据</button>
           <input id="importLibraryFile" type="file" accept="application/json,.json" hidden />
         </div>
         <div id="libraryBatchToolbar" class="library-batch-toolbar" hidden>
           <label><input id="selectAllLibrary" type="checkbox" /><span>全选</span></label><span id="librarySelectedSummary">已选 0</span>
-          <button id="bulkFavorite" class="subtle-button" type="button">批量收藏</button><button id="bulkTag" class="subtle-button" type="button">添加标签</button><button id="bulkCollection" class="subtle-button" type="button">归档到集合</button><button id="bulkDelete" class="subtle-button danger" type="button">删除</button>
+          <button id="bulkFavorite" class="subtle-button" type="button">批量收藏</button><button id="bulkTag" class="subtle-button" type="button">添加标签</button><button id="bulkCollection" class="subtle-button" type="button">归档到集合</button><button id="bulkDelete" class="subtle-button danger" type="button">删除</button><button id="libraryDownloadSelected" class="subtle-button" type="button" disabled>下载选中</button><button id="libraryZipSelected" class="subtle-button" type="button" disabled>下载 ZIP</button>
         </div>
         <div class="library-filter-row">
           <select id="libraryFormat" aria-label="按格式筛选"><option value="all">全部格式</option><option value="jpeg">JPEG</option><option value="png">PNG</option><option value="webp">WEBP</option><option value="avif">AVIF</option><option value="other">其它</option></select>
           <input id="libraryMinWidth" type="number" min="0" step="10" placeholder="最小宽度" aria-label="素材库最小宽度" />
+          <input id="libraryMaxWidth" type="number" min="0" step="10" placeholder="最大宽度" aria-label="素材库最大宽度" />
           <input id="libraryMinHeight" type="number" min="0" step="10" placeholder="最小高度" aria-label="素材库最小高度" />
+          <input id="libraryMaxHeight" type="number" min="0" step="10" placeholder="最大高度" aria-label="素材库最大高度" />
+          <input id="libraryMinSize" type="number" min="0" step="1" placeholder="最小 KB" aria-label="素材库最小文件大小 KB" />
+          <input id="libraryMaxSize" type="number" min="0" step="1" placeholder="最大 KB" aria-label="素材库最大文件大小 KB" />
           <select id="librarySort" aria-label="素材库排序"><option value="updated">最近更新</option><option value="width">宽度</option><option value="height">高度</option><option value="size">文件大小</option></select>
         </div>
         <p id="librarySummary" class="library-summary">正在读取素材库…</p>

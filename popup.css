@@ -173,7 +173,7 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 .library-batch-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin: -2px 0 9px; padding: 7px; border: 1px solid #f4d8d0; border-radius: 9px; background: #fffaf8; }
 .library-batch-toolbar > label { display: flex; align-items: center; gap: 5px; color: #66727b; font-size: 9px; font-weight: 800; }
 .library-batch-toolbar > span { margin-right: auto; color: #d95b3e; font-size: 9px; font-weight: 800; }
-.library-filter-row { display: grid; grid-template-columns: 1.1fr .8fr .8fr 1fr; gap: 5px; margin-bottom: 10px; }
+.library-filter-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; margin-bottom: 10px; }
 .library-filter-row select, .library-filter-row input { min-width: 0; height: 26px; padding: 0 5px; border: 1px solid #e5eaed; border-radius: 7px; outline: 0; color: #596670; background: #fff; font-size: 8px; }
 .library-filter-row select:focus, .library-filter-row input:focus { border-color: #f0a08d; box-shadow: 0 0 0 3px rgba(238,104,72,.1); }
 .library-grid { max-height: 430px; }
