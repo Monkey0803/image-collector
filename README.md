@@ -41,6 +41,12 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 支持素材库搜索、收藏筛选和标签添加/移除
 - 记录最近扫描页面以及图片/ZIP 下载活动
 - 提供右键扫描页面、下载图片和收藏图片操作
+- 点击缩略图打开大图预览，支持缩放、复制原图地址和新标签页打开
+- 支持保存筛选预设、选择预设和反选当前结果
+- 提供下载任务中心，可暂停、继续、取消和重试失败任务
+- 支持创建自定义素材集合，并按集合浏览本地图片
+- 支持中文/英文界面切换
+- 支持收藏、标签和素材集合数据的 JSON 导入/导出
 
 ### 安装方式
 
@@ -146,6 +152,20 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 
 在网页上右键点击后，可以从 Image Collector 菜单中选择“扫描当前页面”“下载当前图片”或“收藏当前图片”。扫描操作会打开扩展弹窗并扫描当前页面；右键下载和收藏不需要先打开弹窗。
 
+#### 预览、预设和任务中心
+
+- 点击任意图片缩略图可打开大图预览；预览窗口支持 `25%` 到 `400%` 缩放、复制原图地址和新标签页打开。
+- 在筛选区域点击“保存筛选”可以保存当前尺寸、格式、搜索和排序条件；在选择区域可以保存当前图片选择结果。
+- “任务”视图会列出排队中、进行中、暂停、完成和失败的下载。进行中的任务支持暂停、继续和取消，失败或部分失败任务可以重新提交。
+- 任务列表和收藏数据均保存在浏览器本地，不会上传到服务器。
+
+#### 素材集合与数据迁移
+
+- 在“素材库”中点击“新建集合”创建本地图片集合，再通过每张卡片的集合下拉框归档图片。
+- “全部集合”和“未分类”可以快速切换本地文件夹视图。
+- “导出收藏数据”会生成包含收藏、标签和集合关系的 JSON；在另一台浏览器中使用“导入数据”可以合并恢复这些内容。
+- 顶部 `EN` / `中` 按钮可切换界面语言，语言偏好会保存在本机。
+
 ZIP 文件默认命名为：
 
 ```text
@@ -212,7 +232,7 @@ download_image/
 │   ├── icon-48.png     # 扩展管理页图标
 │   └── icon-128.png    # 扩展详情和安装页图标
 ├── LICENSE             # MIT 开源许可证
-├── TODO.md             # 1.2.0 已完成任务和后续路线图
+├── TODO.md             # 1.3.0 已完成任务和后续路线图
 └── README.md           # 中文和英文项目文档
 ```
 
@@ -289,6 +309,12 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Store local image metadata, favorites, tags, scan history, and download history in IndexedDB
 - Browse a local library with favorite filtering, search, and tag editing
 - Provide context-menu actions for scanning pages, downloading images, and favoriting images
+- Open a large-image preview with zoom, original-URL copying, and new-tab opening
+- Save reusable filter presets and selection presets, and invert the current selection
+- Use a download task center to pause, resume, cancel, and retry tasks
+- Create custom local collections and browse images by collection
+- Switch the interface between Chinese and English
+- Import or export favorites, tags, and collection relationships as JSON
 - Customize filenames with template variables for names, domains, formats, dimensions, and dates
 - Create `YYYY.MM.DD` date folders for regular downloads and ZIP entries
 - Queue multiple download requests and run them in submission order
@@ -394,6 +420,20 @@ Click **Library** at the top to browse images saved locally:
 
 On a webpage, right-click to open the Image Collector menu. It provides **Scan current page**, **Download current image**, and **Favorite current image**. The scan action opens the extension popup and scans the current page; context downloads and favorites work without opening the popup first.
 
+#### Preview, presets, and task center
+
+- Click any thumbnail to open a large preview. The preview supports zoom from `25%` to `400%`, copying the original URL, and opening it in a new tab.
+- Click **Save filter** to store the current dimension, format, search, and sort settings. The selection toolbar can store the current image selection as a reusable preset.
+- The **Tasks** view lists queued, running, paused, completed, and failed downloads. Active tasks can be paused, resumed, or cancelled; failed and partial tasks can be submitted again.
+- Task records and library data stay in the browser and are not uploaded to a server.
+
+#### Collections and data migration
+
+- Click **New collection** in the library to create a local image collection, then assign images with the collection selector on each card.
+- Use **All collections** or **Uncategorized** to browse the local folder-style view.
+- **Export library** creates a JSON file containing favorites, tags, and collection relationships. **Import data** merges the file into another browser profile.
+- Use the `EN` / `中` button in the header to switch languages. The preference is stored locally.
+
 The default ZIP filename is generated in this format:
 
 ```text
@@ -458,7 +498,7 @@ download_image/
 │   ├── icon-48.png     # Extensions management icon
 │   └── icon-128.png    # Extension detail and installation icon
 ├── LICENSE             # MIT open-source license
-├── TODO.md             # 1.2.0 checklist and future roadmap
+├── TODO.md             # 1.3.0 checklist and future roadmap
 └── README.md           # Chinese and English documentation
 ```
 

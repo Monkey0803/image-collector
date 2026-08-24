@@ -2,10 +2,11 @@
   'use strict';
 
   const DB_NAME = 'image-collector-library';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   const IMAGE_STORE = 'images';
   const SCAN_STORE = 'scans';
   const DOWNLOAD_STORE = 'downloads';
+  const COLLECTION_STORE = 'collections';
   let databasePromise;
 
   function openDatabase() {
@@ -29,14 +30,24 @@
           store.createIndex('byCreatedAt', 'createdAt');
           store.createIndex('byStatus', 'status');
         }
+        if (!db.objectStoreNames.contains(COLLECTION_STORE)) {
+          const store = db.createObjectStore(COLLECTION_STORE, { keyPath: 'id' });
+          store.createIndex('byUpdatedAt', 'updatedAt');
+        }
       };
       request.onsuccess = () => {
         const db = request.result;
         db.onversionchange = () => db.close();
         resolve(db);
       };
-      request.onerror = () => reject(request.error || new Error('无法打开本地素材库'));
-      request.onblocked = () => reject(new Error('本地素材库正在被其他页面占用'));
+      request.onerror = () => {
+        databasePromise = null;
+        reject(request.error || new Error('无法打开本地素材库'));
+      };
+      request.onblocked = () => {
+        databasePromise = null;
+        reject(new Error('本地素材库正在被其他页面占用'));
+      };
     });
     return databasePromise;
   }
@@ -87,6 +98,7 @@
       domain: hostnameFor(url),
       favorite: Boolean(image.favorite),
       tags: cleanTags(image.tags),
+      collectionIds: cleanCollectionIds(image.collectionIds),
       updatedAt: Date.now()
     };
   }
@@ -116,6 +128,7 @@
         original: image.original || Boolean(previous?.original),
         favorite: previous ? Boolean(previous.favorite) : image.favorite,
         tags: previous ? cleanTags(previous.tags) : image.tags,
+        collectionIds: previous ? cleanCollectionIds(previous.collectionIds) : image.collectionIds,
         createdAt: previous?.createdAt || Date.now()
       };
     });
@@ -165,7 +178,7 @@
     const db = await openDatabase();
     const transaction = db.transaction(SCAN_STORE, 'readonly');
     const records = await requestValue(transaction.objectStore(SCAN_STORE).getAll());
-    return records.sort((left, right) => right.createdAt - left.createdAt).slice(0, limit);
+    return records.sort((left, right) => (right.updatedAt || right.createdAt) - (left.updatedAt || left.createdAt)).slice(0, limit);
   }
 
   async function listDownloads(limit = 30) {
@@ -194,6 +207,7 @@
       url: base.url,
       favorite: updates.favorite === undefined ? Boolean(base.favorite) : Boolean(updates.favorite),
       tags: updates.tags === undefined ? cleanTags(base.tags) : cleanTags(updates.tags),
+      collectionIds: updates.collectionIds === undefined ? cleanCollectionIds(base.collectionIds) : cleanCollectionIds(updates.collectionIds),
       updatedAt: Date.now()
     };
     const db = await openDatabase();
@@ -223,13 +237,99 @@
       failed: Number(record.failed) || 0,
       error: record.error || '',
       filename: record.filename || '',
+      jobId: record.jobId || '',
+      phase: record.phase || '',
+      percent: Number(record.percent) || 0,
+      detail: record.detail || '',
+      paused: Boolean(record.paused),
+      completedAt: Number(record.completedAt) || 0,
       createdAt: record.createdAt || Date.now()
     };
+    item.updatedAt = record.updatedAt || Date.now();
     const db = await openDatabase();
     const transaction = db.transaction(DOWNLOAD_STORE, 'readwrite');
     transaction.objectStore(DOWNLOAD_STORE).put(item);
     await transactionDone(transaction);
     return item;
+  }
+
+  async function updateDownload(id, updates = {}) {
+    const db = await openDatabase();
+    const transaction = db.transaction(DOWNLOAD_STORE, 'readwrite');
+    const store = transaction.objectStore(DOWNLOAD_STORE);
+    const previous = await requestValue(store.get(id));
+    if (!previous) return null;
+    const item = {
+      ...previous,
+      ...updates,
+      id: previous.id,
+      urls: Array.isArray(updates.urls) ? updates.urls.slice(0, 1000) : previous.urls,
+      percent: updates.percent === undefined ? previous.percent || 0 : Number(updates.percent) || 0,
+      paused: updates.paused === undefined ? (updates.status === 'paused' ? true : Boolean(previous.paused)) : Boolean(updates.paused),
+      updatedAt: Date.now()
+    };
+    store.put(item);
+    await transactionDone(transaction);
+    return item;
+  }
+
+  function cleanCollectionIds(ids) {
+    return [...new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || '').trim()).filter(Boolean))].slice(0, 50);
+  }
+
+  function cleanCollectionName(name) {
+    return String(name || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+  }
+
+  async function createCollection(name) {
+    const cleanName = cleanCollectionName(name);
+    if (!cleanName) return null;
+    const existing = await listCollections();
+    const duplicate = existing.find((item) => item.name.toLowerCase() === cleanName.toLowerCase());
+    if (duplicate) return duplicate;
+    const db = await openDatabase();
+    const transaction = db.transaction(COLLECTION_STORE, 'readwrite');
+    const store = transaction.objectStore(COLLECTION_STORE);
+    const collection = { id: `collection-${Date.now()}-${Math.random().toString(36).slice(2)}`, name: cleanName, createdAt: Date.now(), updatedAt: Date.now() };
+    store.put(collection);
+    await transactionDone(transaction);
+    return collection;
+  }
+
+  async function listCollections() {
+    const db = await openDatabase();
+    const transaction = db.transaction(COLLECTION_STORE, 'readonly');
+    const records = await requestValue(transaction.objectStore(COLLECTION_STORE).getAll());
+    return records.sort((left, right) => (left.name || '').localeCompare(right.name || '', undefined, { sensitivity: 'base' }));
+  }
+
+  function setImageCollections(url, collectionIds) { return updateImage(url, { collectionIds: cleanCollectionIds(collectionIds) }); }
+
+  async function exportLibrary() {
+    const [images, collections] = await Promise.all([listImages(), listCollections()]);
+    return { version: 1, exportedAt: new Date().toISOString(), collections, images };
+  }
+
+  async function importLibrary(data) {
+    const payload = data && typeof data === 'object' ? data : {};
+    const collections = Array.isArray(payload.collections) ? payload.collections : [];
+    const images = Array.isArray(payload.images) ? payload.images : [];
+    const collectionMap = new Map();
+    for (const collection of collections) {
+      const created = await createCollection(collection.name);
+      if (created && collection.id) collectionMap.set(collection.id, created.id);
+    }
+    for (const image of images) {
+      if (!image?.url) continue;
+      const previous = await getImage(image.url);
+      await updateImage(image.url, {
+        ...image,
+        favorite: Boolean(image.favorite || previous?.favorite),
+        tags: cleanTags([...(previous?.tags || []), ...(image.tags || [])]),
+        collectionIds: cleanCollectionIds((image.collectionIds || []).map((id) => collectionMap.get(id) || id))
+      });
+    }
+    return { collections: collectionMap.size, images: images.length };
   }
 
   async function countFavorites() {
@@ -257,6 +357,12 @@
     toggleFavorite,
     setTags,
     saveDownload,
+    updateDownload,
+    createCollection,
+    listCollections,
+    setImageCollections,
+    exportLibrary,
+    importLibrary,
     countFavorites,
     clearHistory,
     cleanTags

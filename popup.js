@@ -29,7 +29,15 @@ const state = {
   downloadJobId: null,
   retryImages: [],
   retryAsZip: false,
-  cancelled: false
+  cancelled: false,
+  language: 'zh',
+  filterPresets: [],
+  selectionPresets: [],
+  libraryCollection: '',
+  collections: [],
+  preview: null,
+  previewZoom: 1,
+  taskRecords: []
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -42,28 +50,30 @@ const els = {
   clearFilters: $('#clearFilters'), selectAll: $('#selectAll'), resultCount: $('#resultCount'),
   selectedSummary: $('#selectedSummary'), searchInput: $('#searchInput'), sortSelect: $('#sortSelect'),
   originalOnly: $('#originalOnly'), zipLayout: $('#zipLayout'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'),
-  pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'),
+  pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'), taskViewButton: $('#taskViewButton'),
   libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryScope: $('#libraryScope'),
-  librarySearch: $('#librarySearch'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'),
+  librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'),
   historyView: $('#historyView'), clearHistory: $('#clearHistory'), refreshHistory: $('#refreshHistory'), scanHistory: $('#scanHistory'),
   downloadHistory: $('#downloadHistory'), historyEmpty: $('#historyEmpty'),
+  taskView: $('#taskView'), refreshTasks: $('#refreshTasks'), retryAllTasks: $('#retryAllTasks'), taskSummary: $('#taskSummary'), taskList: $('#taskList'), taskEmpty: $('#taskEmpty'),
   exportJson: $('#exportJson'), exportCsv: $('#exportCsv'),
   formatTabs: [...document.querySelectorAll('[data-format]')],
   grid: $('#imageGrid'), empty: $('#emptyState'), loading: $('#loadingState'), error: $('#errorState'),
   saveAs: $('#saveAs'), download: $('#downloadButton'), zip: $('#zipButton'), selectedCount: $('#selectedCount'),
   downloadProgress: $('#downloadProgress'), progressLabel: $('#progressLabel'), progressValue: $('#progressValue'),
   progressBar: $('#progressBar'), progressDetail: $('#progressDetail'), cancelButton: $('#cancelButton'), retryButton: $('#retryButton'),
-  retryCount: $('#retryCount'), toast: $('#toast')
+  retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
 };
 
 document.addEventListener('DOMContentLoaded', init);
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === 'downloadProgress' && message.jobId === state.downloadJobId) updateDownloadProgress(message);
+  if (message?.type === 'downloadProgress' && state.view === 'tasks') loadTasks();
 });
 
 async function init() {
-  const saved = await chrome.storage.local.get({ filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false });
+  const saved = await chrome.storage.local.get({ filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false, language: 'zh', filterPresets: [], selectionPresets: [] });
   const savedFilters = saved.filters && typeof saved.filters === 'object' ? saved.filters : {};
   state.saveAs = typeof saved.saveAs === 'boolean' ? saved.saveAs : true;
   state.searchQuery = typeof saved.searchQuery === 'string' ? saved.searchQuery : '';
@@ -72,6 +82,9 @@ async function init() {
   state.zipLayout = ['flat', 'domain', 'format', 'domain-format'].includes(saved.zipLayout) ? saved.zipLayout : 'flat';
   state.filenameTemplate = typeof saved.filenameTemplate === 'string' && saved.filenameTemplate.trim() ? saved.filenameTemplate : '{name}';
   state.dateFolder = Boolean(saved.dateFolder);
+  state.language = saved.language === 'en' ? 'en' : 'zh';
+  state.filterPresets = Array.isArray(saved.filterPresets) ? saved.filterPresets : [];
+  state.selectionPresets = Array.isArray(saved.selectionPresets) ? saved.selectionPresets : [];
   state.filterValues = {
     width: { min: normalizeLimit(savedFilters.minWidth), max: normalizeLimit(savedFilters.maxWidth) },
     height: { min: normalizeLimit(savedFilters.minHeight), max: normalizeLimit(savedFilters.maxHeight) }
@@ -87,6 +100,8 @@ async function init() {
   els.zipLayout.value = state.zipLayout;
   els.filenameTemplate.value = state.filenameTemplate;
   els.dateFolder.checked = state.dateFolder;
+  renderPresets();
+  applyLanguage();
   await refreshLibraryData();
   bindEvents();
   await scanPage();
@@ -96,9 +111,23 @@ function bindEvents() {
   els.pageViewButton.addEventListener('click', () => switchView('page'));
   els.libraryViewButton.addEventListener('click', () => switchView('library'));
   els.historyViewButton.addEventListener('click', () => switchView('history'));
+  els.taskViewButton.addEventListener('click', () => switchView('tasks'));
+  els.language.addEventListener('click', async () => {
+    state.language = state.language === 'zh' ? 'en' : 'zh';
+    await chrome.storage.local.set({ language: state.language });
+    applyLanguage();
+    render();
+    renderLibrary();
+    loadHistory();
+    loadTasks();
+  });
   els.refreshLibrary.addEventListener('click', refreshLibraryData);
   els.libraryScope.addEventListener('change', () => {
     state.libraryScope = els.libraryScope.value;
+    refreshLibraryData();
+  });
+  els.libraryCollection.addEventListener('change', () => {
+    state.libraryCollection = els.libraryCollection.value;
     refreshLibraryData();
   });
   els.librarySearch.addEventListener('input', () => {
@@ -106,6 +135,12 @@ function bindEvents() {
     refreshLibraryData();
   });
   els.refreshHistory.addEventListener('click', loadHistory);
+  els.refreshTasks.addEventListener('click', loadTasks);
+  els.retryAllTasks.addEventListener('click', retryAllTasks);
+  els.newCollection.addEventListener('click', createNewCollection);
+  els.exportLibrary.addEventListener('click', exportLibraryData);
+  els.importLibrary.addEventListener('click', () => els.importLibraryFile.click());
+  els.importLibraryFile.addEventListener('change', importLibraryData);
   els.clearHistory.addEventListener('click', async () => {
     if (!window.confirm('确定清空所有扫描和下载历史吗？')) return;
     try {
@@ -133,6 +168,9 @@ function bindEvents() {
     state.format = 'all';
     applyFilters();
   });
+  els.filterPreset.addEventListener('change', applyFilterPreset);
+  els.saveFilterPreset.addEventListener('click', saveFilterPreset);
+  els.deleteFilterPreset.addEventListener('click', deleteFilterPreset);
   els.minWidth.addEventListener('input', () => handleRangeInput('width', 'min'));
   els.maxWidth.addEventListener('input', () => handleRangeInput('width', 'max'));
   els.minHeight.addEventListener('input', () => handleRangeInput('height', 'min'));
@@ -174,6 +212,12 @@ function bindEvents() {
     else state.filtered.forEach((image) => state.selected.delete(image.id));
     render();
   });
+  els.invertSelection.addEventListener('click', () => {
+    state.filtered.forEach((image) => state.selected[state.selected.has(image.id) ? 'delete' : 'add'](image.id));
+    render();
+  });
+  els.selectionPreset.addEventListener('change', applySelectionPreset);
+  els.saveSelectionPreset.addEventListener('click', saveSelectionPreset);
   els.saveAs.addEventListener('change', async () => {
     state.saveAs = els.saveAs.checked;
     await chrome.storage.local.set({ saveAs: state.saveAs });
@@ -192,14 +236,25 @@ function bindEvents() {
   els.exportCsv.addEventListener('click', () => exportImages('csv'));
   els.download.addEventListener('click', () => downloadSelected(false));
   els.zip.addEventListener('click', () => downloadSelected(true));
+  els.closePreview.addEventListener('click', closePreview);
+  els.previewModal.addEventListener('click', (event) => { if (event.target.matches('[data-close-preview]')) closePreview(); });
+  els.copyImageUrl.addEventListener('click', copyPreviewUrl);
+  els.openImageUrl.addEventListener('click', () => { if (state.preview?.url) chrome.tabs.create({ url: state.preview.url }); });
+  els.zoomIn.addEventListener('click', () => changePreviewZoom(.25));
+  els.zoomOut.addEventListener('click', () => changePreviewZoom(-.25));
+  els.zoomReset.addEventListener('click', () => { state.previewZoom = 1; updatePreviewZoom(); });
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !els.previewModal.hidden) closePreview(); });
 }
 
 async function refreshLibraryData() {
   try {
-    const records = await ImageCollectorDB.listImages();
+    const [records, collections] = await Promise.all([ImageCollectorDB.listImages(), ImageCollectorDB.listCollections()]);
+    state.collections = collections;
     state.libraryRecords = new Map(records.map((record) => [record.url, record]));
     state.libraryResults = records.filter((record) => {
       if (state.libraryScope === 'favorites' && !record.favorite) return false;
+      if (state.libraryCollection === '__uncategorized' && record.collectionIds?.length) return false;
+      if (state.libraryCollection && state.libraryCollection !== '__uncategorized' && !record.collectionIds?.includes(state.libraryCollection)) return false;
       if (!state.librarySearch) return true;
       const query = state.librarySearch.toLowerCase();
       return [record.url, record.domain, record.format, record.alt, ...record.tags]
@@ -207,6 +262,8 @@ async function refreshLibraryData() {
     });
     els.favoriteCount.textContent = records.filter((record) => record.favorite).length;
     els.libraryScope.value = state.libraryScope;
+    renderCollectionOptions();
+    els.libraryCollection.value = state.libraryCollection;
     els.librarySearch.value = state.librarySearch;
     renderLibrary();
     if (state.view === 'page') render();
@@ -222,19 +279,34 @@ async function refreshLibraryData() {
   }
 }
 
+function renderCollectionOptions() {
+  if (!els.libraryCollection) return;
+  const current = state.libraryCollection;
+  els.libraryCollection.replaceChildren();
+  const all = document.createElement('option'); all.value = ''; all.textContent = t('allCollections'); els.libraryCollection.append(all);
+  const uncategorized = document.createElement('option'); uncategorized.value = '__uncategorized'; uncategorized.textContent = t('uncategorized'); els.libraryCollection.append(uncategorized);
+  state.collections.forEach((collection) => {
+    const option = document.createElement('option'); option.value = collection.id; option.textContent = collection.name; els.libraryCollection.append(option);
+  });
+  els.libraryCollection.value = [...els.libraryCollection.options].some((option) => option.value === current) ? current : '';
+}
+
 function switchView(view) {
   state.view = view;
   const isPage = view === 'page';
   const isLibrary = view === 'library';
+  const isTasks = view === 'tasks';
   els.pageView.hidden = !isPage;
   els.libraryView.hidden = !isLibrary;
-  els.historyView.hidden = isPage || isLibrary;
-  [[els.pageViewButton, isPage], [els.libraryViewButton, isLibrary], [els.historyViewButton, view === 'history']].forEach(([button, active]) => {
+  els.historyView.hidden = isPage || isLibrary || isTasks;
+  els.taskView.hidden = !isTasks;
+  [[els.pageViewButton, isPage], [els.libraryViewButton, isLibrary], [els.historyViewButton, view === 'history'], [els.taskViewButton, isTasks]].forEach(([button, active]) => {
     button.classList.toggle('active', active);
     button.setAttribute('aria-selected', active ? 'true' : 'false');
   });
   if (isLibrary) refreshLibraryData();
   if (view === 'history') loadHistory();
+  if (isTasks) loadTasks();
 }
 
 async function persistScanRecord(scanId) {
@@ -256,6 +328,7 @@ function createLibraryCard(record) {
   const wrap = document.createElement('div'); wrap.className = 'thumbnail-wrap';
   const thumbnail = document.createElement('img'); thumbnail.className = 'thumbnail'; thumbnail.src = record.url; thumbnail.alt = record.alt || '网页图片'; thumbnail.loading = 'lazy';
   thumbnail.addEventListener('error', () => { wrap.textContent = '预览不可用'; wrap.style.color = '#9ba4ac'; wrap.style.fontSize = '10px'; });
+  thumbnail.addEventListener('click', (event) => { event.stopPropagation(); openPreview(record); });
   wrap.append(thumbnail);
   const actions = document.createElement('div'); actions.className = 'library-card-actions';
   const favorite = document.createElement('button'); favorite.type = 'button'; favorite.className = `library-favorite${record.favorite ? ' active' : ''}`; favorite.textContent = record.favorite ? '★' : '☆'; favorite.title = record.favorite ? '取消收藏' : '收藏'; favorite.setAttribute('aria-label', favorite.title); favorite.setAttribute('aria-pressed', record.favorite ? 'true' : 'false');
@@ -278,6 +351,13 @@ function createLibraryCard(record) {
     });
     tags.append(chip);
   });
+  const collectionSelect = document.createElement('select'); collectionSelect.className = 'card-collection'; collectionSelect.title = '选择集合'; collectionSelect.setAttribute('aria-label', '选择集合');
+  const noCollection = document.createElement('option'); noCollection.value = ''; noCollection.textContent = '未分类'; collectionSelect.append(noCollection);
+  state.collections.forEach((collection) => { const option = document.createElement('option'); option.value = collection.id; option.textContent = collection.name; collectionSelect.append(option); });
+  collectionSelect.value = record.collectionIds?.[0] || '';
+  collectionSelect.addEventListener('change', async () => {
+    await setImageCollections(record, collectionSelect.value ? [collectionSelect.value] : []);
+  });
   const editor = document.createElement('label'); editor.className = 'tag-editor'; editor.title = '添加标签';
   const input = document.createElement('input'); input.type = 'text'; input.maxLength = 30; input.placeholder = '添加标签'; input.setAttribute('aria-label', '添加标签');
   const add = document.createElement('button'); add.type = 'button'; add.textContent = '+'; add.setAttribute('aria-label', '添加标签');
@@ -289,7 +369,7 @@ function createLibraryCard(record) {
   input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); addTag(); } });
   add.addEventListener('click', addTag);
   editor.append(input, add);
-  card.append(wrap, actions, meta, tags, editor);
+  card.append(wrap, actions, meta, tags, collectionSelect, editor);
   return card;
 }
 
@@ -320,6 +400,56 @@ async function setImageTags(record, tags) {
   } catch { showToast('标签保存失败'); }
 }
 
+async function setImageCollections(record, collectionIds) {
+  try {
+    await ImageCollectorDB.setImageCollections(record.url, collectionIds);
+    await refreshLibraryData();
+    showToast(t('collectionUpdated'));
+  } catch { showToast(t('collectionUpdateFailed')); }
+}
+
+async function createNewCollection() {
+  const name = window.prompt(t('newCollectionPrompt'));
+  if (!name?.trim()) return;
+  try {
+    const collection = await ImageCollectorDB.createCollection(name);
+    state.libraryCollection = collection.id;
+    await refreshLibraryData();
+    showToast(t('collectionCreated'));
+  } catch { showToast(t('collectionCreateFailed')); }
+}
+
+async function exportLibraryData() {
+  try {
+    const data = await ImageCollectorDB.exportLibrary();
+    downloadTextFile(JSON.stringify(data, null, 2), `image-collector-library-${dateStamp()}.json`, 'application/json');
+    showToast(t('libraryExported'));
+  } catch { showToast(t('libraryExportFailed')); }
+}
+
+function importLibraryData(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const data = JSON.parse(String(reader.result || '{}'));
+      const result = await ImageCollectorDB.importLibrary(data);
+      await refreshLibraryData();
+      showToast(`${t('libraryImported')} ${result.images || 0}`);
+    } catch { showToast(t('libraryImportFailed')); }
+  };
+  reader.onerror = () => showToast(t('libraryImportFailed'));
+  reader.readAsText(file);
+}
+
+function downloadTextFile(content, filename, type) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  chrome.downloads.download({ url, filename, saveAs: true, conflictAction: 'uniquify' }).catch(() => {});
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
 async function loadHistory() {
   try {
     const [scans, downloads] = await Promise.all([ImageCollectorDB.listScans(30), ImageCollectorDB.listDownloads(30)]);
@@ -329,6 +459,105 @@ async function loadHistory() {
     els.downloadHistory.replaceChildren();
     els.historyEmpty.hidden = false;
   }
+}
+
+async function loadTasks() {
+  try {
+    state.taskRecords = await ImageCollectorDB.listDownloads(50);
+    renderTasks();
+  } catch {
+    state.taskRecords = [];
+    renderTasks();
+  }
+}
+
+function renderTasks() {
+  if (!els.taskList) return;
+  els.taskList.replaceChildren();
+  const records = state.taskRecords;
+  const active = records.filter((record) => ['queued', 'running', 'paused'].includes(record.status)).length;
+  els.taskSummary.textContent = `${records.length} ${t('taskCount')}${active ? ` · ${active} ${t('activeTasks')}` : ''}`;
+  els.taskEmpty.hidden = records.length !== 0;
+  records.forEach((record) => {
+    const item = document.createElement('article'); item.className = 'task-item';
+    const header = document.createElement('div'); header.className = 'task-item-header';
+    const title = document.createElement('strong'); title.textContent = record.kind === 'zip' ? 'ZIP' : t('imageDownload');
+    const status = document.createElement('span'); status.className = `task-status ${record.status}`; status.textContent = taskStatusLabel(record.status);
+    header.append(title, status);
+    const progress = document.createElement('div'); progress.className = 'task-progress-track';
+    const bar = document.createElement('span'); bar.style.width = `${Math.max(0, Math.min(100, record.percent || 0))}%`; progress.append(bar);
+    const detail = document.createElement('div'); detail.className = 'task-detail'; detail.textContent = record.detail || `${record.count || 0} ${t('items')}`;
+    const footer = document.createElement('div'); footer.className = 'task-item-footer';
+    const time = document.createElement('span'); time.textContent = formatDateTime(record.updatedAt || record.createdAt);
+    footer.append(time);
+    if (['queued', 'running', 'paused'].includes(record.status) && record.jobId) {
+      const pause = document.createElement('button'); pause.type = 'button'; pause.className = 'subtle-button'; pause.textContent = record.status === 'paused' ? t('resume') : t('pause'); pause.addEventListener('click', () => sendTaskAction(record, record.status === 'paused' ? 'resumeDownload' : 'pauseDownload'));
+      const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'subtle-button danger'; cancel.textContent = t('cancel'); cancel.addEventListener('click', () => sendTaskAction(record, 'cancelDownload'));
+      footer.append(pause, cancel);
+    }
+    if (['failed', 'partial'].includes(record.status) && record.urls?.length) {
+      const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'subtle-button'; retry.textContent = t('retry'); retry.addEventListener('click', () => downloadImages(record.urls.map((url) => ({ url })), record.kind === 'zip'));
+      footer.append(retry);
+    }
+    item.append(header, progress, detail, footer); els.taskList.append(item);
+  });
+}
+
+function taskStatusLabel(status) {
+  const labels = { queued: t('queued'), running: t('running'), paused: t('paused'), completed: t('completed'), started: t('completed'), partial: t('partial'), failed: t('failed'), cancelled: t('cancelled') };
+  return labels[status] || status;
+}
+
+async function sendTaskAction(record, type) {
+  try {
+    await chrome.runtime.sendMessage({ type, jobId: record.jobId });
+    await loadTasks();
+  } catch { showToast(t('taskActionFailed')); }
+}
+
+async function retryAllTasks() {
+  const failed = state.taskRecords.filter((record) => ['failed', 'partial'].includes(record.status) && record.urls?.length);
+  if (!failed.length) { showToast(t('noFailedTasks')); return; }
+  for (const record of failed) await downloadImages(record.urls.map((url) => ({ url })), record.kind === 'zip');
+  await loadTasks();
+}
+
+function openPreview(image) {
+  if (!image?.url) return;
+  state.preview = image;
+  state.previewZoom = 1;
+  els.previewImage.src = image.url;
+  els.previewImage.alt = image.alt || t('imagePreview');
+  els.previewTitle.textContent = fileName(image.url);
+  els.previewMeta.textContent = `${image.width && image.height ? `${image.width} × ${image.height}px` : t('unknownSize')} · ${formatLabel(image.format)}${image.original ? ` · ${t('original')}` : ''}`;
+  updatePreviewZoom();
+  els.previewModal.hidden = false;
+  els.closePreview.focus();
+}
+
+function closePreview() {
+  els.previewModal.hidden = true;
+  els.previewImage.removeAttribute('src');
+  state.preview = null;
+}
+
+function changePreviewZoom(delta) {
+  state.previewZoom = Math.max(.25, Math.min(4, state.previewZoom + delta));
+  updatePreviewZoom();
+}
+
+function updatePreviewZoom() {
+  if (!state.preview) return;
+  els.previewImage.style.transform = `scale(${state.previewZoom})`;
+  els.zoomValue.textContent = `${Math.round(state.previewZoom * 100)}%`;
+}
+
+async function copyPreviewUrl() {
+  if (!state.preview?.url) return;
+  try {
+    await navigator.clipboard.writeText(state.preview.url);
+    showToast(t('copied'));
+  } catch { showToast(t('copyFailed')); }
 }
 
 function renderHistory(scans, downloads) {
@@ -718,6 +947,70 @@ function applyFilters() {
   render();
 }
 
+function renderPresets() {
+  const selectedFilter = els.filterPreset.value;
+  els.filterPreset.replaceChildren(new Option(t('filterPreset'), ''));
+  state.filterPresets.forEach((preset) => els.filterPreset.append(new Option(preset.name, preset.id)));
+  els.filterPreset.value = state.filterPresets.some((preset) => preset.id === selectedFilter) ? selectedFilter : '';
+  els.deleteFilterPreset.disabled = !els.filterPreset.value;
+  const selectedSelection = els.selectionPreset.value;
+  els.selectionPreset.replaceChildren(new Option(t('selectionPreset'), ''));
+  state.selectionPresets.forEach((preset) => els.selectionPreset.append(new Option(`${preset.name} (${preset.urls.length})`, preset.id)));
+  els.selectionPreset.value = state.selectionPresets.some((preset) => preset.id === selectedSelection) ? selectedSelection : '';
+}
+
+function currentFilterPreset() {
+  return {
+    width: { ...state.filterValues.width }, height: { ...state.filterValues.height }, format: state.format,
+    searchQuery: state.searchQuery, sort: state.sort, originalOnly: state.originalOnly
+  };
+}
+
+async function saveFilterPreset() {
+  const name = window.prompt(t('filterPresetPrompt'));
+  if (!name?.trim()) return;
+  state.filterPresets.push({ id: `filter-${Date.now()}`, name: name.trim().slice(0, 40), ...currentFilterPreset() });
+  await chrome.storage.local.set({ filterPresets: state.filterPresets });
+  renderPresets();
+  showToast(t('presetSaved'));
+}
+
+function applyFilterPreset() {
+  const preset = state.filterPresets.find((item) => item.id === els.filterPreset.value);
+  if (!preset) return;
+  state.filterValues = { width: { ...preset.width }, height: { ...preset.height } };
+  state.format = preset.format || 'all'; state.searchQuery = preset.searchQuery || ''; state.sort = preset.sort || 'page'; state.originalOnly = Boolean(preset.originalOnly);
+  els.searchInput.value = state.searchQuery; els.sortSelect.value = state.sort; els.originalOnly.checked = state.originalOnly;
+  updateRangeLimits(); applyFilters();
+}
+
+async function deleteFilterPreset() {
+  const id = els.filterPreset.value;
+  if (!id) return;
+  state.filterPresets = state.filterPresets.filter((preset) => preset.id !== id);
+  await chrome.storage.local.set({ filterPresets: state.filterPresets });
+  renderPresets();
+  showToast(t('presetDeleted'));
+}
+
+async function saveSelectionPreset() {
+  const urls = selectedImages().map((image) => image.url);
+  if (!urls.length) { showToast(t('selectBeforeSave')); return; }
+  const name = window.prompt(t('selectionPresetPrompt'));
+  if (!name?.trim()) return;
+  state.selectionPresets.push({ id: `selection-${Date.now()}`, name: name.trim().slice(0, 40), urls });
+  await chrome.storage.local.set({ selectionPresets: state.selectionPresets });
+  renderPresets(); showToast(t('presetSaved'));
+}
+
+function applySelectionPreset() {
+  const preset = state.selectionPresets.find((item) => item.id === els.selectionPreset.value);
+  if (!preset) return;
+  const urls = new Set(preset.urls || []);
+  state.selected.clear(); state.images.forEach((image) => { if (urls.has(image.url)) state.selected.add(image.id); });
+  render();
+}
+
 function sortImages(images) {
   const result = [...images];
   if (state.sort === 'width-desc') return result.sort((a, b) => (b.width || 0) - (a.width || 0) || a.index - b.index);
@@ -855,6 +1148,7 @@ function createCard(image) {
   const wrap = document.createElement('div'); wrap.className = 'thumbnail-wrap';
   const thumbnail = document.createElement('img'); thumbnail.className = 'thumbnail'; thumbnail.src = image.url; thumbnail.alt = image.alt || '网页图片'; thumbnail.loading = 'lazy';
   thumbnail.addEventListener('error', () => { wrap.textContent = '预览不可用'; wrap.style.color = '#9ba4ac'; wrap.style.fontSize = '10px'; });
+  thumbnail.addEventListener('click', (event) => { event.stopPropagation(); openPreview(image); });
   wrap.append(thumbnail);
   const meta = document.createElement('div'); meta.className = 'card-meta';
   const size = document.createElement('span'); size.className = 'card-size'; size.textContent = image.width && image.height ? `${image.width} × ${image.height}` : '尺寸未知';
@@ -975,6 +1269,85 @@ function dateStamp() {
   const now = new Date();
   const pad = (value) => String(value).padStart(2, '0');
   return `${now.getFullYear()}.${pad(now.getMonth() + 1)}.${pad(now.getDate())}`;
+}
+
+const TRANSLATIONS = {
+  zh: {
+    page: '当前页面', library: '素材库', history: '历史', tasks: '任务', filterPreset: '筛选预设', selectionPreset: '选择预设', clear: '清除', width: '宽度', height: '高度', format: '格式', formatHint: '按文件类型查看', originalOnly: '仅显示原图候选', originalHint: '优先使用页面提供的高清地址', selectAll: '全选当前结果', sort: '排序', pageOrder: '页面顺序', widthDesc: '宽度：从大到小', heightDesc: '高度：从大到小', areaDesc: '尺寸：从大到小', nameAsc: '文件名：A–Z', searchPage: '搜索文件名、域名或 URL', noResults: '没有符合条件的图片', noResultsHint: '尝试放宽尺寸筛选，或重新扫描当前页面。', scanning: '正在扫描当前页面…', saveLocation: '下载时选择保存位置', downloadSupport: '支持普通文件与 ZIP', zipLayout: 'ZIP 分组', noGrouping: '不分组', bySite: '按网站', byFormat: '按格式', bySiteFormat: '按网站 / 格式', filenameTemplate: '文件名模板', dateFolder: '按日期建目录', json: '导出 JSON', csv: '导出 CSV', downloadSelected: '下载选中', zip: '下载 ZIP', zipNote: 'ZIP 会将当前选中的图片合并为一个文件，适合批量保存。',
+    saveFilter: '保存筛选', deletePreset: '删除预设', saveSelection: '保存选择', invert: '反选', allCollections: '全部集合', uncategorized: '未分类',
+    newCollection: '新建集合', exportLibrary: '导出收藏数据', importLibrary: '导入数据', taskCount: '个任务', activeTasks: '进行中', imageDownload: '图片下载', libraryTitle: '本地素材库', refresh: '刷新', allImages: '全部图片', librarySearch: '搜索图片、域名或标签', libraryEmpty: '素材库还是空的', libraryEmptyHint: '在当前页面收藏图片，或从右键菜单收藏网页图片。', historyTitle: '最近活动', clearHistory: '清空历史', recentScans: '最近扫描', downloads: '下载记录', historyEmpty: '暂时没有历史记录', historyEmptyHint: '扫描网页或下载图片后，记录会显示在这里。',
+    pause: '暂停', resume: '继续', cancel: '取消', retry: '重试', queued: '排队中', running: '进行中', paused: '已暂停', completed: '已完成', partial: '部分失败', failed: '失败', cancelled: '已取消',
+    preview: '图片预览', copyUrl: '复制原图地址', openUrl: '在新标签页打开', reset: '重置', original: '原图', unknownSize: '尺寸未知', imagePreview: '图片预览',
+    copied: '原图地址已复制', copyFailed: '复制失败，请检查浏览器权限', collectionUpdated: '集合已更新', collectionUpdateFailed: '集合更新失败', collectionCreated: '集合已创建', collectionCreateFailed: '集合创建失败',
+    libraryExported: '素材库数据已导出', libraryExportFailed: '素材库导出失败', libraryImported: '素材库数据已导入', libraryImportFailed: '导入失败，请选择有效的 JSON 文件', taskActionFailed: '任务操作失败', noFailedTasks: '没有可重试的失败任务',
+    filterPresetPrompt: '请输入筛选预设名称', selectionPresetPrompt: '请输入选择预设名称', newCollectionPrompt: '请输入集合名称', presetSaved: '预设已保存', presetDeleted: '预设已删除', selectBeforeSave: '请先选择图片'
+  },
+  en: {
+    page: 'Current', library: 'Library', history: 'History', tasks: 'Tasks', filterPreset: 'Filter preset', selectionPreset: 'Selection preset', clear: 'Clear', width: 'Width', height: 'Height', format: 'Format', formatHint: 'Filter by file type', originalOnly: 'Original candidates only', originalHint: 'Prefer high-resolution addresses from the page', selectAll: 'Select all results', sort: 'Sort', pageOrder: 'Page order', widthDesc: 'Width: largest first', heightDesc: 'Height: largest first', areaDesc: 'Area: largest first', nameAsc: 'Filename: A–Z', searchPage: 'Search filename, hostname or URL', noResults: 'No matching images', noResultsHint: 'Try widening the size range or scan the page again.', scanning: 'Scanning current page…', saveLocation: 'Ask where to save downloads', downloadSupport: 'Files and ZIP supported', zipLayout: 'ZIP folders', noGrouping: 'No folders', bySite: 'By site', byFormat: 'By format', bySiteFormat: 'By site / format', filenameTemplate: 'Filename template', dateFolder: 'Create date folder', json: 'Export JSON', csv: 'Export CSV', downloadSelected: 'Download selected', zip: 'Download ZIP', zipNote: 'Selected images will be combined into one ZIP archive.',
+    saveFilter: 'Save filter', deletePreset: 'Delete preset', saveSelection: 'Save selection', invert: 'Invert', allCollections: 'All collections', uncategorized: 'Uncategorized',
+    newCollection: 'New collection', exportLibrary: 'Export library', importLibrary: 'Import data', taskCount: 'tasks', activeTasks: 'active', imageDownload: 'Image download', libraryTitle: 'Local library', refresh: 'Refresh', allImages: 'All images', librarySearch: 'Search images, sites or tags', libraryEmpty: 'Your library is empty', libraryEmptyHint: 'Favorite an image on this page or use the context menu to save one.', historyTitle: 'Recent activity', clearHistory: 'Clear history', recentScans: 'Recent scans', downloads: 'Downloads', historyEmpty: 'No activity yet', historyEmptyHint: 'Scan a page or download an image to see activity here.',
+    pause: 'Pause', resume: 'Resume', cancel: 'Cancel', retry: 'Retry', queued: 'Queued', running: 'Running', paused: 'Paused', completed: 'Completed', partial: 'Partial', failed: 'Failed', cancelled: 'Cancelled',
+    preview: 'Image preview', copyUrl: 'Copy original URL', openUrl: 'Open in new tab', reset: 'Reset', original: 'Original', unknownSize: 'Unknown size', imagePreview: 'Image preview',
+    copied: 'Original URL copied', copyFailed: 'Copy failed; check browser permission', collectionUpdated: 'Collection updated', collectionUpdateFailed: 'Collection update failed', collectionCreated: 'Collection created', collectionCreateFailed: 'Collection creation failed',
+    libraryExported: 'Library data exported', libraryExportFailed: 'Library export failed', libraryImported: 'Library data imported', libraryImportFailed: 'Import failed; choose a valid JSON file', taskActionFailed: 'Task action failed', noFailedTasks: 'No failed tasks to retry',
+    filterPresetPrompt: 'Filter preset name', selectionPresetPrompt: 'Selection preset name', newCollectionPrompt: 'Collection name', presetSaved: 'Preset saved', presetDeleted: 'Preset deleted', selectBeforeSave: 'Select images first'
+  }
+};
+
+function t(key) { return TRANSLATIONS[state.language]?.[key] || TRANSLATIONS.zh[key] || key; }
+
+function applyLanguage() {
+  document.documentElement.lang = state.language === 'en' ? 'en' : 'zh-CN';
+  els.language.textContent = state.language === 'en' ? '中' : 'EN';
+  els.pageViewButton.textContent = t('page');
+  const favoriteCount = els.favoriteCount.textContent;
+  els.libraryViewButton.innerHTML = `${t('library')} <span id="favoriteCount">${favoriteCount}</span>`;
+  els.favoriteCount = $('#favoriteCount');
+  els.historyViewButton.textContent = t('history'); els.taskViewButton.textContent = t('tasks');
+  els.filterPreset.options[0].textContent = t('filterPreset'); els.selectionPreset.options[0].textContent = t('selectionPreset');
+  els.saveFilterPreset.textContent = t('saveFilter'); els.deleteFilterPreset.textContent = t('deletePreset'); els.saveSelectionPreset.textContent = t('saveSelection'); els.invertSelection.textContent = t('invert');
+  els.newCollection.textContent = t('newCollection'); els.exportLibrary.textContent = t('exportLibrary'); els.importLibrary.textContent = t('importLibrary');
+  els.previewTitle.textContent = state.preview ? fileName(state.preview.url) : t('preview'); els.copyImageUrl.textContent = t('copyUrl'); els.openImageUrl.textContent = t('openUrl'); els.zoomReset.textContent = t('reset');
+  document.querySelector('.filter-panel h2').textContent = state.language === 'en' ? 'Filter by size' : '按尺寸筛选';
+  els.clearFilters.textContent = t('clear');
+  const dimensionLabels = [...document.querySelectorAll('.dimension-slider .slider-label > span')];
+  if (dimensionLabels[0]) dimensionLabels[0].textContent = t('width');
+  if (dimensionLabels[1]) dimensionLabels[1].textContent = t('height');
+  const formatLabelNode = document.querySelector('.format-filter .slider-label > span'); if (formatLabelNode) formatLabelNode.textContent = t('format');
+  const formatHint = document.querySelector('.format-hint'); if (formatHint) formatHint.textContent = t('formatHint');
+  const originalLabel = document.querySelector('.original-filter span'); if (originalLabel) originalLabel.textContent = t('originalOnly');
+  const originalHint = document.querySelector('.original-filter small'); if (originalHint) originalHint.textContent = t('originalHint');
+  const selectAllLabel = document.querySelector('.select-all span'); if (selectAllLabel) selectAllLabel.textContent = t('selectAll');
+  const search = document.querySelector('#searchInput'); search.placeholder = t('searchPage');
+  const sortLabel = document.querySelector('.sort-control > span'); if (sortLabel) sortLabel.textContent = t('sort');
+  const sortOptions = [t('pageOrder'), t('widthDesc'), t('heightDesc'), t('areaDesc'), t('nameAsc')]; [...els.sortSelect.options].forEach((option, index) => { if (sortOptions[index]) option.textContent = sortOptions[index]; });
+  [...els.formatTabs].forEach((tab) => { const format = tab.dataset.format; const labels = { all: state.language === 'en' ? 'All' : '全部', jpeg: 'JPEG', png: 'PNG', webp: 'WEBP', avif: 'AVIF', other: state.language === 'en' ? 'Other' : '其它' }; const count = tab.querySelector('[data-count]')?.textContent || '0'; tab.innerHTML = `${labels[format] || format} <strong data-count>${count}</strong>`; });
+  els.loading.lastChild.textContent = ` ${t('scanning')}`;
+  const saveText = document.querySelector('.save-option > span'); if (saveText) saveText.textContent = t('saveLocation');
+  const downloadCaption = document.querySelector('.download-caption-note'); if (downloadCaption) downloadCaption.textContent = t('downloadSupport');
+  const settingLabels = [...document.querySelectorAll('.download-settings > label > span')]; if (settingLabels[0]) settingLabels[0].textContent = t('zipLayout'); if (settingLabels[1]) settingLabels[1].textContent = t('filenameTemplate');
+  const zipOptions = [t('noGrouping'), t('bySite'), t('byFormat'), t('bySiteFormat')]; [...els.zipLayout.options].forEach((option, index) => { if (zipOptions[index]) option.textContent = zipOptions[index]; });
+  const dateText = document.querySelector('.date-folder-setting span'); if (dateText) dateText.textContent = t('dateFolder');
+  els.exportJson.textContent = t('json'); els.exportCsv.textContent = t('csv');
+  els.download.innerHTML = `${t('downloadSelected')} <span id="selectedCount">${els.selectedCount.textContent}</span>`;
+  els.selectedCount = $('#selectedCount');
+  els.zip.innerHTML = `<span class="zip-icon">▣</span> ${t('zip')}`;
+  const note = document.querySelector('.download-note'); if (note) note.textContent = t('zipNote');
+  const libraryTitle = document.querySelector('#libraryView h2'); if (libraryTitle) libraryTitle.textContent = t('libraryTitle');
+  if (els.refreshLibrary) els.refreshLibrary.textContent = t('refresh');
+  if (els.librarySearch) els.librarySearch.placeholder = t('librarySearch');
+  const libraryEmptyTitle = document.querySelector('#libraryEmpty strong'); if (libraryEmptyTitle) libraryEmptyTitle.textContent = t('libraryEmpty');
+  const libraryEmptyHint = document.querySelector('#libraryEmpty span'); if (libraryEmptyHint) libraryEmptyHint.textContent = t('libraryEmptyHint');
+  const allImagesOption = [...els.libraryScope.options].find((option) => option.value === 'all'); if (allImagesOption) allImagesOption.textContent = t('allImages');
+  const favoritesOption = [...els.libraryScope.options].find((option) => option.value === 'favorites'); if (favoritesOption) favoritesOption.textContent = state.language === 'en' ? 'Favorites' : '我的收藏';
+  const historyTitle = document.querySelector('#historyView h2'); if (historyTitle) historyTitle.textContent = t('historyTitle');
+  els.clearHistory.textContent = t('clearHistory');
+  const blocks = [...document.querySelectorAll('#historyView .history-block-heading strong')]; if (blocks[0]) blocks[0].textContent = t('recentScans'); if (blocks[1]) blocks[1].textContent = t('downloads');
+  const historyEmptyTitle = document.querySelector('#historyEmpty strong'); if (historyEmptyTitle) historyEmptyTitle.textContent = t('historyEmpty');
+  const historyEmptyHint = document.querySelector('#historyEmpty span'); if (historyEmptyHint) historyEmptyHint.textContent = t('historyEmptyHint');
+  const taskTitle = document.querySelector('#taskView h2'); if (taskTitle) taskTitle.textContent = state.language === 'en' ? 'Download task center' : '下载任务中心';
+  if (els.refreshTasks) els.refreshTasks.textContent = t('refresh');
+  if (els.retryAllTasks) els.retryAllTasks.textContent = state.language === 'en' ? 'Retry failed' : '重试失败任务';
 }
 
 function setLoading(loading) { els.loading.hidden = !loading; if (loading) { els.grid.replaceChildren(); els.empty.hidden = true; } }

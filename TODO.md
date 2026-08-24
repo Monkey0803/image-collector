@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录 `1.2.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
+本文档记录 `1.3.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
 
 ## 1.0.1
 
@@ -48,16 +48,16 @@
 
 ### 体验和管理能力
 
-- [ ] 增加大图预览、缩放和复制原图地址。
-- [ ] 支持保存常用筛选条件和批量选择预设。
-- [ ] 增加独立下载任务中心，支持暂停、继续和批量重试。
-- [ ] 支持自定义图片集合和本地文件夹视图。
-- [ ] 增加中英文界面切换。
-- [ ] 支持导入和导出收藏、标签数据。
+- [x] 增加大图预览、缩放和复制原图地址。
+- [x] 支持保存常用筛选条件和批量选择预设。
+- [x] 增加独立下载任务中心，支持暂停、继续和批量重试。
+- [x] 支持自定义图片集合和本地文件夹视图。
+- [x] 增加中英文界面切换。
+- [x] 支持导入和导出收藏、标签数据。
 
 ## English
 
-This document tracks `1.2.0` and future releases. Completed items use `[x]`.
+This document tracks `1.3.0` and future releases. Completed items use `[x]`.
 
 ### 1.0.1 core experience
 
@@ -92,9 +92,9 @@ This document tracks `1.2.0` and future releases. Completed items use `[x]`.
 
 ### 1.3.0 experience and management
 
-- [ ] Add large-image preview, zoom, and original-URL copying.
-- [ ] Save reusable filters and batch-selection presets.
-- [ ] Add a dedicated download task center with pause, resume, and batch retry.
-- [ ] Support custom image collections and local folder views.
-- [ ] Add Chinese/English interface switching.
-- [ ] Import and export favorites and tag data.
+- [x] Add large-image preview, zoom, and original-URL copying.
+- [x] Save reusable filters and batch-selection presets.
+- [x] Add a dedicated download task center with pause, resume, and batch retry.
+- [x] Support custom image collections and local folder views.
+- [x] Add Chinese/English interface switching.
+- [x] Import and export favorites and tag data.

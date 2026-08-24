@@ -33,6 +33,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ ok: true });
     return true;
   }
+  if (message.type === 'pauseDownload') {
+    pauseDownload(message.jobId);
+    sendResponse({ ok: true });
+    return true;
+  }
+  if (message.type === 'resumeDownload') {
+    resumeDownload(message.jobId);
+    sendResponse({ ok: true });
+    return true;
+  }
   return false;
 });
 
@@ -107,13 +117,15 @@ async function runDownloadJob(kind, images, saveAs, jobId, settings) {
   const result = kind === 'zip'
     ? await downloadZip(images, saveAs, jobId, settings)
     : await downloadImages(images, saveAs, jobId, settings);
-  await saveDownloadRecord(kind, images, result);
+  await saveDownloadRecord(kind, images, result, jobId);
   return result;
 }
 
-async function saveDownloadRecord(kind, images, result) {
+async function saveDownloadRecord(kind, images, result, jobId = '') {
   try {
-    await ImageCollectorDB.saveDownload({
+    const record = {
+      id: jobId || undefined,
+      jobId,
       kind,
       status: result.cancelled ? 'cancelled' : result.ok && result.failed?.length ? 'partial' : result.ok ? 'started' : 'failed',
       urls: images.map((image) => image.url),
@@ -121,8 +133,15 @@ async function saveDownloadRecord(kind, images, result) {
       started: result.started || 0,
       failed: Array.isArray(result.failed) ? result.failed.length : 0,
       error: result.error || '',
-      filename: kind === 'zip' ? `image_${dateStamp()}.zip` : ''
-    });
+      filename: kind === 'zip' ? `image_${dateStamp()}.zip` : '',
+      phase: result.cancelled ? 'cancelled' : result.ok ? 'complete' : 'failed',
+      percent: 100,
+      detail: result.error || (result.cancelled ? '任务已取消' : '任务完成'),
+      paused: false,
+      completedAt: Date.now()
+    };
+    const updated = jobId ? await ImageCollectorDB.updateDownload(jobId, record) : null;
+    if (!updated) await ImageCollectorDB.saveDownload(record);
   } catch {
     // Downloading remains usable even if IndexedDB is unavailable or full.
   }
@@ -133,8 +152,10 @@ async function downloadImages(images, saveAs, jobId, settings = {}) {
   let started = 0;
   const total = images.length;
   const job = getJob(jobId);
+  await waitForResume(job);
   sendProgress(jobId, { phase: 'starting', completed: 0, total, failed: 0, percent: 0, detail: '准备提交下载任务' });
   for (const [index, image] of images.entries()) {
+    await waitForResume(job);
     if (job.cancelled) return finishDownloadJob(jobId, { ok: started > 0, started, failed, cancelled: true, error: '下载任务已取消' }, total, failed.length);
     sendProgress(jobId, {
       phase: 'downloading', completed: index, total, failed: failed.length, percent: progressPercent(index, total),
@@ -168,8 +189,10 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
   const usedNames = new Set();
   const total = images.length;
   const job = getJob(jobId);
+  await waitForResume(job);
   sendProgress(jobId, { phase: 'starting', completed: 0, total, failed: 0, percent: 0, detail: '准备读取图片' });
   for (const [index, image] of images.entries()) {
+    await waitForResume(job);
     if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, cancelled: true, error: 'ZIP 任务已取消' }, total, failed.length);
     const controller = new AbortController();
     job.controllers.add(controller);
@@ -234,7 +257,7 @@ async function inspectImages(images) {
 }
 
 function beginJob(jobId) {
-  const job = { cancelled: false, downloadIds: new Set(), controllers: new Set() };
+  const job = { cancelled: false, paused: false, resumeResolvers: new Set(), downloadIds: new Set(), controllers: new Set() };
   if (jobId) activeJobs.set(jobId, job);
   return job;
 }
@@ -253,13 +276,16 @@ function enqueueJob(jobId, images, task, kind = 'images') {
   const item = { jobId, images, task, kind, resolve: null };
   const position = downloadQueue.length + (queueRunning ? 1 : 0);
   job.queueItem = item;
+  ImageCollectorDB.saveDownload({
+    id: jobId, jobId, kind, status: 'queued', urls: images.map((image) => image.url), count: images.length,
+    phase: 'queued', percent: 0, detail: '等待下载队列', paused: false
+  }).catch(() => {}).finally(() => processQueue());
   sendProgress(jobId, {
     phase: 'queued', completed: 0, total: images.length, failed: 0, percent: 0,
     detail: position ? `已加入下载队列，前方 ${position} 个任务` : '正在启动下载任务'
   });
   const promise = new Promise((resolve) => { item.resolve = resolve; });
   downloadQueue.push(item);
-  processQueue();
   return promise;
 }
 
@@ -274,7 +300,7 @@ async function processQueue() {
         const result = finishDownloadJob(item.jobId, {
           ok: false, failed: [], cancelled: true, error: '下载任务已取消'
         }, item.images.length, 0);
-        saveDownloadRecord(item.kind, item.images, result);
+        saveDownloadRecord(item.kind, item.images, result, item.jobId);
         item.resolve(result);
         continue;
       }
@@ -283,9 +309,11 @@ async function processQueue() {
       try {
         item.resolve(await item.task());
       } catch (error) {
-        item.resolve(finishJob(item.jobId, {
+        const result = finishJob(item.jobId, {
           ok: false, failed: [], error: readableError(error, '下载任务失败')
-        }));
+        });
+        await saveDownloadRecord(item.kind, item.images, result, item.jobId);
+        item.resolve(result);
       }
     }
   } finally {
@@ -319,7 +347,7 @@ function cancelDownload(jobId) {
     const result = finishDownloadJob(jobId, {
       ok: false, failed: [], cancelled: true, error: '下载任务已取消'
     }, item.images.length, 0);
-    saveDownloadRecord(item.kind, item.images, result);
+    saveDownloadRecord(item.kind, item.images, result, item.jobId);
     item.resolve(result);
     updateQueueProgress();
     processQueue();
@@ -327,7 +355,30 @@ function cancelDownload(jobId) {
   }
   job.controllers.forEach((controller) => controller.abort());
   job.downloadIds.forEach((downloadId) => chrome.downloads.cancel(downloadId).catch(() => {}));
+  job.resumeResolvers.forEach((resolve) => resolve());
+  job.resumeResolvers.clear();
   sendProgress(jobId, { phase: 'cancelled', percent: 100, detail: '任务已取消' });
+}
+
+function pauseDownload(jobId) {
+  const job = activeJobs.get(jobId);
+  if (!job || job.cancelled) return;
+  job.paused = true;
+  sendProgress(jobId, { phase: 'paused', detail: '任务已暂停，当前项目完成后等待继续' });
+}
+
+function resumeDownload(jobId) {
+  const job = activeJobs.get(jobId);
+  if (!job || job.cancelled) return;
+  job.paused = false;
+  job.resumeResolvers.forEach((resolve) => resolve());
+  job.resumeResolvers.clear();
+  sendProgress(jobId, { phase: 'resumed', detail: '任务继续执行' });
+}
+
+function waitForResume(job) {
+  if (!job.paused || job.cancelled) return Promise.resolve();
+  return new Promise((resolve) => job.resumeResolvers.add(resolve));
 }
 
 function finishJob(jobId, result) {
@@ -345,6 +396,15 @@ function progressPercent(completed, total) { return total ? Math.round((complete
 function sendProgress(jobId, progress) {
   if (!jobId) return;
   chrome.runtime.sendMessage({ type: 'downloadProgress', jobId, ...progress }).catch(() => {});
+  const job = activeJobs.get(jobId);
+  if (job) {
+    const phase = progress.phase || '';
+    const status = phase === 'queued' ? 'queued' : phase === 'paused' ? 'paused' : phase === 'complete' ? 'completed' : phase === 'failed' ? 'failed' : phase === 'cancelled' ? 'cancelled' : 'running';
+    ImageCollectorDB.updateDownload(jobId, {
+      status, phase, percent: Number(progress.percent) || 0, detail: progress.detail || '', paused: status === 'paused',
+      completed: Number(progress.completed) || 0, failed: Number(progress.failed) || 0
+    }).catch(() => {});
+  }
 }
 
 function normalizeName(image, contentType = '', settings = {}) {
