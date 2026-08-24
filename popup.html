@@ -71,6 +71,22 @@
           </div>
           <span id="resultCount" class="result-count">0 张图片</span>
         </div>
+        <div class="results-controls">
+          <label class="search-box" aria-label="搜索图片">
+            <span aria-hidden="true">⌕</span>
+            <input id="searchInput" type="search" placeholder="搜索文件名、域名或 URL" autocomplete="off" />
+          </label>
+          <label class="sort-control">
+            <span>排序</span>
+            <select id="sortSelect" aria-label="图片排序方式">
+              <option value="page">页面顺序</option>
+              <option value="width-desc">宽度：从大到小</option>
+              <option value="height-desc">高度：从大到小</option>
+              <option value="area-desc">尺寸：从大到小</option>
+              <option value="name-asc">文件名：A–Z</option>
+            </select>
+          </label>
+        </div>
         <div id="imageGrid" class="image-grid"></div>
         <div id="emptyState" class="empty-state" hidden>
           <div class="empty-icon">◌</div>
@@ -87,6 +103,17 @@
         <div class="download-caption">
           <label class="save-option"><input id="saveAs" type="checkbox" checked /><span>下载时选择保存位置</span><span class="help" title="ZIP 下载或单张下载时会打开 Chrome 的保存对话框">?</span></label>
           <span class="download-caption-note">支持普通文件与 ZIP</span>
+        </div>
+        <div id="downloadProgress" class="download-progress" hidden>
+          <div class="progress-heading">
+            <span id="progressLabel">准备下载</span>
+            <strong id="progressValue">0%</strong>
+          </div>
+          <div class="progress-track"><span id="progressBar"></span></div>
+          <div class="progress-detail">
+            <span id="progressDetail">等待任务开始</span>
+            <button id="retryButton" class="retry-button" type="button" hidden>重试失败项 <span id="retryCount">0</span></button>
+          </div>
         </div>
         <div class="download-actions">
           <button id="downloadButton" class="secondary-button" type="button" disabled>下载选中 <span id="selectedCount">0</span></button>

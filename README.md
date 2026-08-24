@@ -22,6 +22,10 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 默认 ZIP 文件名为 `image_YYYY.MM.dd.zip`
 - 下载时可选择保存位置，也可以使用 Chrome 默认下载目录
 - 使用浏览器本地能力处理数据，不需要账号或服务器
+- 原图优先识别 `srcset`、`picture`、懒加载属性和图片外链
+- 按文件名、域名或 URL 搜索，并按尺寸、面积或文件名排序
+- 使用像素指纹或规范化 URL 过滤重复图片
+- 显示普通下载和 ZIP 任务进度，失败图片可以单独重试
 
 ### 安装方式
 
@@ -74,6 +78,18 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 
 分类按钮上的数字表示该格式在当前尺寸筛选条件下的图片数量。
 
+#### 搜索和排序
+
+图片列表上方提供搜索框和排序菜单：
+
+- 搜索文件名、域名、URL、格式或图片来源。
+- 按页面顺序查看，或按宽度、高度、面积从大到小查看。
+- 也可以按文件名的字母顺序查看。
+
+扫描时会优先尝试 `data-original`、`data-full`、`srcset`、`picture` 和图片外链中的原图地址。卡片中的“原图”标识表示该地址不是页面当前显示的缩略图地址。
+
+扫描结果会自动过滤重复图片。同源图片优先使用缩小后的像素指纹判断重复内容；浏览器无法读取跨域图片像素时，会使用规范化后的图片 URL。
+
 #### 选择和下载
 
 - 点击图片卡片可以选择或取消选择图片。
@@ -81,6 +97,7 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 点击图片卡片右下角的下载按钮，可以只下载这一张图片。
 - 点击“下载选中”，会分别下载选中的图片。
 - 点击“下载 ZIP”，会将选中的图片合并为一个 ZIP 文件。
+- 下载面板会显示当前任务进度；部分图片失败时，可以点击“重试失败项”。
 
 ZIP 文件默认命名为：
 
@@ -144,6 +161,7 @@ download_image/
 │   ├── icon-48.png     # 扩展管理页图标
 │   └── icon-128.png    # 扩展详情和安装页图标
 ├── LICENSE             # MIT 开源许可证
+├── TODO.md             # 1.0.1 已完成任务和后续路线图
 └── README.md           # 中文和英文项目文档
 ```
 
@@ -206,6 +224,10 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Use the default ZIP filename format `image_YYYY.MM.dd.zip`
 - Choose a save location or use Chrome's default download directory
 - Process image lists and filters locally in the browser without an account or server
+- Prefer original sources from `srcset`, `picture`, lazy-loading attributes, and image links
+- Search by filename, hostname, or URL and sort by dimensions, area, or filename
+- Filter duplicates with pixel fingerprints or normalized URLs
+- Show download progress and retry failed images
 
 ### Installation
 
@@ -258,6 +280,14 @@ Use the format tabs to show:
 
 The number on each tab reflects the images matching the current dimension filters.
 
+#### Search and sort
+
+The controls above the image grid let you search filenames, hostnames, URLs, formats, and image sources. Results can be sorted by page order, width, height, area, or filename.
+
+During scanning, the extension prefers original candidates from `data-original`, `data-full`, `srcset`, `picture`, and linked image URLs. An `Original` marker means that the selected URL differs from the thumbnail currently displayed by the page.
+
+Duplicate results are filtered automatically. Same-origin images use a small pixel fingerprint when available; cross-origin images fall back to a normalized URL because browser security rules may prevent pixel access.
+
 #### Select and download images
 
 - Click an image card to select or deselect it.
@@ -265,6 +295,7 @@ The number on each tab reflects the images matching the current dimension filter
 - Click the download button on an image card to download only that image.
 - Click **Download selected** to download selected images individually.
 - Click **Download ZIP** to combine selected images into one ZIP archive.
+- The download panel shows task progress. If some images fail, click **Retry failed items** to retry them with the same download mode.
 
 The default ZIP filename is generated in this format:
 
@@ -326,6 +357,7 @@ download_image/
 │   ├── icon-48.png     # Extensions management icon
 │   └── icon-128.png    # Extension detail and installation icon
 ├── LICENSE             # MIT open-source license
+├── TODO.md             # 1.0.1 checklist and future roadmap
 └── README.md           # Chinese and English documentation
 ```
 
