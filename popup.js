@@ -46,8 +46,29 @@ const state = {
 
 let filterRenderFrame = null;
 let libraryRefreshTimer = null;
+let eventsBound = false;
+let languageTouched = false;
+
+function withTimeout(task, timeoutMs, timeoutMessage) {
+  let timer;
+  const operation = Promise.resolve().then(() => (typeof task === 'function' ? task() : task));
+  const timeout = new Promise((resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+  });
+  return Promise.race([operation, timeout]).finally(() => clearTimeout(timer));
+}
+
+function safeStorageSet(values) {
+  try {
+    return Promise.resolve(chrome.storage.local.set(values)).catch(() => {});
+  } catch {
+    return Promise.resolve();
+  }
+}
 
 const $ = (selector) => document.querySelector(selector);
+const on = (element, eventName, handler, options) => element?.addEventListener(eventName, handler, options);
+const setText = (element, value) => { if (element) element.textContent = value; };
 const els = {
   refresh: $('#refreshButton'),
   scanStatus: $('#scanStatus'),
@@ -72,15 +93,54 @@ const els = {
   retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
 };
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  init().catch(handleInitError);
+});
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === 'downloadProgress' && message.jobId === state.downloadJobId) updateDownloadProgress(message);
   if (message?.type === 'downloadProgress' && state.view === 'tasks') loadTasks();
 });
 
+// A side panel stays open while the user changes tabs. Keep the current-page
+// view in sync with the active tab instead of requiring a manual refresh.
+chrome.tabs?.onActivated?.addListener(() => {
+  if (state.view === 'page') scanPage();
+});
+chrome.tabs?.onUpdated?.addListener((tabId, changeInfo) => {
+  if (tabId === state.tabId && changeInfo.status === 'complete' && state.view === 'page') scanPage();
+});
+
+function handleInitError(error) {
+  // An unexpected startup error must never leave the default spinner running
+  // forever. Keep the popup interactive and expose a useful retry path.
+  try {
+    setLoading(false);
+    if (els.refresh) els.refresh.disabled = false;
+    if (els.error) {
+      els.error.hidden = false;
+      els.error.textContent = `${t('scanFailedPrefix')}${error?.message || t('pageAccessError')}`;
+    }
+    setText(els.scanStatus, t('scanFailed'));
+  } catch {
+    // There is no safe UI fallback if the DOM itself is unavailable.
+  }
+}
+
 async function init() {
-  const saved = await chrome.storage.local.get({ filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false });
+  // Render a usable default immediately while settings are loading. The
+  // controls are bound immediately so the popup never presents dead controls.
+  bindEvents();
+  applyLanguage();
+
+  const defaults = { filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false };
+  let saved = defaults;
+  try {
+    saved = (await withTimeout(() => chrome.storage.local.get(defaults), 1500, '读取扩展设置超时')) || defaults;
+  } catch {
+    // Settings are optional. Continue with defaults so the page scan remains usable.
+  }
+  const userChangedLanguage = languageTouched;
   const savedFilters = saved.filters && typeof saved.filters === 'object' ? saved.filters : {};
   state.saveAs = typeof saved.saveAs === 'boolean' ? saved.saveAs : true;
   state.searchQuery = typeof saved.searchQuery === 'string' ? saved.searchQuery : '';
@@ -89,7 +149,7 @@ async function init() {
   state.zipLayout = ['flat', 'domain', 'format', 'domain-format'].includes(saved.zipLayout) ? saved.zipLayout : 'flat';
   state.filenameTemplate = typeof saved.filenameTemplate === 'string' && saved.filenameTemplate.trim() ? saved.filenameTemplate : '{name}';
   state.dateFolder = Boolean(saved.dateFolder);
-  state.language = saved.language === 'en' || saved.language === 'zh' ? saved.language : detectLanguage();
+  if (!userChangedLanguage) state.language = saved.language === 'en' || saved.language === 'zh' ? saved.language : detectLanguage();
   state.filterPresets = Array.isArray(saved.filterPresets) ? saved.filterPresets : [];
   state.selectionPresets = Array.isArray(saved.selectionPresets) ? saved.selectionPresets : [];
   state.scanLimit = [0, 200, 500, 1000].includes(Number(saved.scanLimit)) ? Number(saved.scanLimit) : 500;
@@ -102,82 +162,89 @@ async function init() {
     const limits = state.filterValues[axis];
     if (limits.min !== null && limits.max !== null && limits.min > limits.max) limits.max = limits.min;
   }
-  els.saveAs.checked = state.saveAs;
-  els.searchInput.value = state.searchQuery;
-  els.sortSelect.value = state.sort;
-  els.originalOnly.checked = state.originalOnly;
-  els.zipLayout.value = state.zipLayout;
-  els.filenameTemplate.value = state.filenameTemplate;
-  els.dateFolder.checked = state.dateFolder;
-  els.scanLimit.value = String(state.scanLimit); els.autoScroll.checked = state.autoScroll;
+  if (els.saveAs) els.saveAs.checked = state.saveAs;
+  if (els.searchInput) els.searchInput.value = state.searchQuery;
+  if (els.sortSelect) els.sortSelect.value = state.sort;
+  if (els.originalOnly) els.originalOnly.checked = state.originalOnly;
+  if (els.zipLayout) els.zipLayout.value = state.zipLayout;
+  if (els.filenameTemplate) els.filenameTemplate.value = state.filenameTemplate;
+  if (els.dateFolder) els.dateFolder.checked = state.dateFolder;
+  if (els.scanLimit) els.scanLimit.value = String(state.scanLimit);
+  if (els.autoScroll) els.autoScroll.checked = state.autoScroll;
   renderPresets();
   applyLanguage();
-  await refreshLibraryData();
-  bindEvents();
+  // Library data is secondary to the current-page scan. Do not block the
+  // scan or the loading state on IndexedDB reads.
+  void refreshLibraryData();
   await scanPage();
 }
 
 function bindEvents() {
-  els.pageViewButton.addEventListener('click', () => switchView('page'));
-  els.libraryViewButton.addEventListener('click', () => switchView('library'));
-  els.historyViewButton.addEventListener('click', () => switchView('history'));
-  els.taskViewButton.addEventListener('click', () => switchView('tasks'));
-  els.settingsViewButton.addEventListener('click', () => switchView('settings'));
-  els.language.addEventListener('click', async () => {
+  if (eventsBound) return;
+  eventsBound = true;
+  on(els.pageViewButton, 'click', () => switchView('page'));
+  on(els.libraryViewButton, 'click', () => switchView('library'));
+  on(els.historyViewButton, 'click', () => switchView('history'));
+  on(els.taskViewButton, 'click', () => switchView('tasks'));
+  on(els.settingsViewButton, 'click', () => switchView('settings'));
+  on(els.language, 'click', async () => {
+    languageTouched = true;
     state.language = state.language === 'zh' ? 'en' : 'zh';
-    await chrome.storage.local.set({ language: state.language });
-    chrome.runtime.sendMessage({ type: 'languageChanged', language: state.language }).catch(() => {});
     applyLanguage();
     render();
     renderLibrary();
     loadHistory();
     loadTasks();
     if (state.view === 'settings') loadStorageStats();
+    // Update the UI first. Storage and service-worker persistence are
+    // best-effort and must not prevent a language switch.
+    await safeStorageSet({ language: state.language });
+    try { Promise.resolve(chrome.runtime.sendMessage({ type: 'languageChanged', language: state.language })).catch(() => {}); } catch {}
   });
-  els.refreshLibrary.addEventListener('click', refreshLibraryData);
-  els.libraryScope.addEventListener('change', () => {
+  on(els.refreshLibrary, 'click', refreshLibraryData);
+  on(els.libraryScope, 'change', () => {
     state.libraryScope = els.libraryScope.value;
     refreshLibraryData();
   });
-  els.libraryCollection.addEventListener('change', () => {
+  on(els.libraryCollection, 'change', () => {
     state.libraryCollection = els.libraryCollection.value;
     refreshLibraryData();
   });
   const syncLibraryFilters = () => {
     state.libraryFormat = els.libraryFormat.value; state.libraryMinWidth = els.libraryMinWidth.value; state.libraryMaxWidth = els.libraryMaxWidth.value; state.libraryMinHeight = els.libraryMinHeight.value; state.libraryMaxHeight = els.libraryMaxHeight.value; state.libraryMinSize = els.libraryMinSize.value; state.libraryMaxSize = els.libraryMaxSize.value; state.librarySort = els.librarySort.value; scheduleLibraryRefresh();
   };
-  [els.libraryFormat, els.libraryMinWidth, els.libraryMaxWidth, els.libraryMinHeight, els.libraryMaxHeight, els.libraryMinSize, els.libraryMaxSize, els.librarySort].forEach((control) => control.addEventListener('input', syncLibraryFilters));
-  els.librarySort.addEventListener('change', syncLibraryFilters);
-  els.selectAllLibrary.addEventListener('change', () => {
+  [els.libraryFormat, els.libraryMinWidth, els.libraryMaxWidth, els.libraryMinHeight, els.libraryMaxHeight, els.libraryMinSize, els.libraryMaxSize, els.librarySort].forEach((control) => on(control, 'input', syncLibraryFilters));
+  on(els.librarySort, 'change', syncLibraryFilters);
+  on(els.selectAllLibrary, 'change', () => {
     if (els.selectAllLibrary.checked) state.libraryResults.forEach((record) => state.librarySelected.add(record.url));
     else state.libraryResults.forEach((record) => state.librarySelected.delete(record.url));
     renderLibrary();
   });
-  els.bulkFavorite.addEventListener('click', () => bulkUpdateLibrary('favorite'));
-  els.bulkTag.addEventListener('click', () => bulkUpdateLibrary('tag'));
-  els.bulkCollection.addEventListener('click', () => bulkUpdateLibrary('collection'));
-  els.bulkDelete.addEventListener('click', () => bulkUpdateLibrary('delete'));
-  els.libraryDownloadSelected.addEventListener('click', () => downloadImages(selectedLibraryImages(), false));
-  els.libraryZipSelected.addEventListener('click', () => downloadImages(selectedLibraryImages(), true));
-  els.exportLibraryResultsJson.addEventListener('click', () => exportLibraryResults('json'));
-  els.exportLibraryResultsCsv.addEventListener('click', () => exportLibraryResults('csv'));
-  els.librarySearch.addEventListener('input', () => {
+  on(els.bulkFavorite, 'click', () => bulkUpdateLibrary('favorite'));
+  on(els.bulkTag, 'click', () => bulkUpdateLibrary('tag'));
+  on(els.bulkCollection, 'click', () => bulkUpdateLibrary('collection'));
+  on(els.bulkDelete, 'click', () => bulkUpdateLibrary('delete'));
+  on(els.libraryDownloadSelected, 'click', () => downloadImages(selectedLibraryImages(), false));
+  on(els.libraryZipSelected, 'click', () => downloadImages(selectedLibraryImages(), true));
+  on(els.exportLibraryResultsJson, 'click', () => exportLibraryResults('json'));
+  on(els.exportLibraryResultsCsv, 'click', () => exportLibraryResults('csv'));
+  on(els.librarySearch, 'input', () => {
     state.librarySearch = els.librarySearch.value.trim();
     scheduleLibraryRefresh();
   });
-  els.refreshHistory.addEventListener('click', loadHistory);
-  els.refreshTasks.addEventListener('click', loadTasks);
-  els.retryAllTasks.addEventListener('click', retryAllTasks);
-  els.refreshStorage.addEventListener('click', loadStorageStats);
-  els.clearLibrary.addEventListener('click', clearLocalLibrary);
-  els.resetSettings.addEventListener('click', resetExtensionSettings);
-  els.scanLimit.addEventListener('change', async () => { state.scanLimit = Number(els.scanLimit.value) || 0; await chrome.storage.local.set({ scanLimit: state.scanLimit }); });
-  els.autoScroll.addEventListener('change', async () => { state.autoScroll = els.autoScroll.checked; await chrome.storage.local.set({ autoScroll: state.autoScroll }); });
-  els.newCollection.addEventListener('click', createNewCollection);
-  els.exportLibrary.addEventListener('click', exportLibraryData);
-  els.importLibrary.addEventListener('click', () => els.importLibraryFile.click());
-  els.importLibraryFile.addEventListener('change', importLibraryData);
-  els.clearHistory.addEventListener('click', async () => {
+  on(els.refreshHistory, 'click', loadHistory);
+  on(els.refreshTasks, 'click', loadTasks);
+  on(els.retryAllTasks, 'click', retryAllTasks);
+  on(els.refreshStorage, 'click', loadStorageStats);
+  on(els.clearLibrary, 'click', clearLocalLibrary);
+  on(els.resetSettings, 'click', resetExtensionSettings);
+  on(els.scanLimit, 'change', async () => { state.scanLimit = Number(els.scanLimit.value) || 0; await safeStorageSet({ scanLimit: state.scanLimit }); });
+  on(els.autoScroll, 'change', async () => { state.autoScroll = els.autoScroll.checked; await safeStorageSet({ autoScroll: state.autoScroll }); });
+  on(els.newCollection, 'click', createNewCollection);
+  on(els.exportLibrary, 'click', exportLibraryData);
+  on(els.importLibrary, 'click', () => els.importLibraryFile?.click());
+  on(els.importLibraryFile, 'change', importLibraryData);
+  on(els.clearHistory, 'click', async () => {
     if (!window.confirm(t('clearHistoryConfirm'))) return;
     try {
       await ImageCollectorDB.clearHistory();
@@ -185,15 +252,15 @@ function bindEvents() {
       showToast(t('historyCleared'));
     } catch { showToast(t('historyClearFailed')); }
   });
-  els.refresh.addEventListener('click', scanPage);
-  els.clearFilters.addEventListener('click', () => {
-    els.minWidth.value = 0;
-    els.maxWidth.value = els.maxWidth.max;
-    els.minHeight.value = 0;
-    els.maxHeight.value = els.maxHeight.max;
-    els.searchInput.value = '';
-    els.sortSelect.value = 'page';
-    els.originalOnly.checked = false;
+  on(els.refresh, 'click', scanPage);
+  on(els.clearFilters, 'click', () => {
+    if (els.minWidth) els.minWidth.value = 0;
+    if (els.maxWidth) els.maxWidth.value = els.maxWidth.max;
+    if (els.minHeight) els.minHeight.value = 0;
+    if (els.maxHeight) els.maxHeight.value = els.maxHeight.max;
+    if (els.searchInput) els.searchInput.value = '';
+    if (els.sortSelect) els.sortSelect.value = 'page';
+    if (els.originalOnly) els.originalOnly.checked = false;
     state.filterValues = {
       width: { min: null, max: null },
       height: { min: null, max: null }
@@ -204,81 +271,81 @@ function bindEvents() {
     state.format = 'all';
     scheduleApplyFilters();
   });
-  els.filterPreset.addEventListener('change', applyFilterPreset);
-  els.saveFilterPreset.addEventListener('click', saveFilterPreset);
-  els.deleteFilterPreset.addEventListener('click', deleteFilterPreset);
-  els.minWidth.addEventListener('input', () => handleRangeInput('width', 'min'));
-  els.maxWidth.addEventListener('input', () => handleRangeInput('width', 'max'));
-  els.minHeight.addEventListener('input', () => handleRangeInput('height', 'min'));
-  els.maxHeight.addEventListener('input', () => handleRangeInput('height', 'max'));
-  els.searchInput.addEventListener('input', () => {
+  on(els.filterPreset, 'change', applyFilterPreset);
+  on(els.saveFilterPreset, 'click', saveFilterPreset);
+  on(els.deleteFilterPreset, 'click', deleteFilterPreset);
+  on(els.minWidth, 'input', () => handleRangeInput('width', 'min'));
+  on(els.maxWidth, 'input', () => handleRangeInput('width', 'max'));
+  on(els.minHeight, 'input', () => handleRangeInput('height', 'min'));
+  on(els.maxHeight, 'input', () => handleRangeInput('height', 'max'));
+  on(els.searchInput, 'input', () => {
     state.searchQuery = els.searchInput.value.trim();
     chrome.storage.local.set({ searchQuery: state.searchQuery });
     scheduleApplyFilters();
   });
-  els.sortSelect.addEventListener('change', () => {
+  on(els.sortSelect, 'change', () => {
     state.sort = els.sortSelect.value;
     chrome.storage.local.set({ sort: state.sort });
     applyFilters();
   });
-  els.originalOnly.addEventListener('change', () => {
+  on(els.originalOnly, 'change', () => {
     state.originalOnly = els.originalOnly.checked;
     chrome.storage.local.set({ originalOnly: state.originalOnly });
     applyFilters();
   });
-  els.zipLayout.addEventListener('change', () => {
+  on(els.zipLayout, 'change', () => {
     state.zipLayout = els.zipLayout.value;
     chrome.storage.local.set({ zipLayout: state.zipLayout });
   });
-  els.filenameTemplate.addEventListener('change', () => {
+  on(els.filenameTemplate, 'change', () => {
     state.filenameTemplate = els.filenameTemplate.value.trim() || '{name}';
     els.filenameTemplate.value = state.filenameTemplate;
     chrome.storage.local.set({ filenameTemplate: state.filenameTemplate });
   });
-  els.dateFolder.addEventListener('change', () => {
+  on(els.dateFolder, 'change', () => {
     state.dateFolder = els.dateFolder.checked;
     chrome.storage.local.set({ dateFolder: state.dateFolder });
   });
-  els.formatTabs.forEach((tab) => tab.addEventListener('click', () => {
+  els.formatTabs.forEach((tab) => on(tab, 'click', () => {
     state.format = tab.dataset.format || 'all';
     applyFilters();
   }));
-  els.selectAll.addEventListener('change', () => {
+  on(els.selectAll, 'change', () => {
     if (els.selectAll.checked) state.filtered.forEach((image) => state.selected.add(image.id));
     else state.filtered.forEach((image) => state.selected.delete(image.id));
     render();
   });
-  els.invertSelection.addEventListener('click', () => {
+  on(els.invertSelection, 'click', () => {
     state.filtered.forEach((image) => state.selected[state.selected.has(image.id) ? 'delete' : 'add'](image.id));
     render();
   });
-  els.selectionPreset.addEventListener('change', applySelectionPreset);
-  els.saveSelectionPreset.addEventListener('click', saveSelectionPreset);
-  els.saveAs.addEventListener('change', async () => {
+  on(els.selectionPreset, 'change', applySelectionPreset);
+  on(els.saveSelectionPreset, 'click', saveSelectionPreset);
+  on(els.saveAs, 'change', async () => {
     state.saveAs = els.saveAs.checked;
     await chrome.storage.local.set({ saveAs: state.saveAs });
   });
-  els.retryButton.addEventListener('click', () => {
+  on(els.retryButton, 'click', () => {
     if (state.retryImages.length) downloadImages([...state.retryImages], state.retryAsZip);
   });
-  els.cancelButton.addEventListener('click', async () => {
+  on(els.cancelButton, 'click', async () => {
     if (!state.downloadJobId) return;
     state.cancelled = true;
     els.cancelButton.hidden = true;
     try { await chrome.runtime.sendMessage({ type: 'cancelDownload', jobId: state.downloadJobId }); } catch { /* The worker may finish at the same time. */ }
     updateDownloadProgress({ phase: 'cancelled', percent: 100, detail: t('cancelling') });
   });
-  els.exportJson.addEventListener('click', () => exportImages('json'));
-  els.exportCsv.addEventListener('click', () => exportImages('csv'));
-  els.download.addEventListener('click', () => downloadSelected(false));
-  els.zip.addEventListener('click', () => downloadSelected(true));
-  els.closePreview.addEventListener('click', closePreview);
-  els.previewModal.addEventListener('click', (event) => { if (event.target.matches('[data-close-preview]')) closePreview(); });
-  els.copyImageUrl.addEventListener('click', copyPreviewUrl);
-  els.openImageUrl.addEventListener('click', () => { if (state.preview?.url) chrome.tabs.create({ url: state.preview.url }); });
-  els.zoomIn.addEventListener('click', () => changePreviewZoom(.25));
-  els.zoomOut.addEventListener('click', () => changePreviewZoom(-.25));
-  els.zoomReset.addEventListener('click', () => { state.previewZoom = 1; updatePreviewZoom(); });
+  on(els.exportJson, 'click', () => exportImages('json'));
+  on(els.exportCsv, 'click', () => exportImages('csv'));
+  on(els.download, 'click', () => downloadSelected(false));
+  on(els.zip, 'click', () => downloadSelected(true));
+  on(els.closePreview, 'click', closePreview);
+  on(els.previewModal, 'click', (event) => { if (event.target.matches('[data-close-preview]')) closePreview(); });
+  on(els.copyImageUrl, 'click', copyPreviewUrl);
+  on(els.openImageUrl, 'click', () => { if (state.preview?.url) chrome.tabs.create({ url: state.preview.url }); });
+  on(els.zoomIn, 'click', () => changePreviewZoom(.25));
+  on(els.zoomOut, 'click', () => changePreviewZoom(-.25));
+  on(els.zoomReset, 'click', () => { state.previewZoom = 1; updatePreviewZoom(); });
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !els.previewModal.hidden) closePreview(); });
   document.addEventListener('keydown', (event) => {
     if (event.target.matches('input, textarea, select')) return;
@@ -762,7 +829,11 @@ async function scanPage(options = {}) {
     render();
   }
   try {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tabs = await withTimeout(
+      () => chrome.tabs.query({ active: true, currentWindow: true }),
+      5000,
+      t('scanTimeout')
+    );
     const tab = tabs[0];
     if (!tab?.id) throw new Error(t('noActiveTab'));
     if (scanId !== state.scanId) return;
@@ -770,14 +841,20 @@ async function scanPage(options = {}) {
     els.pageTitle.textContent = tab.title || t('currentPage');
     els.pageUrl.textContent = tab.url || '';
     els.pageIcon.textContent = getDomainLetter(tab.url);
-    const results = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: collectPageImages, args: [{ limit: state.scanLimit, autoScroll: state.autoScroll, language: state.language }] });
+    const results = await withTimeout(
+      () => chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: collectPageImages, args: [{ limit: state.scanLimit, autoScroll: state.autoScroll, language: state.language, fast: !quiet, timeLimitMs: quiet ? 15000 : 5000 }] }),
+      quiet ? 30000 : 15000,
+      t('scanTimeout')
+    );
     if (scanId !== state.scanId) return;
     const merged = new Map();
     let duplicateCount = 0;
+    let partialScan = false;
     for (const result of results || []) {
       const payload = result?.result || {};
       const rawImages = Array.isArray(payload) ? payload : payload.images || [];
       duplicateCount += Array.isArray(payload) ? 0 : Number(payload.duplicateCount || 0);
+      partialScan = partialScan || Boolean(!Array.isArray(payload) && payload.partial);
       for (const image of rawImages) {
         const existing = merged.get(image.url);
         if (existing) {
@@ -788,13 +865,23 @@ async function scanPage(options = {}) {
         }
       }
     }
-    state.duplicateCount = duplicateCount;
-    state.images = [...merged.values()].map((image, index) => ({
+    state.duplicateCount = partialScan ? Math.max(state.duplicateCount, duplicateCount) : duplicateCount;
+    const discovered = [...merged.values()].map((image, index) => ({
       ...image,
       format: image.format || 'other',
       id: `${index}-${image.url}`,
       index
     }));
+    if (quiet && partialScan) {
+      const combined = new Map(state.images.map((image) => [image.url, image]));
+      discovered.forEach((image) => {
+        const previous = combined.get(image.url);
+        combined.set(image.url, previous ? { ...previous, ...image, id: previous.id, index: previous.index } : image);
+      });
+      state.images = [...combined.values()];
+    } else {
+      state.images = discovered;
+    }
     state.selected.clear();
     state.images.forEach((image) => { if (previousSelectedUrls.has(image.url)) state.selected.add(image.id); });
     updateScanStatus();
@@ -813,7 +900,8 @@ async function scanPage(options = {}) {
       els.error.hidden = false;
       els.error.textContent = `${t('scanFailedPrefix')}${error.message || t('pageAccessError')}`;
     }
-    els.scanStatus.textContent = t('scanFailed');
+    if (!quiet) els.scanStatus.textContent = t('scanFailed');
+    else updateScanStatus();
   } finally {
     if (scanId === state.scanId) {
       setLoading(false);
@@ -865,6 +953,10 @@ async function collectPageImages(options = {}) {
   const fingerprintCache = new WeakMap();
   const maxCssElements = 2500;
   const maxFingerprints = 400;
+  const fast = options.fast !== false;
+  const timeLimitMs = Math.max(5000, Number(options.timeLimitMs) || 25000);
+  let deadline = Date.now() + timeLimitMs;
+  const expired = () => Date.now() >= deadline;
   const requestedLimit = Number(options.limit) || 0;
   const candidateLimit = requestedLimit > 0 ? Math.max(requestedLimit + 100, requestedLimit * 2) : 0;
   const originalAttributes = [
@@ -876,10 +968,10 @@ async function collectPageImages(options = {}) {
   const waitForPageToSettle = () => new Promise((resolve) => {
     const root = document.documentElement;
     if (!root || typeof MutationObserver === 'undefined') { setTimeout(resolve, 250); return; }
-    let timer = setTimeout(done, 450);
+    let timer = setTimeout(done, Math.min(450, Math.max(0, deadline - Date.now())));
     const observer = new MutationObserver(() => {
       clearTimeout(timer);
-      timer = setTimeout(done, 350);
+      timer = setTimeout(done, Math.min(350, Math.max(0, deadline - Date.now())));
     });
     observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: [
       'src', 'srcset', 'poster', 'data-src', 'data-srcset', 'data-original', 'data-lazy-src', 'style', 'class'
@@ -889,13 +981,14 @@ async function collectPageImages(options = {}) {
       clearTimeout(timer);
       resolve();
     }
-    setTimeout(done, 1800);
+    setTimeout(done, Math.min(1800, Math.max(0, deadline - Date.now())));
   });
 
   if (options.autoScroll) {
     const originalY = window.scrollY;
     let y = 0;
-    for (let pass = 0; pass < 40; pass += 1) {
+    const scrollDeadline = Date.now() + Math.min(7000, timeLimitMs);
+    for (let pass = 0; pass < 40 && Date.now() < scrollDeadline; pass += 1) {
       const height = Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0);
       if (y > height) break;
       window.scrollTo(0, y);
@@ -903,8 +996,11 @@ async function collectPageImages(options = {}) {
       y += Math.max(window.innerHeight || 800, 800);
     }
     window.scrollTo(0, originalY);
+    // Scrolling and collecting are separate phases. Always keep a full
+    // collection budget after scrolling has finished.
+    deadline = Date.now() + timeLimitMs;
   }
-  await waitForPageToSettle();
+  if (!fast) await waitForPageToSettle();
 
   const formatFromUrl = (url) => {
     let parsed;
@@ -994,6 +1090,7 @@ async function collectPageImages(options = {}) {
 
   const probeDimensions = (url, fallbackWidth, fallbackHeight) => new Promise((resolve) => {
     if (!url || url.startsWith('data:')) { resolve({ width: fallbackWidth, height: fallbackHeight }); return; }
+    if (expired()) { resolve({ width: fallbackWidth, height: fallbackHeight }); return; }
     const probe = new Image();
     let settled = false;
     const finish = (width, height) => {
@@ -1004,7 +1101,7 @@ async function collectPageImages(options = {}) {
     probe.onload = () => finish(probe.naturalWidth, probe.naturalHeight);
     probe.onerror = () => finish(fallbackWidth, fallbackHeight);
     probe.src = url;
-    setTimeout(() => finish(fallbackWidth, fallbackHeight), 1200);
+    setTimeout(() => finish(fallbackWidth, fallbackHeight), Math.min(1200, Math.max(0, deadline - Date.now())));
   });
 
   const fingerprint = (image) => {
@@ -1030,6 +1127,7 @@ async function collectPageImages(options = {}) {
   };
 
   for (const image of document.images) {
+    if (expired()) break;
     const chosen = chooseImageSource(image);
     if (!chosen) continue;
     const displayUrl = normalizeUrl(image.currentSrc || image.src || image.getAttribute('data-src')) || chosen.url;
@@ -1042,33 +1140,39 @@ async function collectPageImages(options = {}) {
     });
   }
   for (const video of document.querySelectorAll('video[poster]')) {
+    if (expired()) break;
     const rect = video.getBoundingClientRect();
     add(video.getAttribute('poster'), video.videoWidth || rect.width, video.videoHeight || rect.height, 'VIDEO', options.language === 'en' ? 'Video poster' : '视频封面', { quality: 5500 });
   }
   for (const object of document.querySelectorAll('object[data]')) {
+    if (expired()) break;
     const url = normalizeUrl(object.getAttribute('data'));
     if (!url || !imageLikeUrl(url)) continue;
     const rect = object.getBoundingClientRect();
     add(url, rect.width, rect.height, 'OBJECT', options.language === 'en' ? 'Embedded image' : '嵌入图片', { quality: 4000 });
   }
-  const allElements = [...document.querySelectorAll('*')];
-  const cssElements = allElements.length > maxCssElements
-    ? allElements.filter((element) => element.hasAttribute('style') || element.id || element.className).slice(0, maxCssElements)
-    : allElements;
-  for (const element of cssElements) {
-    const background = getComputedStyle(element).backgroundImage || '';
-    const matches = [...background.matchAll(/url\((?:"|')?(.*?)(?:"|')?\)/g)];
-    if (!matches.length) continue;
-    const rect = element.getBoundingClientRect();
-    for (const match of matches) {
-      add(match[1], rect?.width, rect?.height, 'CSS', options.language === 'en' ? 'Background image' : '背景图片', { quality: 2000 });
+  if (!fast) {
+    const allElements = [...document.querySelectorAll('*')];
+    const cssElements = allElements.length > maxCssElements
+      ? allElements.filter((element) => element.hasAttribute('style') || element.id || element.className).slice(0, maxCssElements)
+      : allElements;
+    for (const element of cssElements) {
+      if (expired()) break;
+      const background = getComputedStyle(element).backgroundImage || '';
+      const matches = [...background.matchAll(/url\((?:"|')?(.*?)(?:"|')?\)/g)];
+      if (!matches.length) continue;
+      const rect = element.getBoundingClientRect();
+      for (const match of matches) {
+        if (expired()) break;
+        add(match[1], rect?.width, rect?.height, 'CSS', options.language === 'en' ? 'Background image' : '背景图片', { quality: 2000 });
+      }
     }
   }
 
   const processInBatches = async (items, concurrency, worker) => {
     let nextIndex = 0;
     const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-      while (nextIndex < items.length) {
+      while (nextIndex < items.length && !expired()) {
         const index = nextIndex;
         nextIndex += 1;
         await worker(items[index], index);
@@ -1076,15 +1180,19 @@ async function collectPageImages(options = {}) {
     });
     await Promise.all(workers);
   };
-  await processInBatches(found, 8, async (entry, index) => {
-    if (entry.original && entry.url !== entry.displayUrl) {
-      const dimensions = await probeDimensions(entry.url, entry.width || entry.widthHint, entry.height);
-      entry.width = dimensions.width;
-      entry.height = dimensions.height;
-    }
-    entry.contentKey = index < maxFingerprints ? fingerprint(entry.element) : '';
-    delete entry.element;
-  });
+  if (fast) {
+    found.forEach((entry) => { delete entry.element; });
+  } else {
+    await processInBatches(found, 16, async (entry, index) => {
+      if (entry.original && entry.url !== entry.displayUrl) {
+        const dimensions = await probeDimensions(entry.url, entry.width || entry.widthHint, entry.height);
+        entry.width = dimensions.width;
+        entry.height = dimensions.height;
+      }
+      entry.contentKey = index < maxFingerprints ? fingerprint(entry.element) : '';
+      delete entry.element;
+    });
+  }
 
   const unique = new Map();
   let duplicateCount = 0;
@@ -1100,8 +1208,8 @@ async function collectPageImages(options = {}) {
     const existingScore = existing.quality + (existing.width * existing.height) / 1000000;
     if (entryScore > existingScore) unique.set(key, entry);
   }
-  const images = [...unique.values()].map(({ contentKey, ...image }) => image);
-  return { images: options.limit ? images.slice(0, Number(options.limit)) : images, duplicateCount };
+  const images = [...unique.values()].map(({ contentKey, element, ...image }) => image);
+  return { images: options.limit ? images.slice(0, Number(options.limit)) : images, duplicateCount, partial: expired() };
 }
 
 function applyFilters() {
@@ -1483,7 +1591,7 @@ const TRANSLATIONS = {
     filterPresetPrompt: '请输入筛选预设名称', selectionPresetPrompt: '请输入选择预设名称', newCollectionPrompt: '请输入集合名称', presetSaved: '预设已保存', presetDeleted: '预设已删除', selectBeforeSave: '请先选择图片', selectBeforeAction: '请先选择素材', bulkFavoriteDone: '已批量收藏', bulkTagPrompt: '请输入要添加的标签', bulkTagDone: '标签已批量添加', bulkCollectionPrompt: '请输入集合序号', createCollectionFirst: '请先创建集合', bulkCollectionDone: '已批量归档', bulkDeleteConfirm: '确定删除选中的素材吗？', bulkDeleteDone: '素材已删除', bulkActionFailed: '批量操作失败', clearLibraryConfirm: '确定清空整个素材库吗？此操作不可撤销。', libraryCleared: '素材库已清空', clearLibraryFailed: '素材库清理失败', resetSettingsConfirm: '确定重置所有扩展设置吗？', settingsReset: '设置已重置',
     sizeFilterTitle: '按尺寸筛选', unlimited: '不限', imageCount: '{count} 张图片', itemCount: '{count} 项', selectedCount: '已选 {count}', duplicates: '去重 {count}', all: '全部', other: '其它', switchLanguage: '切换语言', rescan: '重新扫描', viewSwitcher: '视图切换', filterSection: '图片筛选', searchImages: '搜索图片', sortImages: '图片排序方式', saveHelp: 'ZIP 下载或单张下载时会打开 Chrome 的保存对话框', libraryScope: '素材库筛选范围', collectionFilter: '按集合筛选', waitingTask: '等待任务开始', scanLimit: '扫描上限', maxImages: '最大扫描图片数量', imageOptions: ['200 张', '500 张', '1000 张', '不限'], autoScroll: '自动滚动加载懒加载图片',
     widthMin: '最小宽度', widthMax: '最大宽度', heightMin: '最小高度', heightMax: '最大高度', formatFilter: '按图片格式筛选', saveLocationHint: 'ZIP 下载或单张下载时会打开 Chrome 的保存对话框', filenameTemplateHint: '支持 {name}、{filename}、{domain}、{format}、{width}、{height}、{date}',
-    currentPage: '当前页面', readingPage: '正在读取当前页面', scanningStatus: '扫描中', updating: '更新中', scanFailed: '扫描失败', scanFailedPrefix: '扫描失败：', pageAccessError: '当前页面不允许扩展访问，请切换到普通网页后重试。', noActiveTab: '无法获取当前标签页。', unnamedPage: '未命名页面', unknownTime: '时间未知', webImage: '网页图片', previewUnavailable: '预览不可用', selectImage: '选择 {dimensions} 图片', selectNamedImage: '选择 {name}', favorite: '收藏', favoriteImage: '收藏图片', removeFavorite: '取消收藏', downloadImage: '下载图片', removeTag: '移除标签 {tag}', chooseCollection: '选择集合', addTag: '添加标签', favoriteAdded: '已加入收藏', favoriteRemoved: '已取消收藏', favoriteFailed: '收藏操作失败', tagUpdated: '标签已更新', tagSaveFailed: '标签保存失败',
+    currentPage: '当前页面', readingPage: '正在读取当前页面', scanningStatus: '扫描中', updating: '更新中', scanFailed: '扫描失败', scanFailedPrefix: '扫描失败：', scanTimeout: '扫描超时，请重试', pageAccessError: '当前页面不允许扩展访问，请切换到普通网页后重试。', noActiveTab: '无法获取当前标签页。', unnamedPage: '未命名页面', unknownTime: '时间未知', webImage: '网页图片', previewUnavailable: '预览不可用', selectImage: '选择 {dimensions} 图片', selectNamedImage: '选择 {name}', favorite: '收藏', favoriteImage: '收藏图片', removeFavorite: '取消收藏', downloadImage: '下载图片', removeTag: '移除标签 {tag}', chooseCollection: '选择集合', addTag: '添加标签', favoriteAdded: '已加入收藏', favoriteRemoved: '已取消收藏', favoriteFailed: '收藏操作失败', tagUpdated: '标签已更新', tagSaveFailed: '标签保存失败',
     downloadZip: '下载 ZIP', submitted: '已提交', partialFailed: '部分失败 {count}', clearHistoryConfirm: '确定清空所有扫描和下载历史吗？', historyCleared: '历史记录已清空', historyClearFailed: '历史记录清理失败', taskCancelled: '任务已取消', cancelling: '正在取消任务…', downloadCancelled: '下载任务已取消', downloadFailed: '下载失败', downloadFailedRetry: '下载失败，请重试', prepareZip: '准备生成 ZIP…', prepareImages: '准备下载图片…', processedWithFailures: '已处理 {count} 张，失败 {failed}', downloadStartedWithFailures: '已开始下载，{count} 张图片失败，可点击重试', zipStarted: 'ZIP 已开始下载', downloadStarted: '下载已开始', compressing: '正在压缩', taskFailed: '任务失败', taskComplete: '任务完成', downloadProgress: '下载进度', processedProgress: '已处理 {completed}/{total}', noImagesToExport: '当前没有可导出的图片', exportStarted: '{type} 清单已开始下载', exportFailed: '清单导出失败', taskCenter: '下载任务中心', retryFailed: '重试失败任务', retryFailedItems: '重试失败项', taskEmpty: '暂时没有下载任务', taskEmptyHint: '发起图片或 ZIP 下载后，任务会显示在这里。', settingsTitle: '设置与存储', clearLibrary: '清空素材库', resetSettings: '重置设置', myFavorites: '我的收藏', bulkFavorite: '批量收藏', bulkTag: '添加标签', bulkCollection: '归档到集合', bulkDelete: '删除', closePreview: '关闭预览'
   },
   en: {
@@ -1498,7 +1606,7 @@ const TRANSLATIONS = {
     filterPresetPrompt: 'Filter preset name', selectionPresetPrompt: 'Selection preset name', newCollectionPrompt: 'Collection name', presetSaved: 'Preset saved', presetDeleted: 'Preset deleted', selectBeforeSave: 'Select images first', selectBeforeAction: 'Select images first', bulkFavoriteDone: 'Images favorited', bulkTagPrompt: 'Tag to add', bulkTagDone: 'Tags added', bulkCollectionPrompt: 'Collection number', createCollectionFirst: 'Create a collection first', bulkCollectionDone: 'Images archived', bulkDeleteConfirm: 'Delete the selected images? This cannot be undone.', bulkDeleteDone: 'Images deleted', bulkActionFailed: 'Bulk action failed', clearLibraryConfirm: 'Clear the entire library? This cannot be undone.', libraryCleared: 'Library cleared', clearLibraryFailed: 'Could not clear library', resetSettingsConfirm: 'Reset all extension settings?', settingsReset: 'Settings reset',
     sizeFilterTitle: 'Filter by size', unlimited: 'Any', imageCount: '{count} image(s)', itemCount: '{count} item(s)', selectedCount: 'Selected {count}', duplicates: '{count} duplicates removed', all: 'All', other: 'Other', switchLanguage: 'Switch language', rescan: 'Rescan', viewSwitcher: 'View switcher', filterSection: 'Image filters', searchImages: 'Search images', sortImages: 'Image sort', saveHelp: 'Chrome opens a save dialog for ZIP or single-image downloads', libraryScope: 'Library scope', collectionFilter: 'Filter by collection', waitingTask: 'Waiting for task', scanLimit: 'Scan limit', maxImages: 'Maximum image count', imageOptions: ['200 images', '500 images', '1000 images', 'Unlimited'], autoScroll: 'Auto-scroll for lazy images',
     widthMin: 'Minimum width', widthMax: 'Maximum width', heightMin: 'Minimum height', heightMax: 'Maximum height', formatFilter: 'Filter by image format', saveLocationHint: 'Chrome opens a save dialog for ZIP or single-image downloads', filenameTemplateHint: 'Supports {name}, {filename}, {domain}, {format}, {width}, {height}, and {date}',
-    currentPage: 'Current page', readingPage: 'Reading current page', scanningStatus: 'Scanning', updating: 'Updating', scanFailed: 'Scan failed', scanFailedPrefix: 'Scan failed: ', pageAccessError: 'The extension cannot access this page. Switch to a regular webpage and try again.', noActiveTab: 'Could not get the active tab.', unnamedPage: 'Untitled page', unknownTime: 'Unknown time', webImage: 'Web image', previewUnavailable: 'Preview unavailable', selectImage: 'Select {dimensions} image', selectNamedImage: 'Select {name}', favorite: 'Favorite', favoriteImage: 'Favorite image', removeFavorite: 'Remove favorite', downloadImage: 'Download image', removeTag: 'Remove tag {tag}', chooseCollection: 'Choose collection', addTag: 'Add tag', favoriteAdded: 'Added to favorites', favoriteRemoved: 'Removed from favorites', favoriteFailed: 'Favorite action failed', tagUpdated: 'Tag updated', tagSaveFailed: 'Could not save tag',
+    currentPage: 'Current page', readingPage: 'Reading current page', scanningStatus: 'Scanning', updating: 'Updating', scanFailed: 'Scan failed', scanFailedPrefix: 'Scan failed: ', scanTimeout: 'Scan timed out; try again', pageAccessError: 'The extension cannot access this page. Switch to a regular webpage and try again.', noActiveTab: 'Could not get the active tab.', unnamedPage: 'Untitled page', unknownTime: 'Unknown time', webImage: 'Web image', previewUnavailable: 'Preview unavailable', selectImage: 'Select {dimensions} image', selectNamedImage: 'Select {name}', favorite: 'Favorite', favoriteImage: 'Favorite image', removeFavorite: 'Remove favorite', downloadImage: 'Download image', removeTag: 'Remove tag {tag}', chooseCollection: 'Choose collection', addTag: 'Add tag', favoriteAdded: 'Added to favorites', favoriteRemoved: 'Removed from favorites', favoriteFailed: 'Favorite action failed', tagUpdated: 'Tag updated', tagSaveFailed: 'Could not save tag',
     downloadZip: 'Download ZIP', submitted: 'Submitted', partialFailed: 'Partial failure: {count}', clearHistoryConfirm: 'Clear all scan and download history?', historyCleared: 'History cleared', historyClearFailed: 'Could not clear history', taskCancelled: 'Task cancelled', cancelling: 'Cancelling…', downloadCancelled: 'Download task cancelled', downloadFailed: 'Download failed', downloadFailedRetry: 'Download failed; try again', prepareZip: 'Preparing ZIP…', prepareImages: 'Preparing image download…', processedWithFailures: 'Processed {count}; {failed} failed', downloadStartedWithFailures: 'Download started; {count} image(s) failed. You can retry them.', zipStarted: 'ZIP download started', downloadStarted: 'Download started', compressing: 'Compressing', taskFailed: 'Task failed', taskComplete: 'Task complete', downloadProgress: 'Download progress', processedProgress: 'Processed {completed}/{total}', noImagesToExport: 'There are no images to export', exportStarted: '{type} list download started', exportFailed: 'List export failed', taskCenter: 'Download task center', retryFailed: 'Retry failed tasks', retryFailedItems: 'Retry failed items', taskEmpty: 'No download tasks yet', taskEmptyHint: 'Start an image or ZIP download to see it here.', settingsTitle: 'Settings & storage', clearLibrary: 'Clear library', resetSettings: 'Reset settings', myFavorites: 'Favorites', bulkFavorite: 'Favorite', bulkTag: 'Add tag', bulkCollection: 'Archive', bulkDelete: 'Delete', closePreview: 'Close preview'
   }
 };
@@ -1516,10 +1624,12 @@ function detectLanguage() {
 
 function applyLanguage() {
   document.documentElement.lang = state.language === 'en' ? 'en' : 'zh-CN';
-  els.language.textContent = state.language === 'en' ? '中' : 'EN';
-  els.language.title = t('switchLanguage');
-  els.refresh.title = t('rescan');
-  els.refresh.setAttribute('aria-label', t('rescan'));
+  setText(els.language, state.language === 'en' ? '中' : 'EN');
+  if (els.language) els.language.title = t('switchLanguage');
+  if (els.refresh) {
+    els.refresh.title = t('rescan');
+    els.refresh.setAttribute('aria-label', t('rescan'));
+  }
   document.querySelector('.page-summary')?.setAttribute('aria-label', t('currentPage'));
   document.querySelector('.view-switcher')?.setAttribute('aria-label', t('viewSwitcher'));
   document.querySelector('.filter-panel')?.setAttribute('aria-label', t('filterSection'));
@@ -1528,32 +1638,35 @@ function applyLanguage() {
   document.querySelector('#taskView')?.setAttribute('aria-label', t('taskCenter'));
   document.querySelector('#settingsView')?.setAttribute('aria-label', t('settingsTitle'));
   document.querySelector('.search-box')?.setAttribute('aria-label', t('searchImages'));
-  els.sortSelect.setAttribute('aria-label', t('sortImages'));
-  els.minWidth.setAttribute('aria-label', t('widthMin')); els.maxWidth.setAttribute('aria-label', t('widthMax'));
-  els.minHeight.setAttribute('aria-label', t('heightMin')); els.maxHeight.setAttribute('aria-label', t('heightMax'));
+  els.sortSelect?.setAttribute('aria-label', t('sortImages'));
+  els.minWidth?.setAttribute('aria-label', t('widthMin')); els.maxWidth?.setAttribute('aria-label', t('widthMax'));
+  els.minHeight?.setAttribute('aria-label', t('heightMin')); els.maxHeight?.setAttribute('aria-label', t('heightMax'));
   els.formatTabs.forEach((tab) => tab.closest('.format-tabs')?.setAttribute('aria-label', t('formatFilter')));
-  els.scanLimit.setAttribute('aria-label', t('maxImages'));
+  els.scanLimit?.setAttribute('aria-label', t('maxImages'));
   document.querySelector('.save-option .help')?.setAttribute('title', t('saveHelp'));
-  els.filenameTemplate.title = t('filenameTemplateHint');
-  els.libraryScope.setAttribute('aria-label', t('libraryScope'));
-  els.libraryCollection.setAttribute('aria-label', t('collectionFilter'));
-  els.librarySearch.setAttribute('aria-label', t('librarySearch'));
-  els.closePreview.setAttribute('aria-label', t('closePreview'));
-  els.previewImage.alt = t('imagePreview');
-  if (!state.tabId) els.pageTitle.textContent = t('readingPage');
-  if (state.images.length && els.loading.hidden) updateScanStatus();
-  else if (!state.images.length && els.loading.hidden) els.scanStatus.textContent = t('scanningStatus');
-  els.pageViewButton.textContent = t('page');
-  const favoriteCount = els.favoriteCount.textContent;
-  els.libraryViewButton.innerHTML = `${t('library')} <span id="favoriteCount">${favoriteCount}</span>`;
-  els.favoriteCount = $('#favoriteCount');
-  els.historyViewButton.textContent = t('history'); els.taskViewButton.textContent = t('tasks'); els.settingsViewButton.textContent = t('settings');
-  els.filterPreset.options[0].textContent = t('filterPreset'); els.selectionPreset.options[0].textContent = t('selectionPreset');
-  els.saveFilterPreset.textContent = t('saveFilter'); els.deleteFilterPreset.textContent = t('deletePreset'); els.saveSelectionPreset.textContent = t('saveSelection'); els.invertSelection.textContent = t('invert');
-  els.newCollection.textContent = t('newCollection'); els.exportLibrary.textContent = t('exportLibrary'); els.exportLibraryResultsJson.textContent = t('exportFilteredJson'); els.exportLibraryResultsCsv.textContent = t('exportFilteredCsv'); els.importLibrary.textContent = t('importLibrary');
-  els.previewTitle.textContent = state.preview ? fileName(state.preview.url) : t('preview'); els.copyImageUrl.textContent = t('copyUrl'); els.openImageUrl.textContent = t('openUrl'); els.zoomReset.textContent = t('reset');
-  document.querySelector('.filter-panel h2').textContent = t('sizeFilterTitle');
-  els.clearFilters.textContent = t('clear');
+  if (els.filenameTemplate) els.filenameTemplate.title = t('filenameTemplateHint');
+  els.libraryScope?.setAttribute('aria-label', t('libraryScope'));
+  els.libraryCollection?.setAttribute('aria-label', t('collectionFilter'));
+  els.librarySearch?.setAttribute('aria-label', t('librarySearch'));
+  els.closePreview?.setAttribute('aria-label', t('closePreview'));
+  if (els.previewImage) els.previewImage.alt = t('imagePreview');
+  if (!state.tabId) setText(els.pageTitle, t('readingPage'));
+  if (state.images.length && els.loading?.hidden) updateScanStatus();
+  else if (!state.images.length && els.loading?.hidden) setText(els.scanStatus, t('scanningStatus'));
+  setText(els.pageViewButton, t('page'));
+  const favoriteCount = els.favoriteCount?.textContent || '0';
+  if (els.libraryViewButton) {
+    els.libraryViewButton.innerHTML = `${t('library')} <span id="favoriteCount">${favoriteCount}</span>`;
+    els.favoriteCount = $('#favoriteCount');
+  }
+  setText(els.historyViewButton, t('history')); setText(els.taskViewButton, t('tasks')); setText(els.settingsViewButton, t('settings'));
+  if (els.filterPreset?.options[0]) els.filterPreset.options[0].textContent = t('filterPreset');
+  if (els.selectionPreset?.options[0]) els.selectionPreset.options[0].textContent = t('selectionPreset');
+  setText(els.saveFilterPreset, t('saveFilter')); setText(els.deleteFilterPreset, t('deletePreset')); setText(els.saveSelectionPreset, t('saveSelection')); setText(els.invertSelection, t('invert'));
+  setText(els.newCollection, t('newCollection')); setText(els.exportLibrary, t('exportLibrary')); setText(els.exportLibraryResultsJson, t('exportFilteredJson')); setText(els.exportLibraryResultsCsv, t('exportFilteredCsv')); setText(els.importLibrary, t('importLibrary'));
+  setText(els.previewTitle, state.preview ? fileName(state.preview.url) : t('preview')); setText(els.copyImageUrl, t('copyUrl')); setText(els.openImageUrl, t('openUrl')); setText(els.zoomReset, t('reset'));
+  setText(document.querySelector('.filter-panel h2'), t('sizeFilterTitle'));
+  setText(els.clearFilters, t('clear'));
   const dimensionLabels = [...document.querySelectorAll('.dimension-slider .slider-label > span')];
   if (dimensionLabels[0]) dimensionLabels[0].textContent = t('width');
   if (dimensionLabels[1]) dimensionLabels[1].textContent = t('height');
@@ -1562,23 +1675,25 @@ function applyLanguage() {
   const originalLabel = document.querySelector('.original-filter span'); if (originalLabel) originalLabel.textContent = t('originalOnly');
   const originalHint = document.querySelector('.original-filter small'); if (originalHint) originalHint.textContent = t('originalHint');
   const selectAllLabel = document.querySelector('.select-all span'); if (selectAllLabel) selectAllLabel.textContent = t('selectAll');
-  const search = document.querySelector('#searchInput'); search.placeholder = t('searchPage');
+  const search = document.querySelector('#searchInput'); if (search) search.placeholder = t('searchPage');
   const sortLabel = document.querySelector('.sort-control > span'); if (sortLabel) sortLabel.textContent = t('sort');
-  const sortOptions = [t('pageOrder'), t('widthDesc'), t('heightDesc'), t('areaDesc'), t('nameAsc')]; [...els.sortSelect.options].forEach((option, index) => { if (sortOptions[index]) option.textContent = sortOptions[index]; });
+  const sortOptions = [t('pageOrder'), t('widthDesc'), t('heightDesc'), t('areaDesc'), t('nameAsc')]; [...(els.sortSelect?.options || [])].forEach((option, index) => { if (sortOptions[index]) option.textContent = sortOptions[index]; });
   [...els.formatTabs].forEach((tab) => { const format = tab.dataset.format; const labels = { all: t('all'), jpeg: 'JPEG', png: 'PNG', webp: 'WEBP', avif: 'AVIF', other: t('other') }; const count = tab.querySelector('[data-count]')?.textContent || '0'; tab.innerHTML = `${labels[format] || format} <strong data-count>${count}</strong>`; });
-  els.loading.lastChild.textContent = ` ${t('scanning')}`;
+  if (els.loading?.lastChild) els.loading.lastChild.textContent = ` ${t('scanning')}`;
   const saveText = document.querySelector('.save-option > span'); if (saveText) saveText.textContent = t('saveLocation');
   const downloadCaption = document.querySelector('.download-caption-note'); if (downloadCaption) downloadCaption.textContent = t('downloadSupport');
   const settingLabels = [...document.querySelectorAll('.download-settings > label > span')]; if (settingLabels[0]) settingLabels[0].textContent = t('zipLayout'); if (settingLabels[1]) settingLabels[1].textContent = t('filenameTemplate');
-  const zipOptions = [t('noGrouping'), t('bySite'), t('byFormat'), t('bySiteFormat')]; [...els.zipLayout.options].forEach((option, index) => { if (zipOptions[index]) option.textContent = zipOptions[index]; });
+  const zipOptions = [t('noGrouping'), t('bySite'), t('byFormat'), t('bySiteFormat')]; [...(els.zipLayout?.options || [])].forEach((option, index) => { if (zipOptions[index]) option.textContent = zipOptions[index]; });
   const dateText = document.querySelector('.date-folder-setting span'); if (dateText) dateText.textContent = t('dateFolder');
-  els.exportJson.textContent = t('json'); els.exportCsv.textContent = t('csv');
-  els.download.innerHTML = `${t('downloadSelected')} <span id="selectedCount">${els.selectedCount.textContent}</span>`;
-  els.selectedCount = $('#selectedCount');
-  els.zip.innerHTML = `<span class="zip-icon">▣</span> ${t('zip')}`;
+  setText(els.exportJson, t('json')); setText(els.exportCsv, t('csv'));
+  if (els.download) {
+    els.download.innerHTML = `${t('downloadSelected')} <span id="selectedCount">${els.selectedCount?.textContent || '0'}</span>`;
+    els.selectedCount = $('#selectedCount');
+  }
+  if (els.zip) els.zip.innerHTML = `<span class="zip-icon">▣</span> ${t('zip')}`;
   const note = document.querySelector('.download-note'); if (note) note.textContent = t('zipNote');
-  els.progressLabel.textContent = t('downloadProgress');
-  if (!els.downloadProgress.hidden && !els.progressDetail.textContent) els.progressDetail.textContent = t('waitingTask');
+  setText(els.progressLabel, t('downloadProgress'));
+  if (els.downloadProgress && !els.downloadProgress.hidden && els.progressDetail && !els.progressDetail.textContent) els.progressDetail.textContent = t('waitingTask');
   const libraryTitle = document.querySelector('#libraryView h2'); if (libraryTitle) libraryTitle.textContent = t('libraryTitle');
   if (els.refreshLibrary) els.refreshLibrary.textContent = t('refresh');
   if (els.librarySearch) els.librarySearch.placeholder = t('librarySearch');
@@ -1592,10 +1707,10 @@ function applyLanguage() {
   const libraryEmptyHint = document.querySelector('#libraryEmpty span'); if (libraryEmptyHint) libraryEmptyHint.textContent = t('libraryEmptyHint');
   const emptyTitle = document.querySelector('#emptyState strong'); if (emptyTitle) emptyTitle.textContent = t('noResults');
   const emptyHint = document.querySelector('#emptyState span'); if (emptyHint) emptyHint.textContent = t('noResultsHint');
-  const allImagesOption = [...els.libraryScope.options].find((option) => option.value === 'all'); if (allImagesOption) allImagesOption.textContent = t('allImages');
-  const favoritesOption = [...els.libraryScope.options].find((option) => option.value === 'favorites'); if (favoritesOption) favoritesOption.textContent = t('myFavorites');
+  const allImagesOption = [...(els.libraryScope?.options || [])].find((option) => option.value === 'all'); if (allImagesOption) allImagesOption.textContent = t('allImages');
+  const favoritesOption = [...(els.libraryScope?.options || [])].find((option) => option.value === 'favorites'); if (favoritesOption) favoritesOption.textContent = t('myFavorites');
   const historyTitle = document.querySelector('#historyView h2'); if (historyTitle) historyTitle.textContent = t('historyTitle');
-  els.clearHistory.textContent = t('clearHistory');
+  setText(els.clearHistory, t('clearHistory'));
   const blocks = [...document.querySelectorAll('#historyView .history-block-heading strong')]; if (blocks[0]) blocks[0].textContent = t('recentScans'); if (blocks[1]) blocks[1].textContent = t('downloads');
   const historyEmptyTitle = document.querySelector('#historyEmpty strong'); if (historyEmptyTitle) historyEmptyTitle.textContent = t('historyEmpty');
   const historyEmptyHint = document.querySelector('#historyEmpty span'); if (historyEmptyHint) historyEmptyHint.textContent = t('historyEmptyHint');
@@ -1609,15 +1724,17 @@ function applyLanguage() {
   const settingsNote = document.querySelector('.settings-note'); if (settingsNote) settingsNote.textContent = t('settingsNote');
   const scanLabel = document.querySelector('.scan-options label:first-child > span'); if (scanLabel) scanLabel.textContent = t('scanLimit');
   const scrollLabel = document.querySelector('.scan-options label:nth-child(2) > span'); if (scrollLabel) scrollLabel.textContent = t('autoScroll');
-  const scanOptions = t('imageOptions'); [...els.scanLimit.options].forEach((option, index) => { option.textContent = scanOptions[index]; });
-  const libraryFormatOptions = state.language === 'en' ? ['All formats', 'JPEG', 'PNG', 'WEBP', 'AVIF', 'Other'] : ['全部格式', 'JPEG', 'PNG', 'WEBP', 'AVIF', '其它']; [...els.libraryFormat.options].forEach((option, index) => { option.textContent = libraryFormatOptions[index]; });
-  const librarySortOptions = state.language === 'en' ? ['Recently updated', 'Width', 'Height', 'File size'] : ['最近更新', '宽度', '高度', '文件大小']; [...els.librarySort.options].forEach((option, index) => { option.textContent = librarySortOptions[index]; });
-  els.selectAllLibrary.nextElementSibling.textContent = t('selectAll'); els.bulkFavorite.textContent = t('bulkFavorite'); els.bulkTag.textContent = t('bulkTag'); els.bulkCollection.textContent = t('bulkCollection'); els.bulkDelete.textContent = t('bulkDelete'); els.libraryDownloadSelected.textContent = t('libraryDownloadSelected'); els.libraryZipSelected.textContent = t('libraryZipSelected');
+  const scanOptions = t('imageOptions'); [...(els.scanLimit?.options || [])].forEach((option, index) => { if (scanOptions[index]) option.textContent = scanOptions[index]; });
+  const libraryFormatOptions = state.language === 'en' ? ['All formats', 'JPEG', 'PNG', 'WEBP', 'AVIF', 'Other'] : ['全部格式', 'JPEG', 'PNG', 'WEBP', 'AVIF', '其它']; [...(els.libraryFormat?.options || [])].forEach((option, index) => { if (libraryFormatOptions[index]) option.textContent = libraryFormatOptions[index]; });
+  const librarySortOptions = state.language === 'en' ? ['Recently updated', 'Width', 'Height', 'File size'] : ['最近更新', '宽度', '高度', '文件大小']; [...(els.librarySort?.options || [])].forEach((option, index) => { if (librarySortOptions[index]) option.textContent = librarySortOptions[index]; });
+  setText(els.selectAllLibrary?.nextElementSibling, t('selectAll')); setText(els.bulkFavorite, t('bulkFavorite')); setText(els.bulkTag, t('bulkTag')); setText(els.bulkCollection, t('bulkCollection')); setText(els.bulkDelete, t('bulkDelete')); setText(els.libraryDownloadSelected, t('libraryDownloadSelected')); setText(els.libraryZipSelected, t('libraryZipSelected'));
   const taskEmptyTitle = document.querySelector('#taskEmpty strong'); if (taskEmptyTitle) taskEmptyTitle.textContent = t('taskEmpty');
   const taskEmptyHint = document.querySelector('#taskEmpty span'); if (taskEmptyHint) taskEmptyHint.textContent = t('taskEmptyHint');
-  els.cancelButton.textContent = t('cancel');
-  els.retryButton.innerHTML = `${t('retryFailedItems')} <span id="retryCount">${els.retryCount.textContent}</span>`;
-  els.retryCount = $('#retryCount');
+  setText(els.cancelButton, t('cancel'));
+  if (els.retryButton) {
+    els.retryButton.innerHTML = `${t('retryFailedItems')} <span id="retryCount">${els.retryCount?.textContent || '0'}</span>`;
+    els.retryCount = $('#retryCount');
+  }
   const initialProgressDetail = els.progressDetail; if (initialProgressDetail && (!initialProgressDetail.textContent || initialProgressDetail.textContent === '等待任务开始')) initialProgressDetail.textContent = t('waitingTask');
   renderCollectionOptions();
 }

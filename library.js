@@ -386,6 +386,7 @@
         };
         request.onerror = () => reject(request.error || new Error('本地数据读取失败'));
         transaction.onerror = () => reject(transaction.error || new Error('本地数据读取失败'));
+        transaction.onabort = () => reject(transaction.error || new Error('本地数据事务已中止'));
         transaction.oncomplete = () => resolve(stats);
       }));
   }

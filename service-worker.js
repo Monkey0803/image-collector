@@ -94,11 +94,21 @@ const CONTEXT_MENU_IDS = {
   favorite: 'image-collector-favorite-image'
 };
 
-chrome.runtime.onInstalled.addListener(() => createContextMenus());
-chrome.runtime.onStartup.addListener(() => createContextMenus());
+async function configureSidePanel() {
+  if (!chrome.sidePanel?.setPanelBehavior) return;
+  try {
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  } catch {
+    // Older Chrome versions may not support the action-to-side-panel behavior.
+  }
+}
+
+chrome.runtime.onInstalled.addListener(() => { createContextMenus(); configureSidePanel(); });
+chrome.runtime.onStartup.addListener(() => { createContextMenus(); configureSidePanel(); });
+void configureSidePanel();
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === CONTEXT_MENU_IDS.scan) {
-    openCollectorPopup(tab);
+    openCollectorPanel(tab).catch(() => {});
     return;
   }
   if (info.menuItemId === CONTEXT_MENU_IDS.download) {
@@ -118,10 +128,12 @@ async function createContextMenus() {
   });
 }
 
-function openCollectorPopup(tab) {
-  if (!chrome.action?.openPopup) return;
-  const opening = chrome.action.openPopup();
-  if (opening?.catch) opening.catch(() => {});
+async function openCollectorPanel(tab) {
+  if (chrome.sidePanel?.open && tab?.id) {
+    await chrome.sidePanel.open({ tabId: tab.id });
+    return;
+  }
+  if (chrome.action?.openPopup) await chrome.action.openPopup();
 }
 
 function contextImage(info, tab) {

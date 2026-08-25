@@ -55,6 +55,7 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 支持在素材库当前筛选结果中批量下载图片或生成 ZIP
 - 素材库支持最小/最大宽高和文件大小范围筛选
 - 支持将当前素材库筛选结果导出为 JSON 或 CSV
+- 支持 Chrome 侧边栏模式，点击工具栏图标即可在当前网页旁打开
 
 ### 安装方式
 
@@ -71,7 +72,7 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 3. 开启右上角的“开发者模式”。
 4. 点击“加载已解压的扩展程序”。
 5. 选择本项目根目录，也就是包含 `manifest.json` 的目录。
-6. 安装完成后，建议点击扩展详情中的“固定”按钮，方便从工具栏打开。
+6. 安装完成后，建议点击扩展详情中的“固定”按钮，方便从工具栏打开侧边栏。
 
 ### 使用方法
 
@@ -79,8 +80,8 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 
 1. 在 Chrome 中打开需要处理的普通网页。
 2. 等待网页内容加载完成。
-3. 点击工具栏中的 Image Collector 图标。
-4. 扩展会自动扫描当前页面并展示图片列表。
+3. 点击工具栏中的 Image Collector 图标，扩展会在浏览器右侧打开侧边栏。
+4. 侧边栏会自动扫描当前页面并展示图片列表；你可以保持侧边栏打开，同时浏览和切换网页内容。
 5. 如果页面图片是在扩展打开后才加载的，可以点击右上角的刷新按钮重新扫描。
 
 #### 按尺寸筛选
@@ -158,7 +159,7 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - “历史”视图会显示最近扫描页面、下载类型、数量、时间和结果状态。
 - 清空历史只会删除扫描/下载记录，不会删除收藏图片和标签。
 
-在网页上右键点击后，可以从 Image Collector 菜单中选择“扫描当前页面”“下载当前图片”或“收藏当前图片”。扫描操作会打开扩展弹窗并扫描当前页面；右键下载和收藏不需要先打开弹窗。
+在网页上右键点击后，可以从 Image Collector 菜单中选择“扫描当前页面”“下载当前图片”或“收藏当前图片”。“扫描当前页面”会打开侧边栏并扫描当前页面；右键下载和收藏不需要先打开侧边栏。
 
 #### 预览、预设和任务中心
 
@@ -220,6 +221,7 @@ image_2026.08.20.zip
 | `downloads` | 下载图片和 ZIP 文件 |
 | `storage` | 保存筛选条件和保存位置设置 |
 | `contextMenus` | 提供网页和图片右键菜单操作 |
+| `sidePanel` | 在 Chrome 右侧打开扩展侧边栏 |
 | `<all_urls>` | 支持扫描不同网站中的网页图片及图片地址 |
 
 所有图片筛选和列表处理都在浏览器本地完成。项目没有内置服务器，也不会主动上传网页内容、图片或用户设置。
@@ -227,6 +229,7 @@ image_2026.08.20.zip
 ### 已知限制
 
 - `chrome://`、Chrome Web Store、Chrome 设置页等受保护页面不允许扩展注入脚本，因此无法扫描。
+- 侧边栏功能需要支持 Side Panel API 的较新版本 Chrome；如果浏览器版本过旧，扩展可能无法加载。
 - 某些网页需要先允许扩展访问网站内容，或者需要在扩展详情中开启“允许访问文件网址”。
 - 图片服务器的防盗链、登录限制、跨域策略或临时 URL 可能导致 ZIP 无法读取某些图片。
 - 普通 URL 下载由 Chrome 直接处理，通常比 ZIP 下载兼容性更好。
@@ -249,8 +252,8 @@ Chrome 不会像 Chrome Web Store 那样自动更新通过“加载已解压的�
 ```text
 download_image/
 ├── manifest.json       # Chrome Manifest V3 配置、权限和扩展入口
-├── popup.html          # 扩展弹窗的页面结构
-├── popup.css           # 弹窗 UI 样式、布局和交互状态
+├── popup.html          # 侧边栏页面结构（兼容 popup 命名）
+├── popup.css           # 侧边栏 UI 样式、布局和交互状态
 ├── popup.js            # 图片扫描、筛选、分类、选择和下载请求
 ├── library.js          # IndexedDB 素材库、收藏、标签和历史记录数据层
 ├── service-worker.js   # 后台下载任务和 ZIP 文件生成
@@ -356,6 +359,7 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Create `YYYY.MM.DD` date folders for regular downloads and ZIP entries
 - Queue multiple download requests and run them in submission order
 - Report clearer causes for authentication, anti-hotlinking, network, and server failures
+- Open the collector in Chrome's right side panel and keep it visible while browsing
 
 ### Installation
 
@@ -372,7 +376,7 @@ This project is distributed as an unpacked Chrome extension rather than through 
 3. Enable **Developer mode**.
 4. Click **Load unpacked**.
 5. Select the project root directory containing `manifest.json`.
-6. Optionally pin Image Collector to the Chrome toolbar.
+6. Optionally pin Image Collector to the Chrome toolbar so it is easy to open the side panel.
 
 ### How to use it
 
@@ -380,9 +384,9 @@ This project is distributed as an unpacked Chrome extension rather than through 
 
 1. Open a regular webpage in Chrome.
 2. Wait for the page content to load.
-3. Click the Image Collector icon in the toolbar.
-4. The extension scans the current page and displays the image grid.
-5. If images are loaded after the popup opens, click the refresh button to scan again.
+3. Click the Image Collector icon in the toolbar; the extension opens in Chrome's right side panel.
+4. The side panel scans the current page and displays the image grid while you continue browsing.
+5. If images are loaded after the side panel opens, click the refresh button to scan again.
 
 #### Filter by dimensions
 
@@ -455,7 +459,7 @@ Click **Library** at the top to browse images saved locally:
 - The **History** view shows recent scans and image/ZIP downloads with counts, times, and statuses.
 - Clearing history removes scan/download activity only; favorites and tags are preserved.
 
-On a webpage, right-click to open the Image Collector menu. It provides **Scan current page**, **Download current image**, and **Favorite current image**. The scan action opens the extension popup and scans the current page; context downloads and favorites work without opening the popup first.
+On a webpage, right-click to open the Image Collector menu. It provides **Scan current page**, **Download current image**, and **Favorite current image**. The scan action opens the side panel and scans the current page; context downloads and favorites work without opening the side panel first.
 
 #### Preview, presets, and task center
 
@@ -515,6 +519,7 @@ The setting is stored locally and reused the next time the extension is opened.
 | `downloads` | Download image files and ZIP archives |
 | `storage` | Store filter and save-location preferences |
 | `contextMenus` | Provide page and image context-menu actions |
+| `sidePanel` | Open the extension in Chrome's right side panel |
 | `<all_urls>` | Support image scanning across different websites and image hosts |
 
 Image filtering and list processing happen locally in the browser. The project does not include a backend server and does not intentionally upload webpage content, images, or user preferences.
@@ -522,6 +527,7 @@ Image filtering and list processing happen locally in the browser. The project d
 ### Known limitations
 
 - Protected pages such as `chrome://`, the Chrome Web Store, and Chrome settings pages do not allow script injection.
+- The side-panel experience requires a recent Chrome version with the Side Panel API; older versions may reject the extension manifest.
 - Some pages require access to be granted in the extension details page; local files may also require enabling access to file URLs.
 - Anti-hotlinking, authentication requirements, cross-origin policies, or expiring URLs may prevent some images from being read into a ZIP archive.
 - Regular URL downloads are handled directly by Chrome and are generally more compatible than ZIP downloads.
@@ -544,8 +550,8 @@ Chrome does not automatically update extensions installed through **Load unpacke
 ```text
 download_image/
 ├── manifest.json       # Manifest V3 configuration, permissions, and entry points
-├── popup.html          # Popup page structure
-├── popup.css           # Popup layout, styling, and interaction states
+├── popup.html          # Side panel page structure (kept with the popup filename)
+├── popup.css           # Side panel layout, styling, and interaction states
 ├── popup.js            # Scanning, filtering, categorization, selection, and messages
 ├── library.js          # IndexedDB data layer for metadata, favorites, tags, and history
 ├── service-worker.js   # Background downloads and ZIP generation
