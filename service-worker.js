@@ -189,7 +189,7 @@ async function saveDownloadRecord(kind, images, result, jobId = '', language = '
       started: result.started || 0,
       failed: Array.isArray(result.failed) ? result.failed.length : 0,
       error: result.error || '',
-      filename: kind === 'zip' ? `image_${dateStamp()}.zip` : '',
+      filename: kind === 'zip' ? (result.filename || 'image_' + dateStamp() + '.zip') : '',
       phase: result.cancelled ? 'cancelled' : result.ok ? 'complete' : 'failed',
       percent: 100,
       detail: result.error || (result.cancelled ? workerText(language, 'cancelTask') : workerText(language, 'taskComplete')),
@@ -201,6 +201,58 @@ async function saveDownloadRecord(kind, images, result, jobId = '', language = '
   } catch {
     // Downloading remains usable even if IndexedDB is unavailable or full.
   }
+}
+
+function imageCandidates(image) {
+  return [...new Set([image?.url, image?.originalUrl, image?.displayUrl, image?.sourceUrl]
+    .map((url) => String(url || '').trim())
+    .filter(Boolean))];
+}
+
+async function downloadFileWithFallback(image, saveAs, settings) {
+  let lastError = null;
+  for (const url of imageCandidates(image)) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const downloadId = await chrome.downloads.download({
+          url,
+          filename: normalizeName(image, '', settings),
+          saveAs,
+          conflictAction: 'uniquify'
+        });
+        return { downloadId, url };
+      } catch (error) {
+        lastError = error;
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    }
+  }
+  throw lastError || new Error('No image URL available');
+}
+
+async function readImageWithFallback(image, job) {
+  let lastError = null;
+  for (const url of imageCandidates(image)) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const controller = new AbortController();
+      job.controllers.add(controller);
+      try {
+        const response = await fetch(url, { credentials: 'omit', redirect: 'follow', signal: controller.signal });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return {
+          url,
+          contentType: response.headers.get('content-type') || '',
+          data: new Uint8Array(await response.arrayBuffer())
+        };
+      } catch (error) {
+        lastError = error;
+      } finally {
+        job.controllers.delete(controller);
+      }
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  throw lastError || new Error('No image URL available');
 }
 
 async function downloadImages(images, saveAs, jobId, settings = {}) {
@@ -219,7 +271,7 @@ async function downloadImages(images, saveAs, jobId, settings = {}) {
       detail: workerText(language, 'submitting', { current: index + 1, total, name: normalizeName(image, '', settings) })
     });
     try {
-      const downloadId = await chrome.downloads.download({ url: image.url, filename: normalizeName(image, '', settings), saveAs, conflictAction: 'uniquify' });
+      const { downloadId } = await downloadFileWithFallback(image, saveAs, settings);
       job.downloadIds.add(downloadId);
       if (job.cancelled) {
         await chrome.downloads.cancel(downloadId).catch(() => {});
@@ -252,23 +304,17 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
   for (const [index, image] of images.entries()) {
     await waitForResume(job);
     if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
-    const controller = new AbortController();
-    job.controllers.add(controller);
     sendProgress(jobId, {
       phase: 'reading', completed: index, total, failed: failed.length, percent: progressPercent(index, total),
       detail: workerText(language, 'reading', { current: index + 1, total, name: normalizeName(image, '', settings) })
     });
     try {
-      const response = await fetch(image.url, { credentials: 'omit', redirect: 'follow', signal: controller.signal });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const contentType = response.headers.get('content-type') || '';
+      const { contentType, data } = await readImageWithFallback(image, job);
       const filename = normalizeName(image, contentType, { ...settings, dateFolder: false });
       const name = uniqueName(zipPath(image, filename, settings.zipLayout || 'flat', settings, contentType), usedNames);
-      entries.push({ name, data: new Uint8Array(await response.arrayBuffer()) });
+      entries.push({ name, data });
     } catch (error) {
       if (!job.cancelled) failed.push({ url: image.url, error: readableError(error, workerText(language, 'readFailed'), language), stage: 'read' });
-    } finally {
-      job.controllers.delete(controller);
     }
     const completed = index + 1;
     sendProgress(jobId, {
@@ -286,10 +332,11 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
     sendProgress(jobId, { phase: 'compressing', completed: total, total, failed: failed.length, percent: 100, detail: workerText(language, 'compressing', { count: entries.length }) });
     const zip = makeZip(entries);
     const dataUrl = `data:application/zip;base64,${toBase64(zip)}`;
-    const downloadId = await chrome.downloads.download({ url: dataUrl, filename: `image_${dateStamp()}.zip`, saveAs, conflictAction: 'uniquify' });
+    const filename = zipDownloadFilename(settings);
+    const downloadId = await chrome.downloads.download({ url: dataUrl, filename, saveAs, conflictAction: 'uniquify' });
     job.downloadIds.add(downloadId);
     sendProgress(jobId, { phase: 'complete', completed: total, total, failed: failed.length, percent: 100, detail: workerText(language, 'zipSubmitted', { count: entries.length }) });
-    return finishJob(jobId, { ok: true, started: 1, failed });
+    return finishJob(jobId, { ok: true, started: 1, failed, filename });
   } catch (error) {
     const reason = readableError(error, workerText(language, 'zipFailed'), language);
     sendProgress(jobId, { phase: 'failed', completed: total, total, failed: failed.length, percent: 100, detail: reason });
@@ -557,6 +604,12 @@ function uniqueName(name, usedNames) {
 }
 
 function fileName(url) { try { return decodeURIComponent(new URL(url).pathname.split('/').pop() || 'image'); } catch { return 'image'; } }
+function zipDownloadFilename(settings = {}) {
+  const stamp = dateStamp();
+  const filename = 'image_' + stamp + '.zip';
+  return settings.dateFolder ? 'image_' + stamp + '/' + filename : filename;
+}
+
 function dateStamp() {
   const now = new Date();
   const pad = (value) => String(value).padStart(2, '0');

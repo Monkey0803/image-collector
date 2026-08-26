@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录 `1.6.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
+本文档记录 `1.7.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
 
 ## 1.0.1
 
@@ -84,9 +84,24 @@
 - [x] 优化 IndexedDB 批量读写和图片元数据探测，减少重复事务和 HEAD 请求。
 - [x] 增加必要的性能回归检查，确保扫描、筛选和下载行为保持可用。
 
+## 1.7.0
+
+### 智能筛选与下载可靠性
+
+- [x] 增加横向、纵向和正方形宽高比筛选，并支持保存到筛选预设。
+- [x] 普通下载和 ZIP 下载支持备用图片地址，网络失败时自动重试一次。
+- [x] 侧边栏动态扫描发现新图片时给出提示，方便处理懒加载页面。
+- [x] 更新扩展版本号和中英文使用文档。
+
+### 后续版本候选
+
+- [ ] 图片永久缓存，原地址失效后仍可在素材库预览。
+- [ ] 智能集合，根据尺寸、格式、域名和日期自动归档。
+- [ ] 增加文件大小和宽高比的可视化范围筛选。
+
 ## English
 
-This document tracks `1.6.0` and future releases. Completed items use `[x]`.
+This document tracks `1.7.0` and future releases. Completed items use `[x]`.
 
 ### 1.0.1 core experience
 
@@ -150,3 +165,18 @@ This document tracks `1.6.0` and future releases. Completed items use `[x]`.
 - [x] Optimize library filtering and rendering with coalesced refreshes and batched `DocumentFragment` rendering.
 - [x] Optimize IndexedDB bulk reads/writes and image metadata inspection to reduce transactions and duplicate HEAD requests.
 - [x] Add the necessary performance regression checks while preserving scan, filter, and download behavior.
+
+## 1.7.0
+
+### Smart filtering and reliable downloads
+
+- [x] Add landscape, portrait, and square aspect-ratio filters and save them in filter presets.
+- [x] Try fallback image URLs and retry once automatically for regular and ZIP downloads.
+- [x] Notify users when dynamic side-panel scans discover new images on lazy-loaded pages.
+- [x] Update the extension version and Chinese/English usage documentation.
+
+### Future candidates
+
+- [ ] Permanently cache image data so library previews survive expired source URLs.
+- [ ] Add smart collections that automatically group images by dimensions, format, hostname, or date.
+- [ ] Add visual range controls for file size and aspect ratio.

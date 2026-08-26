@@ -10,6 +10,7 @@ const state = {
   searchQuery: '',
   sort: 'page',
   originalOnly: false,
+  aspectRatio: 'all',
   zipLayout: 'flat',
   filenameTemplate: '{name}',
   dateFolder: false,
@@ -48,6 +49,7 @@ let filterRenderFrame = null;
 let libraryRefreshTimer = null;
 let eventsBound = false;
 let languageTouched = false;
+let previewLoadToken = 0;
 
 function withTimeout(task, timeoutMs, timeoutMessage) {
   let timer;
@@ -75,9 +77,11 @@ const els = {
   pageTitle: $('#pageTitle'), pageUrl: $('#pageUrl'), pageIcon: $('#pageIcon'),
   minWidth: $('#minWidth'), maxWidth: $('#maxWidth'), minHeight: $('#minHeight'), maxHeight: $('#maxHeight'),
   widthValue: $('#widthValue'), heightValue: $('#heightValue'), widthTrack: $('#widthTrack'), heightTrack: $('#heightTrack'),
+  widthEditor: $('#widthEditor'), heightEditor: $('#heightEditor'),
+  widthMinValue: $('#widthMinValue'), widthMaxValue: $('#widthMaxValue'), heightMinValue: $('#heightMinValue'), heightMaxValue: $('#heightMaxValue'),
   clearFilters: $('#clearFilters'), selectAll: $('#selectAll'), resultCount: $('#resultCount'),
   selectedSummary: $('#selectedSummary'), searchInput: $('#searchInput'), sortSelect: $('#sortSelect'),
-  originalOnly: $('#originalOnly'), zipLayout: $('#zipLayout'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'),
+  originalOnly: $('#originalOnly'), aspectRatio: $('#aspectRatio'), zipLayout: $('#zipLayout'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'),
   pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'), taskViewButton: $('#taskViewButton'), settingsViewButton: $('#settingsViewButton'),
   libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryScope: $('#libraryScope'),
   librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), exportLibraryResultsJson: $('#exportLibraryResultsJson'), exportLibraryResultsCsv: $('#exportLibraryResultsCsv'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'), libraryBatchToolbar: $('#libraryBatchToolbar'), selectAllLibrary: $('#selectAllLibrary'), librarySelectedSummary: $('#librarySelectedSummary'), bulkFavorite: $('#bulkFavorite'), bulkTag: $('#bulkTag'), bulkCollection: $('#bulkCollection'), bulkDelete: $('#bulkDelete'), libraryDownloadSelected: $('#libraryDownloadSelected'), libraryZipSelected: $('#libraryZipSelected'), libraryFormat: $('#libraryFormat'), libraryMinWidth: $('#libraryMinWidth'), libraryMaxWidth: $('#libraryMaxWidth'), libraryMinHeight: $('#libraryMinHeight'), libraryMaxHeight: $('#libraryMaxHeight'), libraryMinSize: $('#libraryMinSize'), libraryMaxSize: $('#libraryMaxSize'), librarySort: $('#librarySort'),
@@ -90,7 +94,7 @@ const els = {
   saveAs: $('#saveAs'), download: $('#downloadButton'), zip: $('#zipButton'), selectedCount: $('#selectedCount'),
   downloadProgress: $('#downloadProgress'), progressLabel: $('#progressLabel'), progressValue: $('#progressValue'),
   progressBar: $('#progressBar'), progressDetail: $('#progressDetail'), cancelButton: $('#cancelButton'), retryButton: $('#retryButton'),
-  retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
+  retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewError: $('#previewError'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -133,7 +137,7 @@ async function init() {
   bindEvents();
   applyLanguage();
 
-  const defaults = { filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false };
+  const defaults = { filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, aspectRatio: 'all', zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false };
   let saved = defaults;
   try {
     saved = (await withTimeout(() => chrome.storage.local.get(defaults), 1500, '读取扩展设置超时')) || defaults;
@@ -146,6 +150,7 @@ async function init() {
   state.searchQuery = typeof saved.searchQuery === 'string' ? saved.searchQuery : '';
   state.sort = ['page', 'width-desc', 'height-desc', 'area-desc', 'name-asc'].includes(saved.sort) ? saved.sort : 'page';
   state.originalOnly = Boolean(saved.originalOnly);
+  state.aspectRatio = ['all', 'landscape', 'portrait', 'square'].includes(saved.aspectRatio) ? saved.aspectRatio : 'all';
   state.zipLayout = ['flat', 'domain', 'format', 'domain-format'].includes(saved.zipLayout) ? saved.zipLayout : 'flat';
   state.filenameTemplate = typeof saved.filenameTemplate === 'string' && saved.filenameTemplate.trim() ? saved.filenameTemplate : '{name}';
   state.dateFolder = Boolean(saved.dateFolder);
@@ -166,6 +171,7 @@ async function init() {
   if (els.searchInput) els.searchInput.value = state.searchQuery;
   if (els.sortSelect) els.sortSelect.value = state.sort;
   if (els.originalOnly) els.originalOnly.checked = state.originalOnly;
+  if (els.aspectRatio) els.aspectRatio.value = state.aspectRatio;
   if (els.zipLayout) els.zipLayout.value = state.zipLayout;
   if (els.filenameTemplate) els.filenameTemplate.value = state.filenameTemplate;
   if (els.dateFolder) els.dateFolder.checked = state.dateFolder;
@@ -261,6 +267,7 @@ function bindEvents() {
     if (els.searchInput) els.searchInput.value = '';
     if (els.sortSelect) els.sortSelect.value = 'page';
     if (els.originalOnly) els.originalOnly.checked = false;
+    if (els.aspectRatio) els.aspectRatio.value = 'all';
     state.filterValues = {
       width: { min: null, max: null },
       height: { min: null, max: null }
@@ -268,6 +275,7 @@ function bindEvents() {
     state.searchQuery = '';
     state.sort = 'page';
     state.originalOnly = false;
+    state.aspectRatio = 'all';
     state.format = 'all';
     scheduleApplyFilters();
   });
@@ -278,6 +286,27 @@ function bindEvents() {
   on(els.maxWidth, 'input', () => handleRangeInput('width', 'max'));
   on(els.minHeight, 'input', () => handleRangeInput('height', 'min'));
   on(els.maxHeight, 'input', () => handleRangeInput('height', 'max'));
+  for (const axis of ['width', 'height']) {
+    const valueButton = els[`${axis}Value`];
+    const track = els[`${axis}Track`];
+    const editor = els[`${axis}Editor`];
+    on(valueButton, 'click', () => toggleDimensionEditor(axis));
+    on(valueButton, 'keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      toggleDimensionEditor(axis);
+    });
+    on(track, 'click', (event) => setDimensionFromTrack(axis, event));
+    on(els[`${axis}MinValue`], 'change', () => applyDimensionEditor(axis, 'min'));
+    on(els[`${axis}MaxValue`], 'change', () => applyDimensionEditor(axis, 'max'));
+    on(els[`${axis}MinValue`], 'keydown', (event) => { if (event.key === 'Enter') applyDimensionEditor(axis, 'min'); });
+    on(els[`${axis}MaxValue`], 'keydown', (event) => { if (event.key === 'Enter') applyDimensionEditor(axis, 'max'); });
+    on(editor, 'click', (event) => event.stopPropagation());
+  }
+  on(document, 'click', (event) => {
+    if (event.target.closest('.dimension-slider')) return;
+    closeDimensionEditors();
+  });
   on(els.searchInput, 'input', () => {
     state.searchQuery = els.searchInput.value.trim();
     chrome.storage.local.set({ searchQuery: state.searchQuery });
@@ -291,6 +320,11 @@ function bindEvents() {
   on(els.originalOnly, 'change', () => {
     state.originalOnly = els.originalOnly.checked;
     chrome.storage.local.set({ originalOnly: state.originalOnly });
+    applyFilters();
+  });
+  on(els.aspectRatio, 'change', () => {
+    state.aspectRatio = ['all', 'landscape', 'portrait', 'square'].includes(els.aspectRatio.value) ? els.aspectRatio.value : 'all';
+    safeStorageSet({ aspectRatio: state.aspectRatio });
     applyFilters();
   });
   on(els.zipLayout, 'change', () => {
@@ -342,7 +376,7 @@ function bindEvents() {
   on(els.closePreview, 'click', closePreview);
   on(els.previewModal, 'click', (event) => { if (event.target.matches('[data-close-preview]')) closePreview(); });
   on(els.copyImageUrl, 'click', copyPreviewUrl);
-  on(els.openImageUrl, 'click', () => { if (state.preview?.url) chrome.tabs.create({ url: state.preview.url }); });
+  on(els.openImageUrl, 'click', () => { const url = previewCandidates(state.preview)[0]; if (url) chrome.tabs.create({ url }); });
   on(els.zoomIn, 'click', () => changePreviewZoom(.25));
   on(els.zoomOut, 'click', () => changePreviewZoom(-.25));
   on(els.zoomReset, 'click', () => { state.previewZoom = 1; updatePreviewZoom(); });
@@ -470,8 +504,8 @@ function createLibraryCard(record) {
   checkbox.addEventListener('click', (event) => event.stopPropagation());
   checkbox.addEventListener('change', () => { if (checkbox.checked) state.librarySelected.add(record.url); else state.librarySelected.delete(record.url); renderLibrary(); });
   const wrap = document.createElement('div'); wrap.className = 'thumbnail-wrap';
-  const thumbnail = document.createElement('img'); thumbnail.className = 'thumbnail'; thumbnail.src = record.url; thumbnail.alt = record.alt || t('webImage'); thumbnail.loading = 'lazy';
-  thumbnail.addEventListener('error', () => { wrap.textContent = t('previewUnavailable'); wrap.style.color = '#9ba4ac'; wrap.style.fontSize = '10px'; });
+  const thumbnail = document.createElement('img'); thumbnail.className = 'thumbnail'; thumbnail.alt = record.alt || t('webImage'); thumbnail.loading = 'lazy';
+  loadThumbnailWithFallback(record, thumbnail, wrap);
   thumbnail.addEventListener('click', (event) => { event.stopPropagation(); openPreview(record); });
   wrap.append(thumbnail);
   const actions = document.createElement('div'); actions.className = 'library-card-actions';
@@ -737,22 +771,88 @@ async function retryAllTasks() {
   await loadTasks();
 }
 
+function previewCandidates(image, preferDisplay = false) {
+  const urls = preferDisplay
+    ? [image?.displayUrl, image?.url, image?.originalUrl, image?.sourceUrl]
+    : [image?.url, image?.displayUrl, image?.originalUrl, image?.sourceUrl];
+  return [...new Set(urls
+    .map((url) => String(url || '').trim())
+    .filter(Boolean))];
+}
+
+function showPreviewUnavailable(container) {
+  if (!container) return;
+  container.textContent = t('previewUnavailable');
+  container.style.color = '#9ba4ac';
+  container.style.fontSize = '10px';
+}
+
+function loadThumbnailWithFallback(image, thumbnail, wrap) {
+  const candidates = previewCandidates(image, true);
+  let candidateIndex = 0;
+  const tryNext = () => {
+    if (candidateIndex >= candidates.length) {
+      thumbnail.hidden = true;
+      showPreviewUnavailable(wrap);
+      return;
+    }
+    thumbnail.src = candidates[candidateIndex++];
+  };
+  thumbnail.addEventListener('error', tryNext);
+  tryNext();
+}
+
+function loadPreviewWithFallback(image) {
+  const candidates = previewCandidates(image);
+  const token = ++previewLoadToken;
+  let candidateIndex = 0;
+  els.previewError.hidden = true;
+  els.previewImage.hidden = false;
+  els.previewImage.onerror = () => {
+    if (token !== previewLoadToken) return;
+    if (candidateIndex < candidates.length) {
+      els.previewImage.src = candidates[candidateIndex++];
+      return;
+    }
+    els.previewImage.hidden = true;
+    els.previewError.hidden = false;
+    els.previewError.textContent = t('previewUnavailable');
+  };
+  els.previewImage.onload = () => {
+    if (token !== previewLoadToken) return;
+    els.previewImage.hidden = false;
+    els.previewError.hidden = true;
+  };
+  if (candidates.length) els.previewImage.src = candidates[candidateIndex++];
+  else {
+    els.previewImage.hidden = true;
+    els.previewError.hidden = false;
+    els.previewError.textContent = t('previewUnavailable');
+  }
+}
+
 function openPreview(image) {
-  if (!image?.url) return;
+  const primaryUrl = previewCandidates(image)[0];
+  if (!primaryUrl) return;
   state.preview = image;
   state.previewZoom = 1;
-  els.previewImage.src = image.url;
   els.previewImage.alt = image.alt || t('imagePreview');
-  els.previewTitle.textContent = fileName(image.url);
+  els.previewTitle.textContent = fileName(primaryUrl);
   els.previewMeta.textContent = `${image.width && image.height ? `${image.width} × ${image.height}px` : t('unknownSize')} · ${formatLabel(image.format)}${image.original ? ` · ${t('original')}` : ''}`;
   updatePreviewZoom();
   els.previewModal.hidden = false;
+  loadPreviewWithFallback(image);
   els.closePreview.focus();
 }
 
 function closePreview() {
+  previewLoadToken += 1;
   els.previewModal.hidden = true;
   els.previewImage.removeAttribute('src');
+  els.previewImage.hidden = false;
+  els.previewImage.onerror = null;
+  els.previewImage.onload = null;
+  els.previewError.hidden = true;
   state.preview = null;
 }
 
@@ -768,9 +868,10 @@ function updatePreviewZoom() {
 }
 
 async function copyPreviewUrl() {
-  if (!state.preview?.url) return;
+  const url = previewCandidates(state.preview)[0];
+  if (!url) return;
   try {
-    await navigator.clipboard.writeText(state.preview.url);
+    await navigator.clipboard.writeText(url);
     showToast(t('copied'));
   } catch { showToast(t('copyFailed')); }
 }
@@ -816,6 +917,7 @@ async function scanPage(options = {}) {
   els.scanStatus.textContent = quiet ? t('updating') : t('scanningStatus');
   els.error.hidden = true;
   const previousSelectedUrls = new Set(selectedImages().map((image) => image.url));
+  const previousImageUrls = new Set(state.images.map((image) => image.url));
   if (!quiet) {
     state.images = [];
     state.dimensionFiltered = [];
@@ -882,6 +984,7 @@ async function scanPage(options = {}) {
     } else {
       state.images = discovered;
     }
+    const newImageCount = quiet ? discovered.filter((image) => !previousImageUrls.has(image.url)).length : 0;
     state.selected.clear();
     state.images.forEach((image) => { if (previousSelectedUrls.has(image.url)) state.selected.add(image.id); });
     updateScanStatus();
@@ -889,6 +992,7 @@ async function scanPage(options = {}) {
     applyFilters();
     if (!quiet) persistScanRecord(scanId);
     loadImageMetadata(scanId);
+    if (newImageCount > 0) showToast(t('newImagesFound', { count: newImageCount }));
   } catch (error) {
     if (scanId !== state.scanId) return;
     if (!quiet) {
@@ -1217,7 +1321,8 @@ function applyFilters() {
   const minHeight = state.filterValues.height.min, maxHeight = state.filterValues.height.max;
   const dimensionMatched = state.images.filter((image) =>
     (minWidth === null || image.width >= minWidth) && (maxWidth === null || image.width <= maxWidth) &&
-    (minHeight === null || image.height >= minHeight) && (maxHeight === null || image.height <= maxHeight)
+    (minHeight === null || image.height >= minHeight) && (maxHeight === null || image.height <= maxHeight) &&
+    matchesAspectRatio(image, state.aspectRatio)
   );
   state.dimensionFiltered = dimensionMatched.filter((image) => !state.originalOnly || image.original);
   const formatFiltered = state.format === 'all'
@@ -1256,7 +1361,7 @@ function renderPresets() {
 function currentFilterPreset() {
   return {
     width: { ...state.filterValues.width }, height: { ...state.filterValues.height }, format: state.format,
-    searchQuery: state.searchQuery, sort: state.sort, originalOnly: state.originalOnly
+    searchQuery: state.searchQuery, sort: state.sort, originalOnly: state.originalOnly, aspectRatio: state.aspectRatio
   };
 }
 
@@ -1273,8 +1378,8 @@ function applyFilterPreset() {
   const preset = state.filterPresets.find((item) => item.id === els.filterPreset.value);
   if (!preset) return;
   state.filterValues = { width: { ...preset.width }, height: { ...preset.height } };
-  state.format = preset.format || 'all'; state.searchQuery = preset.searchQuery || ''; state.sort = preset.sort || 'page'; state.originalOnly = Boolean(preset.originalOnly);
-  els.searchInput.value = state.searchQuery; els.sortSelect.value = state.sort; els.originalOnly.checked = state.originalOnly;
+  state.format = preset.format || 'all'; state.searchQuery = preset.searchQuery || ''; state.sort = preset.sort || 'page'; state.originalOnly = Boolean(preset.originalOnly); state.aspectRatio = ['all', 'landscape', 'portrait', 'square'].includes(preset.aspectRatio) ? preset.aspectRatio : 'all';
+  els.searchInput.value = state.searchQuery; els.sortSelect.value = state.sort; els.originalOnly.checked = state.originalOnly; if (els.aspectRatio) els.aspectRatio.value = state.aspectRatio;
   updateRangeLimits(); applyFilters();
 }
 
@@ -1330,6 +1435,16 @@ function renderFormatTabs() {
   });
 }
 
+function matchesAspectRatio(image, ratio) {
+  if (ratio === 'all') return true;
+  if (!image.width || !image.height) return false;
+  const value = image.width / image.height;
+  if (ratio === 'landscape') return value > 1.05;
+  if (ratio === 'portrait') return value < 0.95;
+  if (ratio === 'square') return Math.abs(value - 1) <= 0.05;
+  return true;
+}
+
 function formatCategory(format) { return ['jpeg', 'png', 'webp', 'avif'].includes(format) ? format : 'other'; }
 
 function updateRangeLimits() {
@@ -1371,6 +1486,84 @@ function handleRangeInput(axis, changedSide) {
   scheduleApplyFilters();
 }
 
+function toggleDimensionEditor(axis) {
+  const editor = els[`${axis}Editor`];
+  if (!editor) return;
+  const shouldOpen = editor.hidden;
+  closeDimensionEditors();
+  if (!shouldOpen) return;
+  syncDimensionEditor(axis);
+  editor.hidden = false;
+  els[`${axis}Value`]?.setAttribute('aria-expanded', 'true');
+  els[`${axis}MinValue`]?.focus();
+}
+
+function closeDimensionEditors() {
+  for (const axis of ['width', 'height']) {
+    const editor = els[`${axis}Editor`];
+    if (!editor) continue;
+    editor.hidden = true;
+    els[`${axis}Value`]?.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function syncDimensionEditor(axis) {
+  const minRange = els[`min${capitalize(axis)}`];
+  const maxRange = els[`max${capitalize(axis)}`];
+  const minValue = els[`${axis}MinValue`];
+  const maxValue = els[`${axis}MaxValue`];
+  if (!minRange || !maxRange || !minValue || !maxValue) return;
+  const max = Number(maxRange.max) || 5000;
+  minValue.value = Number(minRange.value) === 0 ? '' : String(Math.round(Number(minRange.value)));
+  maxValue.value = Number(maxRange.value) === max ? '' : String(Math.round(Number(maxRange.value)));
+  minValue.placeholder = t('unlimited');
+  maxValue.placeholder = t('unlimited');
+  minValue.setAttribute('aria-label', `${t(`${axis}Min`)} px`);
+  maxValue.setAttribute('aria-label', `${t(`${axis}Max`)} px`);
+}
+
+function applyDimensionEditor(axis, changedSide) {
+  const minRange = els[`min${capitalize(axis)}`];
+  const maxRange = els[`max${capitalize(axis)}`];
+  const minValue = els[`${axis}MinValue`];
+  const maxValue = els[`${axis}MaxValue`];
+  if (!minRange || !maxRange || !minValue || !maxValue) return;
+  const max = Number(maxRange.max) || 5000;
+  const parseValue = (input, fallback) => {
+    const raw = input.value.trim();
+    if (!raw) return fallback;
+    const value = Number(raw);
+    return Number.isFinite(value) ? Math.max(0, Math.min(max, Math.round(value))) : fallback;
+  };
+  let min = parseValue(minValue, 0);
+  let upper = parseValue(maxValue, max);
+  if (min > upper) {
+    if (changedSide === 'min') upper = min;
+    else min = upper;
+  }
+  minRange.value = String(min);
+  maxRange.value = String(upper);
+  handleRangeInput(axis, changedSide);
+}
+
+function setDimensionFromTrack(axis, event) {
+  const track = els[`${axis}Track`];
+  if (!track || event.target?.closest?.('input')) return;
+  const minRange = els[`min${capitalize(axis)}`];
+  const maxRange = els[`max${capitalize(axis)}`];
+  const max = Number(maxRange?.max) || 5000;
+  const rect = track.getBoundingClientRect();
+  if (!rect.width) return;
+  const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  const value = Math.round(ratio * max);
+  const min = Number(minRange.value);
+  const upper = Number(maxRange.value);
+  const changedSide = Math.abs(value - min) <= Math.abs(value - upper) ? 'min' : 'max';
+  const range = changedSide === 'min' ? minRange : maxRange;
+  range.value = String(value);
+  handleRangeInput(axis, changedSide);
+}
+
 function updateSliderUI(axis) {
   const minInput = els[`min${capitalize(axis)}`];
   const maxInput = els[`max${capitalize(axis)}`];
@@ -1381,6 +1574,7 @@ function updateSliderUI(axis) {
   track.style.setProperty('--start', `${(min / max) * 100}%`);
   track.style.setProperty('--end', `${(upper / max) * 100}%`);
   els[`${axis}Value`].textContent = min === 0 && upper === max ? t('unlimited') : `${displayLimit(axis, min, 'min')} – ${displayLimit(axis, upper, 'max')}`;
+  syncDimensionEditor(axis);
 }
 
 function normalizeLimit(value) {
@@ -1452,8 +1646,8 @@ function createCard(image) {
   const favorite = document.createElement('button'); favorite.type = 'button'; favorite.className = `card-favorite${savedRecord?.favorite ? ' active' : ''}`; favorite.textContent = savedRecord?.favorite ? '★' : '☆'; favorite.title = savedRecord?.favorite ? t('removeFavorite') : t('favoriteImage'); favorite.setAttribute('aria-label', favorite.title); favorite.setAttribute('aria-pressed', savedRecord?.favorite ? 'true' : 'false');
   favorite.addEventListener('click', (event) => { event.stopPropagation(); toggleFavorite(image); });
   const wrap = document.createElement('div'); wrap.className = 'thumbnail-wrap';
-  const thumbnail = document.createElement('img'); thumbnail.className = 'thumbnail'; thumbnail.src = image.url; thumbnail.alt = image.alt || t('webImage'); thumbnail.loading = 'lazy';
-  thumbnail.addEventListener('error', () => { wrap.textContent = t('previewUnavailable'); wrap.style.color = '#9ba4ac'; wrap.style.fontSize = '10px'; });
+  const thumbnail = document.createElement('img'); thumbnail.className = 'thumbnail'; thumbnail.alt = image.alt || t('webImage'); thumbnail.loading = 'lazy';
+  loadThumbnailWithFallback(image, thumbnail, wrap);
   thumbnail.addEventListener('click', (event) => { event.stopPropagation(); openPreview(image); });
   wrap.append(thumbnail);
   const meta = document.createElement('div'); meta.className = 'card-meta';
@@ -1580,7 +1774,7 @@ function dateStamp() {
 
 const TRANSLATIONS = {
   zh: {
-    page: '当前页面', library: '素材库', history: '历史', tasks: '任务', filterPreset: '筛选预设', selectionPreset: '选择预设', clear: '清除', width: '宽度', height: '高度', format: '格式', formatHint: '按文件类型查看', originalOnly: '仅显示原图候选', originalHint: '优先使用页面提供的高清地址', selectAll: '全选当前结果', sort: '排序', pageOrder: '页面顺序', widthDesc: '宽度：从大到小', heightDesc: '高度：从大到小', areaDesc: '尺寸：从大到小', nameAsc: '文件名：A–Z', searchPage: '搜索文件名、域名或 URL', noResults: '没有符合条件的图片', noResultsHint: '尝试放宽尺寸筛选，或重新扫描当前页面。', scanning: '正在扫描当前页面…', saveLocation: '下载时选择保存位置', downloadSupport: '支持普通文件与 ZIP', zipLayout: 'ZIP 分组', noGrouping: '不分组', bySite: '按网站', byFormat: '按格式', bySiteFormat: '按网站 / 格式', filenameTemplate: '文件名模板', dateFolder: '按日期建目录', json: '导出 JSON', csv: '导出 CSV', downloadSelected: '下载选中', zip: '下载 ZIP', zipNote: 'ZIP 会将当前选中的图片合并为一个文件，适合批量保存。',
+    page: '当前页面', library: '素材库', history: '历史', tasks: '任务', filterPreset: '筛选预设', selectionPreset: '选择预设', clear: '清除', width: '宽度', height: '高度', format: '格式', formatHint: '按文件类型查看', originalOnly: '仅显示原图候选', originalHint: '优先使用页面提供的高清地址', aspectRatio: '宽高比', allRatios: '全部比例', landscape: '横向图片', portrait: '纵向图片', square: '正方形', selectAll: '全选当前结果', sort: '排序', pageOrder: '页面顺序', widthDesc: '宽度：从大到小', heightDesc: '高度：从大到小', areaDesc: '尺寸：从大到小', nameAsc: '文件名：A–Z', searchPage: '搜索文件名、域名或 URL', noResults: '没有符合条件的图片', noResultsHint: '尝试放宽尺寸筛选，或重新扫描当前页面。', scanning: '正在扫描当前页面…', saveLocation: '下载时选择保存位置', downloadSupport: '支持普通文件与 ZIP', zipLayout: 'ZIP 分组', noGrouping: '不分组', bySite: '按网站', byFormat: '按格式', bySiteFormat: '按网站 / 格式', filenameTemplate: '文件名模板', dateFolder: '按日期建目录', json: '导出 JSON', csv: '导出 CSV', downloadSelected: '下载选中', zip: '下载 ZIP', zipNote: 'ZIP 会将当前选中的图片合并为一个文件，适合批量保存。',
     saveFilter: '保存筛选', deletePreset: '删除预设', saveSelection: '保存选择', invert: '反选', allCollections: '全部集合', uncategorized: '未分类',
     newCollection: '新建集合', exportLibrary: '导出收藏数据', importLibrary: '导入数据', taskCount: '个任务', activeTasks: '进行中', imageDownload: '图片下载', libraryTitle: '本地素材库', refresh: '刷新', allImages: '全部图片', librarySearch: '搜索图片、域名或标签', libraryMinWidth: '最小宽度', libraryMinHeight: '最小高度', libraryEmpty: '素材库还是空的', libraryEmptyHint: '在当前页面收藏图片，或从右键菜单收藏网页图片。', historyTitle: '最近活动', clearHistory: '清空历史', recentScans: '最近扫描', downloads: '下载记录', historyEmpty: '暂时没有历史记录', historyEmptyHint: '扫描网页或下载图片后，记录会显示在这里。', settings: '设置', settingsNote: '清空素材库会删除图片、收藏、标签和集合，但不会影响当前网页。', selected: '已选', images: '张图片', favorites: '收藏', collections: '个集合', storageUnavailable: '本地存储暂时不可用',
     exportFilteredJson: '导出筛选 JSON', exportFilteredCsv: '导出筛选 CSV', libraryDownloadSelected: '下载选中', libraryZipSelected: '下载 ZIP', libraryMaxWidth: '最大宽度', libraryMaxHeight: '最大高度', libraryMinSize: '最小 KB', libraryMaxSize: '最大 KB', libraryResultsEmpty: '当前筛选结果为空', libraryResultsExported: '筛选结果已导出', items: '项',
@@ -1590,12 +1784,12 @@ const TRANSLATIONS = {
     libraryExported: '素材库数据已导出', libraryExportFailed: '素材库导出失败', libraryImported: '素材库数据已导入', libraryImportFailed: '导入失败，请选择有效的 JSON 文件', taskActionFailed: '任务操作失败', noFailedTasks: '没有可重试的失败任务',
     filterPresetPrompt: '请输入筛选预设名称', selectionPresetPrompt: '请输入选择预设名称', newCollectionPrompt: '请输入集合名称', presetSaved: '预设已保存', presetDeleted: '预设已删除', selectBeforeSave: '请先选择图片', selectBeforeAction: '请先选择素材', bulkFavoriteDone: '已批量收藏', bulkTagPrompt: '请输入要添加的标签', bulkTagDone: '标签已批量添加', bulkCollectionPrompt: '请输入集合序号', createCollectionFirst: '请先创建集合', bulkCollectionDone: '已批量归档', bulkDeleteConfirm: '确定删除选中的素材吗？', bulkDeleteDone: '素材已删除', bulkActionFailed: '批量操作失败', clearLibraryConfirm: '确定清空整个素材库吗？此操作不可撤销。', libraryCleared: '素材库已清空', clearLibraryFailed: '素材库清理失败', resetSettingsConfirm: '确定重置所有扩展设置吗？', settingsReset: '设置已重置',
     sizeFilterTitle: '按尺寸筛选', unlimited: '不限', imageCount: '{count} 张图片', itemCount: '{count} 项', selectedCount: '已选 {count}', duplicates: '去重 {count}', all: '全部', other: '其它', switchLanguage: '切换语言', rescan: '重新扫描', viewSwitcher: '视图切换', filterSection: '图片筛选', searchImages: '搜索图片', sortImages: '图片排序方式', saveHelp: 'ZIP 下载或单张下载时会打开 Chrome 的保存对话框', libraryScope: '素材库筛选范围', collectionFilter: '按集合筛选', waitingTask: '等待任务开始', scanLimit: '扫描上限', maxImages: '最大扫描图片数量', imageOptions: ['200 张', '500 张', '1000 张', '不限'], autoScroll: '自动滚动加载懒加载图片',
-    widthMin: '最小宽度', widthMax: '最大宽度', heightMin: '最小高度', heightMax: '最大高度', formatFilter: '按图片格式筛选', saveLocationHint: 'ZIP 下载或单张下载时会打开 Chrome 的保存对话框', filenameTemplateHint: '支持 {name}、{filename}、{domain}、{format}、{width}、{height}、{date}',
-    currentPage: '当前页面', readingPage: '正在读取当前页面', scanningStatus: '扫描中', updating: '更新中', scanFailed: '扫描失败', scanFailedPrefix: '扫描失败：', scanTimeout: '扫描超时，请重试', pageAccessError: '当前页面不允许扩展访问，请切换到普通网页后重试。', noActiveTab: '无法获取当前标签页。', unnamedPage: '未命名页面', unknownTime: '时间未知', webImage: '网页图片', previewUnavailable: '预览不可用', selectImage: '选择 {dimensions} 图片', selectNamedImage: '选择 {name}', favorite: '收藏', favoriteImage: '收藏图片', removeFavorite: '取消收藏', downloadImage: '下载图片', removeTag: '移除标签 {tag}', chooseCollection: '选择集合', addTag: '添加标签', favoriteAdded: '已加入收藏', favoriteRemoved: '已取消收藏', favoriteFailed: '收藏操作失败', tagUpdated: '标签已更新', tagSaveFailed: '标签保存失败',
+    widthMin: '最小宽度', widthMax: '最大宽度', heightMin: '最小高度', heightMax: '最大高度', minimum: '最小', maximum: '最大', formatFilter: '按图片格式筛选', saveLocationHint: 'ZIP 下载或单张下载时会打开 Chrome 的保存对话框', filenameTemplateHint: '支持 {name}、{filename}、{domain}、{format}、{width}、{height}、{date}',
+    currentPage: '当前页面', readingPage: '正在读取当前页面', scanningStatus: '扫描中', updating: '更新中', newImagesFound: '发现 {count} 张新图片', scanFailed: '扫描失败', scanFailedPrefix: '扫描失败：', scanTimeout: '扫描超时，请重试', pageAccessError: '当前页面不允许扩展访问，请切换到普通网页后重试。', noActiveTab: '无法获取当前标签页。', unnamedPage: '未命名页面', unknownTime: '时间未知', webImage: '网页图片', previewUnavailable: '预览不可用', selectImage: '选择 {dimensions} 图片', selectNamedImage: '选择 {name}', favorite: '收藏', favoriteImage: '收藏图片', removeFavorite: '取消收藏', downloadImage: '下载图片', removeTag: '移除标签 {tag}', chooseCollection: '选择集合', addTag: '添加标签', favoriteAdded: '已加入收藏', favoriteRemoved: '已取消收藏', favoriteFailed: '收藏操作失败', tagUpdated: '标签已更新', tagSaveFailed: '标签保存失败',
     downloadZip: '下载 ZIP', submitted: '已提交', partialFailed: '部分失败 {count}', clearHistoryConfirm: '确定清空所有扫描和下载历史吗？', historyCleared: '历史记录已清空', historyClearFailed: '历史记录清理失败', taskCancelled: '任务已取消', cancelling: '正在取消任务…', downloadCancelled: '下载任务已取消', downloadFailed: '下载失败', downloadFailedRetry: '下载失败，请重试', prepareZip: '准备生成 ZIP…', prepareImages: '准备下载图片…', processedWithFailures: '已处理 {count} 张，失败 {failed}', downloadStartedWithFailures: '已开始下载，{count} 张图片失败，可点击重试', zipStarted: 'ZIP 已开始下载', downloadStarted: '下载已开始', compressing: '正在压缩', taskFailed: '任务失败', taskComplete: '任务完成', downloadProgress: '下载进度', processedProgress: '已处理 {completed}/{total}', noImagesToExport: '当前没有可导出的图片', exportStarted: '{type} 清单已开始下载', exportFailed: '清单导出失败', taskCenter: '下载任务中心', retryFailed: '重试失败任务', retryFailedItems: '重试失败项', taskEmpty: '暂时没有下载任务', taskEmptyHint: '发起图片或 ZIP 下载后，任务会显示在这里。', settingsTitle: '设置与存储', clearLibrary: '清空素材库', resetSettings: '重置设置', myFavorites: '我的收藏', bulkFavorite: '批量收藏', bulkTag: '添加标签', bulkCollection: '归档到集合', bulkDelete: '删除', closePreview: '关闭预览'
   },
   en: {
-    page: 'Current', library: 'Library', history: 'History', tasks: 'Tasks', filterPreset: 'Filter preset', selectionPreset: 'Selection preset', clear: 'Clear', width: 'Width', height: 'Height', format: 'Format', formatHint: 'Filter by file type', originalOnly: 'Original candidates only', originalHint: 'Prefer high-resolution addresses from the page', selectAll: 'Select all results', sort: 'Sort', pageOrder: 'Page order', widthDesc: 'Width: largest first', heightDesc: 'Height: largest first', areaDesc: 'Area: largest first', nameAsc: 'Filename: A–Z', searchPage: 'Search filename, hostname or URL', noResults: 'No matching images', noResultsHint: 'Try widening the size range or scan the page again.', scanning: 'Scanning current page…', saveLocation: 'Ask where to save downloads', downloadSupport: 'Files and ZIP supported', zipLayout: 'ZIP folders', noGrouping: 'No folders', bySite: 'By site', byFormat: 'By format', bySiteFormat: 'By site / format', filenameTemplate: 'Filename template', dateFolder: 'Create date folder', json: 'Export JSON', csv: 'Export CSV', downloadSelected: 'Download selected', zip: 'Download ZIP', zipNote: 'Selected images will be combined into one ZIP archive.',
+    page: 'Current', library: 'Library', history: 'History', tasks: 'Tasks', filterPreset: 'Filter preset', selectionPreset: 'Selection preset', clear: 'Clear', width: 'Width', height: 'Height', format: 'Format', formatHint: 'Filter by file type', originalOnly: 'Original candidates only', originalHint: 'Prefer high-resolution addresses from the page', aspectRatio: 'Aspect ratio', allRatios: 'All ratios', landscape: 'Landscape', portrait: 'Portrait', square: 'Square', selectAll: 'Select all results', sort: 'Sort', pageOrder: 'Page order', widthDesc: 'Width: largest first', heightDesc: 'Height: largest first', areaDesc: 'Area: largest first', nameAsc: 'Filename: A–Z', searchPage: 'Search filename, hostname or URL', noResults: 'No matching images', noResultsHint: 'Try widening the size range or scan the page again.', scanning: 'Scanning current page…', saveLocation: 'Ask where to save downloads', downloadSupport: 'Files and ZIP supported', zipLayout: 'ZIP folders', noGrouping: 'No folders', bySite: 'By site', byFormat: 'By format', bySiteFormat: 'By site / format', filenameTemplate: 'Filename template', dateFolder: 'Create date folder', json: 'Export JSON', csv: 'Export CSV', downloadSelected: 'Download selected', zip: 'Download ZIP', zipNote: 'Selected images will be combined into one ZIP archive.',
     saveFilter: 'Save filter', deletePreset: 'Delete preset', saveSelection: 'Save selection', invert: 'Invert', allCollections: 'All collections', uncategorized: 'Uncategorized',
     newCollection: 'New collection', exportLibrary: 'Export library', importLibrary: 'Import data', taskCount: 'tasks', activeTasks: 'active', imageDownload: 'Image download', libraryTitle: 'Local library', refresh: 'Refresh', allImages: 'All images', librarySearch: 'Search images, sites or tags', libraryMinWidth: 'Min width', libraryMinHeight: 'Min height', libraryEmpty: 'Your library is empty', libraryEmptyHint: 'Favorite an image on this page or use the context menu to save one.', historyTitle: 'Recent activity', clearHistory: 'Clear history', recentScans: 'Recent scans', downloads: 'Downloads', historyEmpty: 'No activity yet', historyEmptyHint: 'Scan a page or download an image to see activity here.', settings: 'Settings', settingsNote: 'Clearing the library removes images, favorites, tags, and collections, but does not affect the current webpage.', selected: 'Selected', images: 'images', favorites: 'favorites', collections: 'collections', storageUnavailable: 'Local storage is unavailable',
     exportFilteredJson: 'Export filtered JSON', exportFilteredCsv: 'Export filtered CSV', libraryDownloadSelected: 'Download selected', libraryZipSelected: 'Download ZIP', libraryMaxWidth: 'Max width', libraryMaxHeight: 'Max height', libraryMinSize: 'Min KB', libraryMaxSize: 'Max KB', libraryResultsEmpty: 'No filtered images', libraryResultsExported: 'Filtered results exported', items: 'items',
@@ -1605,8 +1799,8 @@ const TRANSLATIONS = {
     libraryExported: 'Library data exported', libraryExportFailed: 'Library export failed', libraryImported: 'Library data imported', libraryImportFailed: 'Import failed; choose a valid JSON file', taskActionFailed: 'Task action failed', noFailedTasks: 'No failed tasks to retry',
     filterPresetPrompt: 'Filter preset name', selectionPresetPrompt: 'Selection preset name', newCollectionPrompt: 'Collection name', presetSaved: 'Preset saved', presetDeleted: 'Preset deleted', selectBeforeSave: 'Select images first', selectBeforeAction: 'Select images first', bulkFavoriteDone: 'Images favorited', bulkTagPrompt: 'Tag to add', bulkTagDone: 'Tags added', bulkCollectionPrompt: 'Collection number', createCollectionFirst: 'Create a collection first', bulkCollectionDone: 'Images archived', bulkDeleteConfirm: 'Delete the selected images? This cannot be undone.', bulkDeleteDone: 'Images deleted', bulkActionFailed: 'Bulk action failed', clearLibraryConfirm: 'Clear the entire library? This cannot be undone.', libraryCleared: 'Library cleared', clearLibraryFailed: 'Could not clear library', resetSettingsConfirm: 'Reset all extension settings?', settingsReset: 'Settings reset',
     sizeFilterTitle: 'Filter by size', unlimited: 'Any', imageCount: '{count} image(s)', itemCount: '{count} item(s)', selectedCount: 'Selected {count}', duplicates: '{count} duplicates removed', all: 'All', other: 'Other', switchLanguage: 'Switch language', rescan: 'Rescan', viewSwitcher: 'View switcher', filterSection: 'Image filters', searchImages: 'Search images', sortImages: 'Image sort', saveHelp: 'Chrome opens a save dialog for ZIP or single-image downloads', libraryScope: 'Library scope', collectionFilter: 'Filter by collection', waitingTask: 'Waiting for task', scanLimit: 'Scan limit', maxImages: 'Maximum image count', imageOptions: ['200 images', '500 images', '1000 images', 'Unlimited'], autoScroll: 'Auto-scroll for lazy images',
-    widthMin: 'Minimum width', widthMax: 'Maximum width', heightMin: 'Minimum height', heightMax: 'Maximum height', formatFilter: 'Filter by image format', saveLocationHint: 'Chrome opens a save dialog for ZIP or single-image downloads', filenameTemplateHint: 'Supports {name}, {filename}, {domain}, {format}, {width}, {height}, and {date}',
-    currentPage: 'Current page', readingPage: 'Reading current page', scanningStatus: 'Scanning', updating: 'Updating', scanFailed: 'Scan failed', scanFailedPrefix: 'Scan failed: ', scanTimeout: 'Scan timed out; try again', pageAccessError: 'The extension cannot access this page. Switch to a regular webpage and try again.', noActiveTab: 'Could not get the active tab.', unnamedPage: 'Untitled page', unknownTime: 'Unknown time', webImage: 'Web image', previewUnavailable: 'Preview unavailable', selectImage: 'Select {dimensions} image', selectNamedImage: 'Select {name}', favorite: 'Favorite', favoriteImage: 'Favorite image', removeFavorite: 'Remove favorite', downloadImage: 'Download image', removeTag: 'Remove tag {tag}', chooseCollection: 'Choose collection', addTag: 'Add tag', favoriteAdded: 'Added to favorites', favoriteRemoved: 'Removed from favorites', favoriteFailed: 'Favorite action failed', tagUpdated: 'Tag updated', tagSaveFailed: 'Could not save tag',
+    widthMin: 'Minimum width', widthMax: 'Maximum width', heightMin: 'Minimum height', heightMax: 'Maximum height', minimum: 'Min', maximum: 'Max', formatFilter: 'Filter by image format', saveLocationHint: 'Chrome opens a save dialog for ZIP or single-image downloads', filenameTemplateHint: 'Supports {name}, {filename}, {domain}, {format}, {width}, {height}, and {date}',
+    currentPage: 'Current page', readingPage: 'Reading current page', scanningStatus: 'Scanning', updating: 'Updating', newImagesFound: '{count} new image(s) found', scanFailed: 'Scan failed', scanFailedPrefix: 'Scan failed: ', scanTimeout: 'Scan timed out; try again', pageAccessError: 'The extension cannot access this page. Switch to a regular webpage and try again.', noActiveTab: 'Could not get the active tab.', unnamedPage: 'Untitled page', unknownTime: 'Unknown time', webImage: 'Web image', previewUnavailable: 'Preview unavailable', selectImage: 'Select {dimensions} image', selectNamedImage: 'Select {name}', favorite: 'Favorite', favoriteImage: 'Favorite image', removeFavorite: 'Remove favorite', downloadImage: 'Download image', removeTag: 'Remove tag {tag}', chooseCollection: 'Choose collection', addTag: 'Add tag', favoriteAdded: 'Added to favorites', favoriteRemoved: 'Removed from favorites', favoriteFailed: 'Favorite action failed', tagUpdated: 'Tag updated', tagSaveFailed: 'Could not save tag',
     downloadZip: 'Download ZIP', submitted: 'Submitted', partialFailed: 'Partial failure: {count}', clearHistoryConfirm: 'Clear all scan and download history?', historyCleared: 'History cleared', historyClearFailed: 'Could not clear history', taskCancelled: 'Task cancelled', cancelling: 'Cancelling…', downloadCancelled: 'Download task cancelled', downloadFailed: 'Download failed', downloadFailedRetry: 'Download failed; try again', prepareZip: 'Preparing ZIP…', prepareImages: 'Preparing image download…', processedWithFailures: 'Processed {count}; {failed} failed', downloadStartedWithFailures: 'Download started; {count} image(s) failed. You can retry them.', zipStarted: 'ZIP download started', downloadStarted: 'Download started', compressing: 'Compressing', taskFailed: 'Task failed', taskComplete: 'Task complete', downloadProgress: 'Download progress', processedProgress: 'Processed {completed}/{total}', noImagesToExport: 'There are no images to export', exportStarted: '{type} list download started', exportFailed: 'List export failed', taskCenter: 'Download task center', retryFailed: 'Retry failed tasks', retryFailedItems: 'Retry failed items', taskEmpty: 'No download tasks yet', taskEmptyHint: 'Start an image or ZIP download to see it here.', settingsTitle: 'Settings & storage', clearLibrary: 'Clear library', resetSettings: 'Reset settings', myFavorites: 'Favorites', bulkFavorite: 'Favorite', bulkTag: 'Add tag', bulkCollection: 'Archive', bulkDelete: 'Delete', closePreview: 'Close preview'
   }
 };
@@ -1664,16 +1858,21 @@ function applyLanguage() {
   if (els.selectionPreset?.options[0]) els.selectionPreset.options[0].textContent = t('selectionPreset');
   setText(els.saveFilterPreset, t('saveFilter')); setText(els.deleteFilterPreset, t('deletePreset')); setText(els.saveSelectionPreset, t('saveSelection')); setText(els.invertSelection, t('invert'));
   setText(els.newCollection, t('newCollection')); setText(els.exportLibrary, t('exportLibrary')); setText(els.exportLibraryResultsJson, t('exportFilteredJson')); setText(els.exportLibraryResultsCsv, t('exportFilteredCsv')); setText(els.importLibrary, t('importLibrary'));
-  setText(els.previewTitle, state.preview ? fileName(state.preview.url) : t('preview')); setText(els.copyImageUrl, t('copyUrl')); setText(els.openImageUrl, t('openUrl')); setText(els.zoomReset, t('reset'));
+  setText(els.previewTitle, state.preview ? fileName(previewCandidates(state.preview)[0]) : t('preview')); setText(els.copyImageUrl, t('copyUrl')); setText(els.openImageUrl, t('openUrl')); setText(els.zoomReset, t('reset'));
+  if (els.previewError) els.previewError.textContent = t('previewUnavailable');
   setText(document.querySelector('.filter-panel h2'), t('sizeFilterTitle'));
   setText(els.clearFilters, t('clear'));
   const dimensionLabels = [...document.querySelectorAll('.dimension-slider .slider-label > span')];
   if (dimensionLabels[0]) dimensionLabels[0].textContent = t('width');
   if (dimensionLabels[1]) dimensionLabels[1].textContent = t('height');
+  const editorLabels = [...document.querySelectorAll('.dimension-editor label > span:first-child')];
+  editorLabels.forEach((label, index) => { label.textContent = index % 2 === 0 ? t('minimum') : t('maximum'); });
   const formatLabelNode = document.querySelector('.format-filter .slider-label > span'); if (formatLabelNode) formatLabelNode.textContent = t('format');
   const formatHint = document.querySelector('.format-hint'); if (formatHint) formatHint.textContent = t('formatHint');
   const originalLabel = document.querySelector('.original-filter span'); if (originalLabel) originalLabel.textContent = t('originalOnly');
   const originalHint = document.querySelector('.original-filter small'); if (originalHint) originalHint.textContent = t('originalHint');
+  const aspectLabel = document.querySelector('.aspect-filter > span'); if (aspectLabel) aspectLabel.textContent = t('aspectRatio');
+  const aspectOptions = [t('allRatios'), t('landscape'), t('portrait'), t('square')]; [...(els.aspectRatio?.options || [])].forEach((option, index) => { if (aspectOptions[index]) option.textContent = aspectOptions[index]; });
   const selectAllLabel = document.querySelector('.select-all span'); if (selectAllLabel) selectAllLabel.textContent = t('selectAll');
   const search = document.querySelector('#searchInput'); if (search) search.placeholder = t('searchPage');
   const sortLabel = document.querySelector('.sort-control > span'); if (sortLabel) sortLabel.textContent = t('sort');
@@ -1737,6 +1936,9 @@ function applyLanguage() {
   }
   const initialProgressDetail = els.progressDetail; if (initialProgressDetail && (!initialProgressDetail.textContent || initialProgressDetail.textContent === '等待任务开始')) initialProgressDetail.textContent = t('waitingTask');
   renderCollectionOptions();
+  updateSliderUI('width'); updateSliderUI('height');
+  els.widthValue?.setAttribute('title', `${t('widthMin')} / ${t('widthMax')}`);
+  els.heightValue?.setAttribute('title', `${t('heightMin')} / ${t('heightMax')}`);
 }
 
 function setLoading(loading) { els.loading.hidden = !loading; if (loading) { els.grid.replaceChildren(); els.empty.hidden = true; } }

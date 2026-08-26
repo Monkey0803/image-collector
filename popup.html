@@ -53,17 +53,27 @@
           <button id="deleteFilterPreset" class="subtle-button danger" type="button" disabled>删除预设</button>
         </div>
         <div class="dimension-slider">
-          <div class="slider-label"><span>宽度</span><strong id="widthValue">不限</strong></div>
+          <div class="slider-label"><span>宽度</span><button id="widthValue" class="slider-value" type="button" aria-expanded="false" aria-controls="widthEditor">不限</button></div>
           <div class="range-slider" id="widthTrack">
-            <input id="minWidth" type="range" min="0" max="5000" value="0" aria-label="最小宽度" />
-            <input id="maxWidth" type="range" min="0" max="5000" value="5000" aria-label="最大宽度" />
+            <input id="minWidth" type="range" min="0" max="5000" step="1" value="0" aria-label="最小宽度" />
+            <input id="maxWidth" type="range" min="0" max="5000" step="1" value="5000" aria-label="最大宽度" />
+          </div>
+          <div id="widthEditor" class="dimension-editor" hidden>
+            <label><span>最小</span><span class="dimension-input"><input id="widthMinValue" type="number" min="0" step="1" inputmode="numeric" /><em>px</em></span></label>
+            <span class="dimension-separator">–</span>
+            <label><span>最大</span><span class="dimension-input"><input id="widthMaxValue" type="number" min="0" step="1" inputmode="numeric" /><em>px</em></span></label>
           </div>
         </div>
         <div class="dimension-slider">
-          <div class="slider-label"><span>高度</span><strong id="heightValue">不限</strong></div>
+          <div class="slider-label"><span>高度</span><button id="heightValue" class="slider-value" type="button" aria-expanded="false" aria-controls="heightEditor">不限</button></div>
           <div class="range-slider" id="heightTrack">
-            <input id="minHeight" type="range" min="0" max="5000" value="0" aria-label="最小高度" />
-            <input id="maxHeight" type="range" min="0" max="5000" value="5000" aria-label="最大高度" />
+            <input id="minHeight" type="range" min="0" max="5000" step="1" value="0" aria-label="最小高度" />
+            <input id="maxHeight" type="range" min="0" max="5000" step="1" value="5000" aria-label="最大高度" />
+          </div>
+          <div id="heightEditor" class="dimension-editor" hidden>
+            <label><span>最小</span><span class="dimension-input"><input id="heightMinValue" type="number" min="0" step="1" inputmode="numeric" /><em>px</em></span></label>
+            <span class="dimension-separator">–</span>
+            <label><span>最大</span><span class="dimension-input"><input id="heightMaxValue" type="number" min="0" step="1" inputmode="numeric" /><em>px</em></span></label>
           </div>
         </div>
         <div class="format-filter">
@@ -78,6 +88,7 @@
           </div>
         </div>
         <label class="original-filter"><input id="originalOnly" type="checkbox" /><span>仅显示原图候选</span><small>优先使用页面提供的高清地址</small></label>
+        <label class="aspect-filter"><span>宽高比</span><select id="aspectRatio" aria-label="按宽高比筛选"><option value="all">全部比例</option><option value="landscape">横向图片</option><option value="portrait">纵向图片</option><option value="square">正方形</option></select></label>
         <div class="scan-options">
           <label><span>扫描上限</span><select id="scanLimit" aria-label="最大扫描图片数量"><option value="200">200 张</option><option value="500" selected>500 张</option><option value="1000">1000 张</option><option value="0">不限</option></select></label>
           <label><input id="autoScroll" type="checkbox" /><span>自动滚动加载懒加载图片</span></label>
@@ -266,7 +277,7 @@
         <div class="preview-backdrop" data-close-preview></div>
         <div class="preview-dialog">
           <div class="preview-header"><strong id="previewTitle">图片预览</strong><button id="closePreview" class="icon-button light" type="button" aria-label="关闭预览">×</button></div>
-          <div class="preview-stage"><img id="previewImage" alt="图片预览" /></div>
+          <div class="preview-stage"><img id="previewImage" alt="图片预览" /><p id="previewError" class="preview-error" hidden>预览不可用</p></div>
           <div class="preview-toolbar">
             <button id="zoomOut" type="button">−</button><span id="zoomValue">100%</span><button id="zoomIn" type="button">＋</button><button id="zoomReset" type="button">重置</button>
           </div>

@@ -19,7 +19,7 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 单选、全选当前筛选结果或多选图片
 - 单独下载某一张图片
 - 将选中的图片合并下载为 ZIP
-- 默认 ZIP 文件名为 `image_YYYY.MM.dd.zip`
+- 默认 ZIP 文件名为 `image_YYYY.MM.DD.zip`
 - 下载时可选择保存位置，也可以使用 Chrome 默认下载目录
 - 使用浏览器本地能力处理数据，不需要账号或服务器
 - 原图优先识别 `srcset`、`picture`、懒加载属性和图片外链
@@ -56,6 +56,8 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 素材库支持最小/最大宽高和文件大小范围筛选
 - 支持将当前素材库筛选结果导出为 JSON 或 CSV
 - 支持 Chrome 侧边栏模式，点击工具栏图标即可在当前网页旁打开
+- 支持横向、纵向和正方形宽高比筛选
+- 下载失败时自动尝试备用图片地址并重试一次
 
 ### 安装方式
 
@@ -94,6 +96,8 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 点击“清除”可以恢复为不限尺寸
 
 尺寸通常使用图片的原始像素尺寸。CSS 背景图片无法获取原始尺寸时，会使用元素的渲染尺寸，或者显示为尺寸未知。
+
+在“宽高比”筛选中可以选择全部比例、横向图片、纵向图片或正方形。宽高比接近 1:1 的图片会归入正方形；无法获取尺寸的图片不会匹配具体比例。
 
 #### 按格式分类
 
@@ -142,7 +146,7 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 | `{width}` / `{height}` | 图片尺寸 |
 | `{date}` | 当前日期，格式为 `YYYY.MM.DD` |
 
-例如填写 `{domain}_{date}_{name}`，会生成类似 `example.com_2026.08.24_photo.jpg` 的文件名。开启“按日期建目录”后，普通下载会保存为 `2026.08.24/example.com_2026.08.24_photo.jpg`；ZIP 内的图片也会放入对应日期目录。未知变量会被忽略，文件名中的非法字符会自动替换为下划线。
+例如填写 `{domain}_{date}_{name}`，会生成类似 `example.com_2026.08.24_photo.jpg` 的文件名。开启“按日期建目录”后，普通下载会保存为 `2026.08.24/example.com_2026.08.24_photo.jpg`；ZIP 压缩包会保存为 `image_2026.08.24/image_2026.08.24.zip`，ZIP 内的图片也会放入对应日期目录。未知变量会被忽略，文件名中的非法字符会自动替换为下划线。
 
 多个下载请求会由后台按提交顺序排队。当前任务完成或取消后，队列中的下一个任务会自动开始；排队中的任务也可以取消。
 
@@ -355,11 +359,13 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Download selected images or create a ZIP from the current library results
 - Filter library images by minimum/maximum dimensions and file-size range
 - Export the current library results as JSON or CSV
+- Open the collector in Chrome's right side panel and keep it visible while browsing
+- Filter images by landscape, portrait, or square aspect ratio
+- Retry failed downloads once and try alternate image URLs when available
 - Customize filenames with template variables for names, domains, formats, dimensions, and dates
-- Create `YYYY.MM.DD` date folders for regular downloads and ZIP entries
+- Create `YYYY.MM.DD` date folders for regular downloads and ZIP entries, and place ZIP archives under `image_YYYY.MM.DD/`
 - Queue multiple download requests and run them in submission order
 - Report clearer causes for authentication, anti-hotlinking, network, and server failures
-- Open the collector in Chrome's right side panel and keep it visible while browsing
 
 ### Installation
 
@@ -398,6 +404,8 @@ Use the width and height range sliders in the filter panel:
 - Click **Clear** to remove all dimension limits.
 
 The dimensions usually represent the image's intrinsic pixel size. When the original size of a CSS background image cannot be detected, the extension may use the element's rendered size or mark the dimensions as unknown.
+
+Use the **Aspect ratio** filter to show all ratios, landscape images, portrait images, or square images. Images without known dimensions do not match a specific ratio.
 
 #### Filter by format
 
@@ -442,7 +450,7 @@ The default filename template is `{name}`. Supported variables are:
 | `{width}` / `{height}` | Image dimensions |
 | `{date}` | Current date in `YYYY.MM.DD` format |
 
-For example, `{domain}_{date}_{name}` can produce `example.com_2026.08.24_photo.jpg`. When **Create date folder** is enabled, regular downloads use a path such as `2026.08.24/example.com_2026.08.24_photo.jpg`, and ZIP entries use the same date folder. Unknown variables are omitted and illegal filename characters are replaced with underscores.
+For example, `{domain}_{date}_{name}` can produce `example.com_2026.08.24_photo.jpg`. When **Create date folder** is enabled, regular downloads use a path such as `2026.08.24/example.com_2026.08.24_photo.jpg`; ZIP archives use `image_2026.08.24/image_2026.08.24.zip`, and ZIP entries use the same date folder. Unknown variables are omitted and illegal filename characters are replaced with underscores.
 
 Multiple download requests are processed by a background queue in submission order. The next task starts automatically when the current task completes or is cancelled, and queued tasks can also be cancelled.
 
