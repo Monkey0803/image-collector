@@ -2,8 +2,9 @@
   'use strict';
 
   const DB_NAME = 'image-collector-library';
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
   const IMAGE_STORE = 'images';
+  const CACHE_STORE = 'imageCache';
   const SCAN_STORE = 'scans';
   const DOWNLOAD_STORE = 'downloads';
   const COLLECTION_STORE = 'collections';
@@ -20,6 +21,11 @@
           store.createIndex('byFavorite', 'favorite');
           store.createIndex('byUpdatedAt', 'updatedAt');
           store.createIndex('byDomain', 'domain');
+        }
+        if (!db.objectStoreNames.contains(CACHE_STORE)) {
+          const store = db.createObjectStore(CACHE_STORE, { keyPath: 'id' });
+          store.createIndex('byUpdatedAt', 'updatedAt');
+          store.createIndex('bySize', 'size');
         }
         if (!db.objectStoreNames.contains(SCAN_STORE)) {
           const store = db.createObjectStore(SCAN_STORE, { keyPath: 'id' });
@@ -107,6 +113,83 @@
     const db = await openDatabase();
     const transaction = db.transaction(IMAGE_STORE, 'readonly');
     return requestValue(transaction.objectStore(IMAGE_STORE).get(imageId(url)));
+  }
+
+  async function getCachedImage(url) {
+    const db = await openDatabase();
+    const transaction = db.transaction(CACHE_STORE, 'readonly');
+    const record = await requestValue(transaction.objectStore(CACHE_STORE).get(imageId(url)));
+    if (!record?.blob) return null;
+    // Refreshing recency is best-effort; a stale cache must never block preview.
+    touchCachedImage(record.id).catch(() => {});
+    return record;
+  }
+
+  async function touchCachedImage(url) {
+    const db = await openDatabase();
+    const readTransaction = db.transaction(CACHE_STORE, 'readonly');
+    const record = await requestValue(readTransaction.objectStore(CACHE_STORE).get(imageId(url)));
+    await transactionDone(readTransaction);
+    if (!record) return null;
+    record.updatedAt = Date.now();
+    const transaction = db.transaction(CACHE_STORE, 'readwrite');
+    transaction.objectStore(CACHE_STORE).put(record);
+    await transactionDone(transaction);
+    return record;
+  }
+
+  const MAX_CACHE_ENTRY_BYTES = 20 * 1024 * 1024;
+  const MAX_CACHE_BYTES = 120 * 1024 * 1024;
+
+  async function putCachedImage(url, blob, metadata = {}) {
+    const id = imageId(url);
+    if (!id || !blob || typeof blob.size !== 'number' || blob.size <= 0 || blob.size > MAX_CACHE_ENTRY_BYTES) return false;
+    const db = await openDatabase();
+    const now = Date.now();
+    const transaction = db.transaction(CACHE_STORE, 'readwrite');
+    transaction.objectStore(CACHE_STORE).put({
+      id,
+      url: id,
+      sourceUrl: metadata.sourceUrl || id,
+      blob,
+      mime: metadata.mime || blob.type || 'application/octet-stream',
+      size: blob.size,
+      createdAt: Number(metadata.createdAt) || now,
+      updatedAt: now
+    });
+    await transactionDone(transaction);
+    await pruneCache(id);
+    return true;
+  }
+
+  async function pruneCache(keepId = '') {
+    const db = await openDatabase();
+    const readTransaction = db.transaction(CACHE_STORE, 'readonly');
+    const records = await requestValue(readTransaction.objectStore(CACHE_STORE).getAll());
+    await transactionDone(readTransaction);
+    let total = records.reduce((sum, record) => sum + (Number(record.size) || record.blob?.size || 0), 0);
+    if (total <= MAX_CACHE_BYTES) return;
+    const candidates = records
+      .filter((record) => record.id !== keepId)
+      .sort((left, right) => (left.updatedAt || 0) - (right.updatedAt || 0));
+    const removeIds = [];
+    for (const record of candidates) {
+      if (total <= MAX_CACHE_BYTES) break;
+      removeIds.push(record.id);
+      total -= Number(record.size) || record.blob?.size || 0;
+    }
+    if (!removeIds.length) return;
+    const transaction = db.transaction(CACHE_STORE, 'readwrite');
+    const store = transaction.objectStore(CACHE_STORE);
+    removeIds.forEach((id) => store.delete(id));
+    await transactionDone(transaction);
+  }
+
+  async function deleteCachedImage(url) {
+    const db = await openDatabase();
+    const transaction = db.transaction(CACHE_STORE, 'readwrite');
+    transaction.objectStore(CACHE_STORE).delete(imageId(url));
+    await transactionDone(transaction);
   }
 
   async function upsertImages(images) {
@@ -354,20 +437,42 @@
   }
 
   async function getStorageStats() {
-    const [images, collections, scans, downloads] = await Promise.all([
+    const [images, cache, collections, scans, downloads] = await Promise.all([
       measureStore(IMAGE_STORE, (stats, record) => { if (record.favorite) stats.favorites += 1; }),
+      measureCacheStore(),
       measureStore(COLLECTION_STORE),
       measureStore(SCAN_STORE),
       measureStore(DOWNLOAD_STORE)
     ]);
     return {
       images: images.count,
+      cachedImages: cache.count,
       favorites: images.favorites,
       collections: collections.count,
       scans: scans.count,
       downloads: downloads.count,
-      bytes: images.bytes + collections.bytes + scans.bytes + downloads.bytes
+      cacheBytes: cache.bytes,
+      bytes: images.bytes + cache.bytes + collections.bytes + scans.bytes + downloads.bytes
     };
+  }
+
+  function measureCacheStore() {
+    return openDatabase().then((db) => new Promise((resolve, reject) => {
+      const transaction = db.transaction(CACHE_STORE, 'readonly');
+      const stats = { count: 0, bytes: 0 };
+      const request = transaction.objectStore(CACHE_STORE).openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        stats.count += 1;
+        stats.bytes += Number(cursor.value.size) || cursor.value.blob?.size || 0;
+        cursor.continue();
+      };
+      request.onerror = () => reject(request.error || new Error('本地缓存读取失败'));
+      transaction.onerror = () => reject(transaction.error || new Error('本地缓存读取失败'));
+      transaction.onabort = () => reject(transaction.error || new Error('本地缓存事务已中止'));
+      transaction.oncomplete = () => resolve(stats);
+    }));
   }
 
   function measureStore(storeName, onRecord = () => {}) {
@@ -393,8 +498,9 @@
 
   async function clearLibrary() {
     const db = await openDatabase();
-    const transaction = db.transaction([IMAGE_STORE, COLLECTION_STORE], 'readwrite');
+    const transaction = db.transaction([IMAGE_STORE, CACHE_STORE, COLLECTION_STORE], 'readwrite');
     transaction.objectStore(IMAGE_STORE).clear();
+    transaction.objectStore(CACHE_STORE).clear();
     transaction.objectStore(COLLECTION_STORE).clear();
     await transactionDone(transaction);
   }
@@ -441,6 +547,9 @@
 
   global.ImageCollectorDB = {
     getImage,
+    getCachedImage,
+    putCachedImage,
+    deleteCachedImage,
     upsertImages,
     saveScan,
     listImages,

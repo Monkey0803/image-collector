@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录 `1.7.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
+本文档记录 `1.8.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
 
 ## 1.0.1
 
@@ -95,13 +95,25 @@
 
 ### 后续版本候选
 
-- [ ] 图片永久缓存，原地址失效后仍可在素材库预览。
+- [x] 图片永久缓存，原地址失效后仍可在素材库预览。
+- [x] 预览失败时提供手动重试、缓存回退和网页地址打开操作。
+- [x] 扫描过程区分页面读取、图片发现和尺寸探测状态，并为尺寸探测设置超时保护。
 - [ ] 智能集合，根据尺寸、格式、域名和日期自动归档。
 - [ ] 增加文件大小和宽高比的可视化范围筛选。
 
+## 1.8.0
+
+### 本地缓存与预览可靠性
+
+- [x] 使用 IndexedDB 保存成功预览或 ZIP 读取的图片数据，单张最多 20 MB，总缓存最多 120 MB。
+- [x] 网页图片地址失效时，预览自动回退到本地缓存，并在设置页显示缓存数量和占用空间。
+- [x] 缓存按最近使用时间自动清理，清空素材库时同步清除缓存。
+- [x] 预览失败时支持重新加载和使用网页地址打开，并修复错误状态下的多语言文案覆盖问题。
+- [x] 将扫描阶段明确显示为读取页面、发现图片和探测尺寸，尺寸探测超时不会让界面永久 loading。
+
 ## English
 
-This document tracks `1.7.0` and future releases. Completed items use `[x]`.
+This document tracks `1.8.0` and future releases. Completed items use `[x]`.
 
 ### 1.0.1 core experience
 
@@ -177,6 +189,16 @@ This document tracks `1.7.0` and future releases. Completed items use `[x]`.
 
 ### Future candidates
 
-- [ ] Permanently cache image data so library previews survive expired source URLs.
+- [x] Permanently cache image data so library previews survive expired source URLs.
+- [x] Add manual preview retry, cached fallback, and page-URL opening actions.
+- [x] Expose page-reading, image-discovery, and dimension-checking scan states with a timeout guard.
 - [ ] Add smart collections that automatically group images by dimensions, format, hostname, or date.
 - [ ] Add visual range controls for file size and aspect ratio.
+
+## 1.8.0 local cache and preview reliability
+
+- [x] Store successfully previewed or ZIP-read image data in IndexedDB, with 20 MB per item and 120 MB total limits.
+- [x] Fall back to local cached data when a page image URL expires, and show cache count and usage in Settings.
+- [x] Evict the least recently used cached entries automatically and clear cached data with the library.
+- [x] Add reload and page-URL actions to the preview failure state, including localized labels.
+- [x] Show explicit page-reading, image-discovery, and dimension-checking states; dimension timeouts no longer leave the UI loading forever.

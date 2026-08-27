@@ -131,7 +131,7 @@
           <span>尝试放宽尺寸筛选，或重新扫描当前页面。</span>
         </div>
         <div id="loadingState" class="loading-state">
-          <span class="spinner"></span> 正在扫描当前页面…
+          <span class="spinner"></span><span id="loadingLabel">正在扫描当前页面…</span>
         </div>
         <div id="errorState" class="error-state" hidden></div>
       </section>
@@ -277,7 +277,7 @@
         <div class="preview-backdrop" data-close-preview></div>
         <div class="preview-dialog">
           <div class="preview-header"><strong id="previewTitle">图片预览</strong><button id="closePreview" class="icon-button light" type="button" aria-label="关闭预览">×</button></div>
-          <div class="preview-stage"><img id="previewImage" alt="图片预览" /><p id="previewError" class="preview-error" hidden>预览不可用</p></div>
+          <div class="preview-stage"><img id="previewImage" alt="图片预览" /><div id="previewError" class="preview-error" hidden><span id="previewErrorText">预览不可用</span><div class="preview-error-actions"><button id="retryPreview" type="button">重新加载</button><button id="openPreviewPage" type="button">使用网页地址</button></div></div></div>
           <div class="preview-toolbar">
             <button id="zoomOut" type="button">−</button><span id="zoomValue">100%</span><button id="zoomIn" type="button">＋</button><button id="zoomReset" type="button">重置</button>
           </div>

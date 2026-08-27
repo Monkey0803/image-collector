@@ -64,6 +64,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     inspectImages(message.images || []).then((result) => sendResponse(result));
     return true;
   }
+  if (message.type === 'cacheImage') {
+    cacheImage(message.image || {}).then((result) => sendResponse(result));
+    return true;
+  }
   if (message.type === 'cancelDownload') {
     cancelDownload(message.jobId);
     sendResponse({ ok: true });
@@ -255,6 +259,19 @@ async function readImageWithFallback(image, job) {
   throw lastError || new Error('No image URL available');
 }
 
+async function cacheImage(image) {
+  const candidateJob = { controllers: new Set() };
+  try {
+    const result = await readImageWithFallback(image, candidateJob);
+    const contentType = (result.contentType || '').split(';')[0] || 'application/octet-stream';
+    const blob = new Blob([result.data], { type: contentType });
+    const saved = await ImageCollectorDB.putCachedImage(image.url, blob, { sourceUrl: result.url, mime: contentType });
+    return { ok: saved, url: image.url, sourceUrl: result.url, size: blob.size, mime: contentType };
+  } catch (error) {
+    return { ok: false, url: image.url || '', error: error?.message || 'cache failed' };
+  }
+}
+
 async function downloadImages(images, saveAs, jobId, settings = {}) {
   const language = normalizeLanguage(settings.language || await getLanguage());
   const failed = [];
@@ -309,7 +326,8 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
       detail: workerText(language, 'reading', { current: index + 1, total, name: normalizeName(image, '', settings) })
     });
     try {
-      const { contentType, data } = await readImageWithFallback(image, job);
+      const { url: fetchedUrl, contentType, data } = await readImageWithFallback(image, job);
+      await ImageCollectorDB.putCachedImage(image.url, new Blob([data], { type: (contentType || '').split(';')[0] || 'application/octet-stream' }), { sourceUrl: fetchedUrl, mime: contentType }).catch(() => {});
       const filename = normalizeName(image, contentType, { ...settings, dateFolder: false });
       const name = uniqueName(zipPath(image, filename, settings.zipLayout || 'flat', settings, contentType), usedNames);
       entries.push({ name, data });

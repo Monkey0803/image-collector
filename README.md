@@ -58,6 +58,9 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 支持 Chrome 侧边栏模式，点击工具栏图标即可在当前网页旁打开
 - 支持横向、纵向和正方形宽高比筛选
 - 下载失败时自动尝试备用图片地址并重试一次
+- 预览成功或 ZIP 读取成功后自动缓存图片，网页地址失效时仍可从素材库预览
+- 预览失败时支持重新加载，或使用网页地址在新标签页打开
+- 设置页显示本地缓存数量和占用空间，缓存会按最近使用时间自动清理
 
 ### 安装方式
 
@@ -111,6 +114,12 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 其它（例如 GIF、SVG 或无法从地址判断的格式）
 
 分类按钮上的数字表示该格式在当前尺寸筛选条件下的图片数量。
+
+#### 图片缓存与预览失败处理
+
+打开大图预览并成功加载后，扩展会在本地保存一份图片副本；读取图片生成 ZIP 时也会保存副本。缓存只保存在当前浏览器中，不会上传到服务器。单张图片超过 20 MB 时不会缓存，缓存总容量上限为 120 MB，空间不足时会优先清理最久未使用的缓存。
+
+如果网页图片因为登录状态、防盗链或临时地址失效而无法再次加载，预览会自动尝试本地缓存。仍无法显示时，可以点击“重新加载”再次尝试所有地址，或点击“使用网页地址”直接在新标签页打开网页提供的图片地址。设置页会显示缓存数量和占用空间；清空素材库时会同时清除缓存。
 
 #### 搜索和排序
 
@@ -328,7 +337,7 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Select individual images, select all current results, or select multiple images
 - Download a single image
 - Download selected images as one ZIP archive
-- Use the default ZIP filename format `image_YYYY.MM.dd.zip`
+- Use the default ZIP filename format `image_YYYY.MM.DD.zip`
 - Choose a save location or use Chrome's default download directory
 - Process image lists and filters locally in the browser without an account or server
 - Prefer original sources from `srcset`, `picture`, lazy-loading attributes, and image links
@@ -503,6 +512,14 @@ On a webpage, right-click to open the Image Collector menu. It provides **Scan c
 - When no language preference is stored, the extension chooses an initial language from the browser locale. Users can still switch manually from the header, and the preference is stored locally.
 - Page scanning limits CSS background candidates and pixel fingerprint work and probes original dimensions in batches, reducing stalls on large pages.
 - Library filter input coalesces rapid refreshes, image cards render in batches, and IndexedDB plus file metadata inspection reuse bulk operations and cache entries.
+
+#### 1.8.0 local cache and preview reliability
+
+- Successfully previewed images and images read for ZIP creation are stored in the browser's local IndexedDB cache. A single item is limited to 20 MB and the total cache is limited to 120 MB.
+- If a page URL expires or hotlink protection blocks it, the preview automatically falls back to the cached copy when one is available.
+- The Settings view shows cached image count and cache usage. Cached entries are evicted by least-recently-used order when the limit is reached, and clearing the library also clears cached files.
+- When preview loading fails, use **Reload** to retry all candidates or **Use page URL** to open the page-provided image URL in a new tab.
+- Scanning now reports separate page-reading, image-discovery, and dimension-checking stages. A dimension-check timeout no longer leaves the loading indicator active forever.
 
 The default ZIP filename is generated in this format:
 
