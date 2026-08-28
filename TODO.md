@@ -209,6 +209,26 @@ This document tracks `1.8.0` and future releases. Completed items use `[x]`.
 - [x] Add visual file-size and aspect-ratio range sliders while keeping precise numeric inputs.
 - [x] Render image grids in batches with a Load more action to keep large pages responsive.
 
+## 2.0.0 configurable scanning and site adapters
+
+### 中文
+
+- [x] 支持包含/排除 CSS 选择器，允许用户按页面结构定制扫描范围。
+- [x] 支持单独开关 CSS 背景图、视频封面和 iframe 扫描。
+- [x] 支持按域名保存站点适配规则、自定义图片选择器和额外图片属性。
+- [x] 支持站点规则匹配后自动归档到素材集合。
+- [x] 支持可选的 Chrome 设置同步，明确不上传图片、缓存和历史记录。
+- [x] 保留默认扫描器并兼容格式错误的选择器，避免自定义规则阻塞正常扫描。
+
+### English
+
+- [x] Add include/exclude CSS selectors for site-specific scan scopes.
+- [x] Add independent switches for CSS backgrounds, video posters, and iframe scanning.
+- [x] Save host-based site adapters with custom image selectors and extra image attributes.
+- [x] Automatically archive matching scan results into a local collection.
+- [x] Add optional Chrome settings sync without syncing images, cache, or history.
+- [x] Preserve the default scanner and ignore malformed selectors without blocking a scan.
+
 ## 1.8.0 local cache and preview reliability
 
 - [x] Store successfully previewed or ZIP-read image data in IndexedDB, with 20 MB per item and 120 MB total limits.

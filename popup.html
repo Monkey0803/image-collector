@@ -302,6 +302,31 @@
       <section id="settingsView" class="history-view settings-view" hidden aria-label="扩展设置">
         <div class="section-heading"><div><p class="eyebrow">PREFERENCES</p><h2>设置与存储</h2></div><button id="refreshStorage" class="text-button" type="button">刷新</button></div>
         <div id="storageStats" class="storage-stats">正在读取本地存储…</div>
+        <section class="settings-card" aria-label="扫描规则">
+          <div class="settings-card-heading"><div><p class="eyebrow">SCAN RULES</p><h3>自定义扫描规则</h3></div><span class="settings-card-hint">按当前网站生效</span></div>
+          <label class="settings-field"><span>包含选择器</span><textarea id="includeSelectors" rows="2" placeholder="例如：.gallery img, picture source"></textarea><small>每行一个 CSS 选择器；为空时使用默认扫描器。</small></label>
+          <label class="settings-field"><span>排除选择器</span><textarea id="excludeSelectors" rows="2" placeholder="例如：.avatar, .icon"></textarea><small>匹配到的元素及其子元素不会加入结果。</small></label>
+          <div class="settings-toggle-grid">
+            <label><input id="scanCssBackground" type="checkbox" checked /><span>扫描 CSS 背景图</span></label>
+            <label><input id="scanVideoPosters" type="checkbox" checked /><span>扫描视频封面</span></label>
+            <label><input id="includeIframes" type="checkbox" checked /><span>扫描 iframe</span></label>
+          </div>
+          <button id="saveScanRules" class="primary-button settings-save-button" type="button">保存扫描规则</button>
+        </section>
+        <section class="settings-card" aria-label="站点适配规则">
+          <div class="settings-card-heading"><div><p class="eyebrow">SITE ADAPTERS</p><h3>站点适配与自动归档</h3></div><span class="settings-card-hint">按域名匹配</span></div>
+          <label class="settings-field"><span>域名匹配</span><input id="adapterHost" type="text" placeholder="例如：xiaohongshu.com 或 *.example.com" /></label>
+          <label class="settings-field"><span>图片选择器</span><input id="adapterSelector" type="text" placeholder="例如：.note-container img" /></label>
+          <label class="settings-field"><span>额外图片属性</span><input id="adapterAttributes" type="text" placeholder="例如：data-original,data-full" /></label>
+          <label class="settings-field"><span>自动归档到集合</span><select id="adapterCollection"><option value="">不自动归档</option></select></label>
+          <div class="settings-inline-actions"><button id="saveSiteAdapter" class="primary-button" type="button">保存站点规则</button><button id="clearSiteAdapter" class="subtle-button" type="button">清空表单</button></div>
+          <div id="siteAdapterList" class="site-adapter-list"></div>
+        </section>
+        <section class="settings-card settings-sync-card" aria-label="设置同步">
+          <div class="settings-card-heading"><div><p class="eyebrow">SYNC</p><h3>可选设置同步</h3></div><span class="settings-card-hint">不上传图片</span></div>
+          <label class="sync-option"><input id="syncSettings" type="checkbox" /><span><strong>使用 Chrome 同步设置</strong><small>仅同步扫描规则、站点适配器和偏好，不同步图片、缓存或历史记录。</small></span></label>
+          <button id="saveSyncSettings" class="subtle-button" type="button">保存同步设置</button>
+        </section>
         <div class="settings-actions"><button id="clearLibrary" class="subtle-button danger" type="button">清空素材库</button><button id="resetSettings" class="subtle-button" type="button">重置设置</button></div>
         <p class="settings-note">清空素材库会删除图片、收藏、标签和集合，但不会影响当前网页。</p>
       </section>

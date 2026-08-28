@@ -64,6 +64,9 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 素材库提供智能集合，可按尺寸、格式、网站和日期自动归档筛选
 - 当前页面和素材库支持文件大小、宽高比的可视化范围滑块
 - 大页面采用分批卡片渲染，点击“加载更多”后继续显示，减少打开扩展时的卡顿
+- 支持自定义包含/排除选择器，以及 CSS 背景图、视频封面和 iframe 开关
+- 支持按域名保存站点适配规则、自定义图片属性，并自动归档到素材集合
+- 支持可选的 Chrome 设置同步，不同步图片、缓存和历史记录
 
 ### 安装方式
 
@@ -226,6 +229,20 @@ image_2026.08.20.zip
 
 这个设置会自动保存，下次打开扩展时继续使用上一次的选择。
 
+#### 2.0.0 自定义规则与站点适配
+
+2.0.0 增加了可配置扫描层，用于处理图片结构特殊的网站：
+
+- 打开“设置”→“自定义扫描规则”，可以填写包含和排除 CSS 选择器，每行一个，例如 `.gallery img` 或 `.avatar`。
+- 可以单独关闭“扫描 CSS 背景图”“扫描视频封面”或“扫描 iframe”，减少装饰性或嵌入内容带来的干扰。
+- 在“站点适配与自动归档”中填写域名匹配，例如 `xiaohongshu.com` 或 `*.example.com`，再填写该网站的图片选择器，例如 `.note-container img`。
+- “额外图片属性”支持逗号分隔的属性名，例如 `data-original,data-full`，适合原图地址不在 `src` 中的网站。
+- 选择一个已有的本地集合后，匹配该网站的扫描结果会在扫描完成后自动归档到这个集合。
+- 可以保存多个站点规则；相同域名和选择器再次保存时会更新原规则。
+- 开启“使用 Chrome 同步”后，只同步扫描规则、站点适配器、扫描上限、自动滚动、ZIP 布局、文件名模板和日期目录设置；图片、缓存、集合和历史记录仍只保存在本机。
+
+扫描流程为：读取配置 → 匹配当前域名的站点规则 → 采集默认和自定义图片地址 → 应用排除规则 → 探测元数据 → 自动归档。格式错误的选择器会被忽略，不会阻塞默认扫描。
+
 ### 权限说明
 
 扩展在 `manifest.json` 中声明了以下权限：
@@ -240,7 +257,7 @@ image_2026.08.20.zip
 | `sidePanel` | 在 Chrome 右侧打开扩展侧边栏 |
 | `<all_urls>` | 支持扫描不同网站中的网页图片及图片地址 |
 
-所有图片筛选和列表处理都在浏览器本地完成。项目没有内置服务器，也不会主动上传网页内容、图片或用户设置。
+所有图片筛选和列表处理都在浏览器本地完成。项目没有内置服务器，也不会主动上传网页内容或图片；只有在用户主动开启 Chrome 同步时，扫描规则和相关偏好才会交给 Chrome 的同步存储。
 
 ### 已知限制
 
@@ -529,6 +546,9 @@ On a webpage, right-click to open the Image Collector menu. It provides **Scan c
 - The Library view includes Smart collections. These are generated from the current local metadata and group images by dimensions, format, hostname, or update date; they do not create duplicate files or require manual tagging.
 - The current-page filter panel includes visual range controls for file size and aspect ratio. The Library view exposes the same controls and keeps the numeric KB inputs for precise adjustment.
 - Image grids render an initial batch and reveal more cards only when requested. This keeps filtering and selection responsive when a page or library contains hundreds of images.
+- Add custom include/exclude selectors and independent switches for CSS backgrounds, video posters, and iframes.
+- Save host-based site adapters with custom image attributes and automatically archive matching results into local collections.
+- Optionally sync scan rules and preferences with Chrome without syncing images, cache, or history.
 
 The default ZIP filename is generated in this format:
 
@@ -544,6 +564,20 @@ When **Choose save location when downloading** is enabled, Chrome opens a save d
 
 The setting is stored locally and reused the next time the extension is opened.
 
+#### 2.0.0 custom rules and site adapters
+
+Version 2.0.0 adds a configurable scanning layer for websites whose image structure differs from a standard `<img>` page:
+
+- Open **Settings** → **Custom scan rules** to add include and exclude CSS selectors. Use one selector per line, for example `.gallery img` or `.avatar`.
+- Turn off **Scan CSS backgrounds**, **Scan video posters**, or **Scan iframes** when decorative or embedded content should not be collected.
+- Under **Site adapters & auto archive**, enter a host pattern such as `xiaohongshu.com` or `*.example.com`, then the site's image selector, such as `.note-container img`.
+- The optional attribute field accepts comma-separated attributes such as `data-original,data-full`, which is useful when a site stores the full-size URL outside `src`.
+- Select an existing local collection to automatically archive images from matching websites into that collection after scanning.
+- You can save multiple site adapters. Saving the same host and selector updates the existing rule.
+- **Use Chrome sync** synchronizes only scan rules, site adapters, scan limits, auto-scroll, ZIP layout, filename templates, and date-folder preference. Images, IndexedDB cache, collections, and history remain local to each browser profile.
+
+The scan flow is: load saved configuration → match adapters for the current host → collect default and custom sources → apply exclusions → inspect metadata → archive matching results. Invalid selectors are ignored so the normal page scan can continue.
+
 ### Permissions
 
 | Permission | Purpose |
@@ -556,7 +590,7 @@ The setting is stored locally and reused the next time the extension is opened.
 | `sidePanel` | Open the extension in Chrome's right side panel |
 | `<all_urls>` | Support image scanning across different websites and image hosts |
 
-Image filtering and list processing happen locally in the browser. The project does not include a backend server and does not intentionally upload webpage content, images, or user preferences.
+Image filtering and list processing happen locally in the browser. The project has no backend server and does not upload webpage content or images; only when the user explicitly enables Chrome Sync are scan rules and related preferences stored in Chrome's sync storage.
 
 ### Known limitations
 

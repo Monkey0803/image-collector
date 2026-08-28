@@ -48,8 +48,60 @@ const state = {
   librarySelected: new Set(), libraryFormat: 'all', libraryMinWidth: '', libraryMaxWidth: '', libraryMinHeight: '', libraryMaxHeight: '', libraryMinSize: '', libraryMaxSize: '', librarySort: 'updated', storageStats: null,
   libraryRefreshToken: 0,
   pageRenderLimit: 120,
-  libraryRenderLimit: 120
+  libraryRenderLimit: 120,
+  scanRules: { includeSelectors: '', excludeSelectors: '', scanCssBackground: true, scanVideoPosters: true, includeIframes: true },
+  siteAdapters: [],
+  syncSettings: false
 };
+
+const SYNC_SETTING_KEYS = ['scanRules', 'siteAdapters', 'scanLimit', 'autoScroll', 'zipLayout', 'filenameTemplate', 'dateFolder'];
+
+function normalizeTextList(value) {
+  return [...new Set(String(value || '').split(/[\n,]/).map((item) => item.trim()).filter(Boolean))].slice(0, 40);
+}
+
+function normalizeScanRules(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  return {
+    includeSelectors: normalizeTextList(source.includeSelectors).join('\n'),
+    excludeSelectors: normalizeTextList(source.excludeSelectors).join('\n'),
+    scanCssBackground: source.scanCssBackground !== false,
+    scanVideoPosters: source.scanVideoPosters !== false,
+    includeIframes: source.includeIframes !== false
+  };
+}
+
+function normalizeSiteAdapters(value) {
+  return (Array.isArray(value) ? value : []).map((item) => ({
+    id: String(item?.id || ('adapter-' + Date.now() + '-' + Math.random().toString(36).slice(2))),
+    hostPattern: String(item?.hostPattern || '').trim().toLowerCase().slice(0, 160),
+    selector: String(item?.selector || '').trim().slice(0, 300),
+    attributes: normalizeTextList(item?.attributes).slice(0, 20),
+    collectionId: String(item?.collectionId || '').trim(),
+    collectionName: String(item?.collectionName || '').trim().slice(0, 60)
+  })).filter((item) => item.hostPattern && item.selector).slice(0, 30);
+}
+
+function syncConfigurationPayload() {
+  return {
+    scanRules: state.scanRules,
+    siteAdapters: state.siteAdapters,
+    scanLimit: state.scanLimit,
+    autoScroll: state.autoScroll,
+    zipLayout: state.zipLayout,
+    filenameTemplate: state.filenameTemplate,
+    dateFolder: state.dateFolder
+  };
+}
+
+async function saveRuleConfiguration() {
+  const payload = { ...syncConfigurationPayload(), syncSettings: state.syncSettings };
+  await safeStorageSet(payload);
+    if (state.syncSettings && chrome.storage.sync?.set) {
+    try { await chrome.storage.sync.set(syncConfigurationPayload()); } catch { showToast(t('syncSaveFailed')); return false; }
+  }
+  return true;
+}
 
 let filterRenderFrame = null;
 let libraryRefreshTimer = null;
@@ -110,6 +162,7 @@ const els = {
   downloadHistory: $('#downloadHistory'), historyEmpty: $('#historyEmpty'),
   taskView: $('#taskView'), refreshTasks: $('#refreshTasks'), retryAllTasks: $('#retryAllTasks'), taskSummary: $('#taskSummary'), taskList: $('#taskList'), taskEmpty: $('#taskEmpty'), settingsView: $('#settingsView'), settingsViewButton: $('#settingsViewButton'), refreshStorage: $('#refreshStorage'), storageStats: $('#storageStats'), clearLibrary: $('#clearLibrary'), resetSettings: $('#resetSettings'),
   exportJson: $('#exportJson'), exportCsv: $('#exportCsv'),
+  includeSelectors: $('#includeSelectors'), excludeSelectors: $('#excludeSelectors'), scanCssBackground: $('#scanCssBackground'), scanVideoPosters: $('#scanVideoPosters'), includeIframes: $('#includeIframes'), saveScanRules: $('#saveScanRules'), adapterHost: $('#adapterHost'), adapterSelector: $('#adapterSelector'), adapterAttributes: $('#adapterAttributes'), adapterCollection: $('#adapterCollection'), saveSiteAdapter: $('#saveSiteAdapter'), clearSiteAdapter: $('#clearSiteAdapter'), siteAdapterList: $('#siteAdapterList'), syncSettings: $('#syncSettings'), saveSyncSettings: $('#saveSyncSettings'),
   formatTabs: [...document.querySelectorAll('[data-format]')],
   grid: $('#imageGrid'), empty: $('#emptyState'), loading: $('#loadingState'), loadingLabel: $('#loadingLabel'), error: $('#errorState'),
   loadMoreImages: $('#loadMoreImages'), loadMoreLibrary: $('#loadMoreLibrary'),
@@ -160,13 +213,22 @@ async function init() {
   bindEvents();
   applyLanguage();
 
-  const defaults = { filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, aspectRatio: 'all', zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false };
+  const defaults = { filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, aspectRatio: 'all', zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false, scanRules: normalizeScanRules(), siteAdapters: [], syncSettings: false };
   let saved = defaults;
   try {
     saved = (await withTimeout(() => chrome.storage.local.get(defaults), 1500, '读取扩展设置超时')) || defaults;
   } catch {
     // Settings are optional. Continue with defaults so the page scan remains usable.
   }
+  let synced = {};
+  if (saved.syncSettings && chrome.storage.sync?.get) {
+    try {
+      synced = await withTimeout(() => chrome.storage.sync.get(SYNC_SETTING_KEYS), 1200, '读取同步设置超时');
+    } catch {
+      synced = {};
+    }
+  }
+  const configuration = { ...saved, ...(synced || {}) };
   const userChangedLanguage = languageTouched;
   const savedFilters = saved.filters && typeof saved.filters === 'object' ? saved.filters : {};
   state.saveAs = typeof saved.saveAs === 'boolean' ? saved.saveAs : true;
@@ -174,14 +236,17 @@ async function init() {
   state.sort = ['page', 'width-desc', 'height-desc', 'area-desc', 'name-asc'].includes(saved.sort) ? saved.sort : 'page';
   state.originalOnly = Boolean(saved.originalOnly);
   state.aspectRatio = ['all', 'landscape', 'portrait', 'square'].includes(saved.aspectRatio) ? saved.aspectRatio : 'all';
-  state.zipLayout = ['flat', 'domain', 'format', 'domain-format'].includes(saved.zipLayout) ? saved.zipLayout : 'flat';
-  state.filenameTemplate = typeof saved.filenameTemplate === 'string' && saved.filenameTemplate.trim() ? saved.filenameTemplate : '{name}';
-  state.dateFolder = Boolean(saved.dateFolder);
+  state.zipLayout = ['flat', 'domain', 'format', 'domain-format'].includes(configuration.zipLayout) ? configuration.zipLayout : 'flat';
+  state.filenameTemplate = typeof configuration.filenameTemplate === 'string' && configuration.filenameTemplate.trim() ? configuration.filenameTemplate : '{name}';
+  state.dateFolder = Boolean(configuration.dateFolder);
   if (!userChangedLanguage) state.language = saved.language === 'en' || saved.language === 'zh' ? saved.language : detectLanguage();
   state.filterPresets = Array.isArray(saved.filterPresets) ? saved.filterPresets : [];
   state.selectionPresets = Array.isArray(saved.selectionPresets) ? saved.selectionPresets : [];
-  state.scanLimit = [0, 200, 500, 1000].includes(Number(saved.scanLimit)) ? Number(saved.scanLimit) : 500;
-  state.autoScroll = Boolean(saved.autoScroll);
+  state.scanLimit = [0, 200, 500, 1000].includes(Number(configuration.scanLimit)) ? Number(configuration.scanLimit) : 500;
+  state.autoScroll = Boolean(configuration.autoScroll);
+  state.scanRules = normalizeScanRules(configuration.scanRules);
+  state.siteAdapters = normalizeSiteAdapters(configuration.siteAdapters);
+  state.syncSettings = Boolean(saved.syncSettings);
   state.filterValues = {
     width: { min: normalizeLimit(savedFilters.minWidth), max: normalizeLimit(savedFilters.maxWidth) },
     height: { min: normalizeLimit(savedFilters.minHeight), max: normalizeLimit(savedFilters.maxHeight) },
@@ -206,7 +271,14 @@ async function init() {
   if (els.dateFolder) els.dateFolder.checked = state.dateFolder;
   if (els.scanLimit) els.scanLimit.value = String(state.scanLimit);
   if (els.autoScroll) els.autoScroll.checked = state.autoScroll;
+  if (els.includeSelectors) els.includeSelectors.value = state.scanRules.includeSelectors;
+  if (els.excludeSelectors) els.excludeSelectors.value = state.scanRules.excludeSelectors;
+  if (els.scanCssBackground) els.scanCssBackground.checked = state.scanRules.scanCssBackground;
+  if (els.scanVideoPosters) els.scanVideoPosters.checked = state.scanRules.scanVideoPosters;
+  if (els.includeIframes) els.includeIframes.checked = state.scanRules.includeIframes;
+  if (els.syncSettings) els.syncSettings.checked = state.syncSettings;
   renderPresets();
+  renderSiteAdapters();
   applyLanguage();
   interactionReady = true;
   // Library data is secondary to the current-page scan. Do not block the
@@ -286,8 +358,22 @@ function bindEvents() {
   on(els.refreshStorage, 'click', loadStorageStats);
   on(els.clearLibrary, 'click', clearLocalLibrary);
   on(els.resetSettings, 'click', resetExtensionSettings);
-  on(els.scanLimit, 'change', async () => { state.scanLimit = Number(els.scanLimit.value) || 0; await safeStorageSet({ scanLimit: state.scanLimit }); });
-  on(els.autoScroll, 'change', async () => { state.autoScroll = els.autoScroll.checked; await safeStorageSet({ autoScroll: state.autoScroll }); });
+  on(els.scanLimit, 'change', async () => { state.scanLimit = Number(els.scanLimit.value) || 0; await saveRuleConfiguration(); });
+  on(els.autoScroll, 'change', async () => { state.autoScroll = els.autoScroll.checked; await saveRuleConfiguration(); });
+  on(els.saveScanRules, 'click', saveScanRules);
+  on(els.saveSiteAdapter, 'click', saveSiteAdapter);
+  on(els.clearSiteAdapter, 'click', clearSiteAdapterForm);
+  on(els.syncSettings, 'change', async () => {
+    state.syncSettings = Boolean(els.syncSettings.checked);
+    const saved = await saveRuleConfiguration();
+    if (!saved) {
+      state.syncSettings = false;
+      if (els.syncSettings) els.syncSettings.checked = false;
+      return;
+    }
+    showToast(state.syncSettings ? t('syncEnabled') : t('syncDisabled'));
+  });
+  on(els.saveSyncSettings, 'click', async () => { if (await saveRuleConfiguration()) showToast(t('syncSaved')); });
   on(els.newCollection, 'click', createNewCollection);
   on(els.exportLibrary, 'click', exportLibraryData);
   on(els.importLibrary, 'click', () => els.importLibraryFile?.click());
@@ -397,16 +483,16 @@ function bindEvents() {
   });
   on(els.zipLayout, 'change', () => {
     state.zipLayout = els.zipLayout.value;
-    chrome.storage.local.set({ zipLayout: state.zipLayout });
+    saveRuleConfiguration();
   });
   on(els.filenameTemplate, 'change', () => {
     state.filenameTemplate = els.filenameTemplate.value.trim() || '{name}';
     els.filenameTemplate.value = state.filenameTemplate;
-    chrome.storage.local.set({ filenameTemplate: state.filenameTemplate });
+    saveRuleConfiguration();
   });
   on(els.dateFolder, 'change', () => {
     state.dateFolder = els.dateFolder.checked;
-    chrome.storage.local.set({ dateFolder: state.dateFolder });
+    saveRuleConfiguration();
   });
   els.formatTabs.forEach((tab) => on(tab, 'click', () => {
     state.format = tab.dataset.format || 'all';
@@ -573,6 +659,74 @@ function renderCollectionOptions() {
     const option = document.createElement('option'); option.value = collection.id; option.textContent = collection.name; els.libraryCollection.append(option);
   });
   els.libraryCollection.value = [...els.libraryCollection.options].some((option) => option.value === current) ? current : '';
+  renderAdapterCollectionOptions();
+}
+
+function renderAdapterCollectionOptions() {
+  if (!els.adapterCollection) return;
+  const current = els.adapterCollection.value;
+  els.adapterCollection.replaceChildren(new Option(t('noAutoArchive'), ''));
+  state.collections.forEach((collection) => els.adapterCollection.append(new Option(collection.name, collection.id)));
+  els.adapterCollection.value = [...els.adapterCollection.options].some((option) => option.value === current) ? current : '';
+}
+
+function clearSiteAdapterForm() {
+  [els.adapterHost, els.adapterSelector, els.adapterAttributes].forEach((input) => { if (input) input.value = ''; });
+  if (els.adapterCollection) els.adapterCollection.value = '';
+}
+
+function renderSiteAdapters() {
+  if (!els.siteAdapterList) return;
+  renderAdapterCollectionOptions();
+  els.siteAdapterList.replaceChildren();
+  if (!state.siteAdapters.length) {
+    const empty = document.createElement('div'); empty.className = 'site-adapter-empty'; empty.textContent = t('noSiteAdapters'); els.siteAdapterList.append(empty); return;
+  }
+  state.siteAdapters.forEach((adapter) => {
+    const item = document.createElement('div'); item.className = 'site-adapter-item';
+    const copy = document.createElement('div'); copy.className = 'site-adapter-copy';
+    const title = document.createElement('strong'); title.textContent = adapter.hostPattern;
+    const collection = state.collections.find((entry) => entry.id === adapter.collectionId);
+    const collectionLabel = collection?.name || adapter.collectionName;
+    const detail = document.createElement('span'); detail.textContent = adapter.selector + (collectionLabel ? ' · ' + t('autoArchive') + ': ' + collectionLabel : '');
+    copy.append(title, detail);
+    const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.title = t('removeSiteAdapter'); remove.setAttribute('aria-label', t('removeSiteAdapter'));
+    remove.addEventListener('click', async () => {
+      state.siteAdapters = state.siteAdapters.filter((entry) => entry.id !== adapter.id);
+      await saveRuleConfiguration(); renderSiteAdapters(); showToast(t('siteAdapterRemoved'));
+    });
+    item.append(copy, remove); els.siteAdapterList.append(item);
+  });
+}
+
+async function saveScanRules() {
+  state.scanRules = normalizeScanRules({
+    includeSelectors: els.includeSelectors?.value,
+    excludeSelectors: els.excludeSelectors?.value,
+    scanCssBackground: els.scanCssBackground?.checked,
+    scanVideoPosters: els.scanVideoPosters?.checked,
+    includeIframes: els.includeIframes?.checked
+  });
+  if (await saveRuleConfiguration()) { showToast(t('scanRulesSaved')); await scanPage(); }
+}
+
+async function saveSiteAdapter() {
+  const hostPattern = String(els.adapterHost?.value || '').trim().toLowerCase();
+  const selector = String(els.adapterSelector?.value || '').trim();
+  if (!hostPattern || !selector) { showToast(t('siteAdapterRequired')); return; }
+  const existingIndex = state.siteAdapters.findIndex((entry) => entry.hostPattern === hostPattern.slice(0, 160) && entry.selector === selector.slice(0, 300));
+  if (existingIndex < 0 && state.siteAdapters.length >= 30) { showToast(t('siteAdapterLimit')); return; }
+  const collection = state.collections.find((entry) => entry.id === String(els.adapterCollection?.value || ''));
+  const adapter = {
+    id: existingIndex >= 0 ? state.siteAdapters[existingIndex].id : 'adapter-' + Date.now() + '-' + Math.random().toString(36).slice(2),
+    hostPattern: hostPattern.slice(0, 160), selector: selector.slice(0, 300),
+    attributes: normalizeTextList(els.adapterAttributes?.value).slice(0, 20),
+    collectionId: String(els.adapterCollection?.value || ''), collectionName: collection?.name || ''
+  };
+  const nextAdapters = [...state.siteAdapters];
+  if (existingIndex >= 0) nextAdapters[existingIndex] = adapter; else nextAdapters.push(adapter);
+  state.siteAdapters = normalizeSiteAdapters(nextAdapters);
+  if (await saveRuleConfiguration()) { clearSiteAdapterForm(); renderSiteAdapters(); showToast(t('siteAdapterSaved')); await scanPage(); }
 }
 
 function renderSmartCollectionOptions(records = [...state.libraryRecords.values()]) {
@@ -641,6 +795,7 @@ async function persistScanRecord(scanId) {
       pageTitle: els.pageTitle.textContent,
       duplicateCount: state.duplicateCount
     });
+    await archiveImagesBySiteAdapters(state.images, els.pageUrl.textContent);
     if (scanId === state.scanId) await refreshLibraryData();
   } catch {
     // Scanning remains available when IndexedDB is blocked or unavailable.
@@ -1168,7 +1323,7 @@ async function scanPage(options = {}) {
     els.pageIcon.textContent = getDomainLetter(tab.url);
     if (!quiet) setScanPhase('discoveringImages');
     const results = await withTimeout(
-      () => chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: collectPageImages, args: [{ limit: state.scanLimit, autoScroll: state.autoScroll, language: state.language, fast: !quiet, timeLimitMs: quiet ? 15000 : 5000 }] }),
+      () => chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: collectPageImages, args: [{ limit: state.scanLimit, autoScroll: state.autoScroll, language: state.language, fast: !quiet, timeLimitMs: quiet ? 15000 : 5000, scanRules: state.scanRules, siteAdapters: state.siteAdapters, pageUrl: tab.url || '' }] }),
       quiet ? 30000 : 15000,
       t('scanTimeout')
     );
@@ -1214,7 +1369,7 @@ async function scanPage(options = {}) {
     updateScanStatus();
     updateRangeLimits();
     applyFilters();
-    if (!quiet) persistScanRecord(scanId);
+    if (!quiet) await persistScanRecord(scanId);
     if (!quiet) setScanPhase('readingDimensions');
     await loadImageMetadata(scanId);
     if (newImageCount > 0) showToast(t('newImagesFound', { count: newImageCount }));
@@ -1252,6 +1407,54 @@ function scheduleDynamicRescan() {
   }, delay);
 }
 
+function siteHostMatches(pattern, pageUrl) {
+  let hostname = '';
+  try { hostname = new URL(pageUrl).hostname.toLowerCase(); } catch { return false; }
+  const normalized = String(pattern || '').toLowerCase().replace(/^https?:\/\//, '').split('/')[0];
+  if (!normalized) return false;
+  if (normalized.startsWith('*.')) return hostname === normalized.slice(2) || hostname.endsWith('.' + normalized.slice(2));
+  return hostname === normalized || hostname.endsWith('.' + normalized);
+}
+
+async function archiveImagesBySiteAdapters(images, pageUrl) {
+  const matchedAdapters = state.siteAdapters.filter((adapter) => siteHostMatches(adapter.hostPattern, pageUrl) && (adapter.collectionId || adapter.collectionName));
+  if (!matchedAdapters.length || !images.length) return;
+  let availableCollections = state.collections;
+  if (!availableCollections.length) {
+    try { availableCollections = await ImageCollectorDB.listCollections(); } catch { availableCollections = []; }
+  }
+  const collectionIds = [];
+  for (const adapter of matchedAdapters) {
+    if (adapter.collectionId && availableCollections.some((collection) => collection.id === adapter.collectionId)) {
+      collectionIds.push(adapter.collectionId);
+      continue;
+    }
+    if (!adapter.collectionName) continue;
+    try {
+      const collections = availableCollections;
+      const existing = collections.find((collection) => collection.name.toLowerCase() === adapter.collectionName.toLowerCase());
+      const collection = existing || await ImageCollectorDB.createCollection(adapter.collectionName);
+      if (collection?.id) {
+        adapter.collectionId = collection.id;
+        availableCollections = [...availableCollections.filter((entry) => entry.id !== collection.id), collection];
+        collectionIds.push(collection.id);
+      }
+    } catch {
+      // A missing local collection should not interrupt scanning.
+    }
+  }
+  const adapterIdSet = new Set(matchedAdapters.map((adapter) => adapter.id));
+  const urls = images.filter((image) => (image.adapterIds || []).some((id) => adapterIdSet.has(id))).map((image) => image.url).filter(Boolean);
+  if (!collectionIds.length || !urls.length) return;
+  state.collections = availableCollections;
+  try {
+    await ImageCollectorDB.bulkUpdateImages(urls, (record) => ({ collectionIds: [...new Set([...(record.collectionIds || []), ...collectionIds])] }));
+    if (state.syncSettings) await saveRuleConfiguration();
+  } catch {
+    // Auto-archiving is an enhancement and must never make scanning fail.
+  }
+}
+
 async function loadImageMetadata(scanId) {
   const images = state.images.slice(0, 300);
   if (!images.length) return;
@@ -1286,6 +1489,36 @@ async function collectPageImages(options = {}) {
   const found = [];
   const seenUrls = new Map();
   const fingerprintCache = new WeakMap();
+  const scanRules = {
+    includeSelectors: String(options.scanRules?.includeSelectors || '').split(/[\n,]/).map((item) => item.trim()).filter(Boolean),
+    excludeSelectors: String(options.scanRules?.excludeSelectors || '').split(/[\n,]/).map((item) => item.trim()).filter(Boolean),
+    scanCssBackground: options.scanRules?.scanCssBackground !== false,
+    scanVideoPosters: options.scanRules?.scanVideoPosters !== false,
+    includeIframes: options.scanRules?.includeIframes !== false
+  };
+  const validSelector = (selector) => {
+    try { document.querySelector(selector); return true; } catch { return false; }
+  };
+  scanRules.includeSelectors = scanRules.includeSelectors.filter(validSelector);
+  scanRules.excludeSelectors = scanRules.excludeSelectors.filter(validSelector);
+  const pageHost = String(location.hostname || '').toLowerCase();
+  const hostMatches = (pattern) => {
+    const normalized = String(pattern || '').toLowerCase().replace(/^https?:\/\//, '').split('/')[0];
+    if (!normalized) return false;
+    if (normalized.startsWith('*.')) return pageHost === normalized.slice(2) || pageHost.endsWith('.' + normalized.slice(2));
+    return pageHost === normalized || pageHost.endsWith('.' + normalized);
+  };
+  const activeAdapters = (Array.isArray(options.siteAdapters) ? options.siteAdapters : []).filter((adapter) => hostMatches(adapter.hostPattern) && validSelector(adapter.selector));
+  const adapterSelectors = activeAdapters.map((adapter) => adapter.selector).filter(Boolean);
+  const includeSelectors = [...new Set([...scanRules.includeSelectors, ...adapterSelectors])];
+  const matchesAny = (element, selectors) => selectors.some((selector) => {
+    try { return Boolean(element?.matches?.(selector) || element?.closest?.(selector)); } catch { return false; }
+  });
+  const adapterIdsFor = (element) => activeAdapters.filter((adapter) => {
+    try { return Boolean(element?.matches?.(adapter.selector) || element?.closest?.(adapter.selector)); } catch { return false; }
+  }).map((adapter) => adapter.id);
+  const excluded = (element) => matchesAny(element, scanRules.excludeSelectors);
+  if (!scanRules.includeIframes && window.self !== window.top) return { images: [], duplicateCount: 0, partial: false };
   const maxCssElements = 2500;
   const maxFingerprints = 400;
   const fast = options.fast !== false;
@@ -1379,10 +1612,12 @@ async function collectPageImages(options = {}) {
       original: Boolean(options.original),
       quality: Number(options.quality || 0),
       widthHint: Number(options.widthHint || 0),
+      adapterIds: [...new Set(Array.isArray(options.adapterIds) ? options.adapterIds : [])],
       element: options.element || null
     };
     const existing = seenUrls.get(url);
     if (existing) {
+      existing.adapterIds = [...new Set([...(existing.adapterIds || []), ...(entry.adapterIds || [])])];
       if (entry.quality > existing.quality) Object.assign(existing, entry);
       return;
     }
@@ -1461,8 +1696,36 @@ async function collectPageImages(options = {}) {
     }
   };
 
+  const collectCustomElement = (element, source = 'CUSTOM', attributes = []) => {
+    if (!element || excluded(element)) return;
+    const tagName = String(element.tagName || '').toLowerCase();
+    if (tagName === 'img') {
+      const chosen = chooseImageSource(element);
+      if (chosen) add(chosen.url, element.naturalWidth || element.width, element.naturalHeight || element.height, source, element.alt || '', {
+        displayUrl: normalizeUrl(element.currentSrc || element.src || element.getAttribute('data-src')) || chosen.url,
+        original: chosen.original, quality: chosen.quality, widthHint: chosen.widthHint, adapterIds: adapterIdsFor(element), element
+      });
+    }
+    const values = [...new Set(['src', 'href', 'poster', 'srcset', 'data-srcset', 'data-src', 'data-original', 'data-full', 'data-large', 'data-image-url', ...attributes])];
+    values.forEach((attribute) => {
+      const value = attribute === 'currentSrc' ? element.currentSrc : element.getAttribute?.(attribute);
+      if (!value) return;
+      if (attribute.toLowerCase().includes('srcset')) {
+        parseSrcset(value).forEach((candidate) => add(candidate.rawUrl, element.naturalWidth || element.width, element.naturalHeight || element.height, source, element.alt || '', { widthHint: candidate.widthHint, adapterIds: adapterIdsFor(element), element }));
+      } else if (imageLikeUrl(normalizeUrl(value)) || attributes.includes(attribute) || tagName === 'img' || tagName === 'video') {
+        if (tagName === 'video' && attribute === 'poster' && !scanRules.scanVideoPosters) return;
+        add(value, element.naturalWidth || element.width, element.naturalHeight || element.height, source, element.alt || '', { adapterIds: adapterIdsFor(element), element });
+      }
+    });
+  };
+  if (includeSelectors.length) {
+    includeSelectors.forEach((selector) => {
+      try { document.querySelectorAll(selector).forEach((element) => collectCustomElement(element, 'RULE', activeAdapters.find((adapter) => adapter.selector === selector)?.attributes || [])); } catch { /* Ignore malformed user selectors. */ }
+    });
+  }
   for (const image of document.images) {
     if (expired()) break;
+    if (excluded(image) || (includeSelectors.length && !matchesAny(image, includeSelectors))) continue;
     const chosen = chooseImageSource(image);
     if (!chosen) continue;
     const displayUrl = normalizeUrl(image.currentSrc || image.src || image.getAttribute('data-src')) || chosen.url;
@@ -1471,35 +1734,39 @@ async function collectPageImages(options = {}) {
       original: chosen.original || chosen.url !== displayUrl,
       quality: chosen.quality,
       widthHint: chosen.widthHint,
+      adapterIds: adapterIdsFor(image),
       element: image
     });
   }
-  for (const video of document.querySelectorAll('video[poster]')) {
+  for (const video of scanRules.scanVideoPosters ? document.querySelectorAll('video[poster]') : []) {
     if (expired()) break;
+    if (excluded(video) || (includeSelectors.length && !matchesAny(video, includeSelectors))) continue;
     const rect = video.getBoundingClientRect();
-    add(video.getAttribute('poster'), video.videoWidth || rect.width, video.videoHeight || rect.height, 'VIDEO', options.language === 'en' ? 'Video poster' : '视频封面', { quality: 5500 });
+    add(video.getAttribute('poster'), video.videoWidth || rect.width, video.videoHeight || rect.height, 'VIDEO', options.language === 'en' ? 'Video poster' : '视频封面', { quality: 5500, adapterIds: adapterIdsFor(video) });
   }
   for (const object of document.querySelectorAll('object[data]')) {
     if (expired()) break;
+    if (excluded(object) || (includeSelectors.length && !matchesAny(object, includeSelectors))) continue;
     const url = normalizeUrl(object.getAttribute('data'));
     if (!url || !imageLikeUrl(url)) continue;
     const rect = object.getBoundingClientRect();
-    add(url, rect.width, rect.height, 'OBJECT', options.language === 'en' ? 'Embedded image' : '嵌入图片', { quality: 4000 });
+    add(url, rect.width, rect.height, 'OBJECT', options.language === 'en' ? 'Embedded image' : '嵌入图片', { quality: 4000, adapterIds: adapterIdsFor(object) });
   }
-  if (!fast) {
+  if (scanRules.scanCssBackground) {
     const allElements = [...document.querySelectorAll('*')];
     const cssElements = allElements.length > maxCssElements
       ? allElements.filter((element) => element.hasAttribute('style') || element.id || element.className).slice(0, maxCssElements)
       : allElements;
     for (const element of cssElements) {
       if (expired()) break;
+      if (excluded(element) || (includeSelectors.length && !matchesAny(element, includeSelectors))) continue;
       const background = getComputedStyle(element).backgroundImage || '';
       const matches = [...background.matchAll(/url\((?:"|')?(.*?)(?:"|')?\)/g)];
       if (!matches.length) continue;
       const rect = element.getBoundingClientRect();
       for (const match of matches) {
         if (expired()) break;
-        add(match[1], rect?.width, rect?.height, 'CSS', options.language === 'en' ? 'Background image' : '背景图片', { quality: 2000 });
+        add(match[1], rect?.width, rect?.height, 'CSS', options.language === 'en' ? 'Background image' : '背景图片', { quality: 2000, adapterIds: adapterIdsFor(element) });
       }
     }
   }
@@ -2138,6 +2405,12 @@ Object.assign(TRANSLATIONS.zh, {
 Object.assign(TRANSLATIONS.en, {
   smartCollections: 'Smart collections', smartDimensions: 'By dimensions', smartFormats: 'By format', smartSites: 'By website', smartDates: 'By date', smartLarge: 'Large images (≥ 1920×1080)', smartToday: 'Added today', smartWeek: 'Last 7 days', smartMonth: 'Last 31 days', smartOlder: 'Older assets', loadMore: 'Load more ({count})', fileSize: 'File size', aspectRange: 'Aspect ratio range', all: 'All', ratioLandscape: 'Landscape', ratioPortrait: 'Portrait', ratioSquare: 'Square', sizeMin: 'Minimum file size', sizeMax: 'Maximum file size'
 });
+Object.assign(TRANSLATIONS.zh, {
+  noAutoArchive: '不自动归档', noSiteAdapters: '还没有站点规则', autoArchive: '自动归档', removeSiteAdapter: '删除站点规则', siteAdapterRemoved: '站点规则已删除', siteAdapterSaved: '站点规则已保存', siteAdapterRequired: '请填写域名和图片选择器', siteAdapterLimit: '最多保存 30 条站点规则', scanRulesSaved: '扫描规则已保存', syncEnabled: '设置同步已开启', syncDisabled: '设置同步已关闭', syncSaved: '同步设置已保存', syncSaveFailed: '同步设置保存失败', customScanRules: '自定义扫描规则', appliesToSite: '按当前网站生效', includeSelectors: '包含选择器', excludeSelectors: '排除选择器', includeSelectorsHint: '每行一个 CSS 选择器；为空时使用默认扫描器。', excludeSelectorsHint: '匹配到的元素及其子元素不会加入结果。', scanCssBackground: '扫描 CSS 背景图', scanVideoPosters: '扫描视频封面', includeIframes: '扫描 iframe', saveScanRules: '保存扫描规则', siteAdapters: '站点适配与自动归档', matchesByHost: '按域名匹配', hostPattern: '域名匹配', imageSelector: '图片选择器', extraAttributes: '额外图片属性', archiveCollection: '自动归档到集合', saveSiteAdapter: '保存站点规则', clearForm: '清空表单', syncTitle: '可选设置同步', noImageSync: '不上传图片', useChromeSync: '使用 Chrome 同步设置', syncDescription: '仅同步扫描规则、站点适配器和偏好，不同步图片、缓存或历史记录。', saveSyncSettings: '保存同步设置'
+});
+Object.assign(TRANSLATIONS.en, {
+  noAutoArchive: 'No auto archive', noSiteAdapters: 'No site rules yet', autoArchive: 'Auto archive', removeSiteAdapter: 'Remove site rule', siteAdapterRemoved: 'Site rule removed', siteAdapterSaved: 'Site rule saved', siteAdapterRequired: 'Enter a host pattern and image selector', siteAdapterLimit: 'Up to 30 site rules can be saved', scanRulesSaved: 'Scan rules saved', syncEnabled: 'Settings sync enabled', syncDisabled: 'Settings sync disabled', syncSaved: 'Sync settings saved', syncSaveFailed: 'Could not save sync settings', customScanRules: 'Custom scan rules', appliesToSite: 'Applied to the current site', includeSelectors: 'Include selectors', excludeSelectors: 'Exclude selectors', includeSelectorsHint: 'One CSS selector per line; leave empty to use the default scanner.', excludeSelectorsHint: 'Matching elements and their descendants are excluded.', scanCssBackground: 'Scan CSS backgrounds', scanVideoPosters: 'Scan video posters', includeIframes: 'Scan iframes', saveScanRules: 'Save scan rules', siteAdapters: 'Site adapters & auto archive', matchesByHost: 'Matched by host', hostPattern: 'Host pattern', imageSelector: 'Image selector', extraAttributes: 'Extra image attributes', archiveCollection: 'Auto archive to collection', saveSiteAdapter: 'Save site rule', clearForm: 'Clear form', syncTitle: 'Optional settings sync', noImageSync: 'No images uploaded', useChromeSync: 'Use Chrome sync', syncDescription: 'Only scan rules, site adapters, and preferences are synced. Images, cache, and history stay local.', saveSyncSettings: 'Save sync settings'
+});
 
 function t(key, values = {}) {
   const raw = TRANSLATIONS[state.language]?.[key] ?? TRANSLATIONS.zh[key] ?? key;
@@ -2278,6 +2551,31 @@ function applyLanguage() {
   const initialProgressDetail = els.progressDetail; if (initialProgressDetail && (!initialProgressDetail.textContent || initialProgressDetail.textContent === '等待任务开始')) initialProgressDetail.textContent = t('waitingTask');
   renderCollectionOptions();
   renderSmartCollectionOptions();
+  renderSiteAdapters();
+  const settingsCards = [...document.querySelectorAll('#settingsView .settings-card')];
+  const cardHeadings = settingsCards.map((card) => card.querySelector('h3'));
+  const cardHints = settingsCards.map((card) => card.querySelector('.settings-card-hint'));
+  if (cardHeadings[0]) cardHeadings[0].textContent = t('customScanRules');
+  if (cardHeadings[1]) cardHeadings[1].textContent = t('siteAdapters');
+  if (cardHeadings[2]) cardHeadings[2].textContent = t('syncTitle');
+  if (cardHints[0]) cardHints[0].textContent = t('appliesToSite');
+  if (cardHints[1]) cardHints[1].textContent = t('matchesByHost');
+  if (cardHints[2]) cardHints[2].textContent = t('noImageSync');
+  [t('customScanRules'), t('siteAdapters'), t('syncTitle')].forEach((label, index) => { if (settingsCards[index]) settingsCards[index].setAttribute('aria-label', label); });
+  const fieldLabels = [...document.querySelectorAll('#settingsView .settings-field > span')];
+  [t('includeSelectors'), t('excludeSelectors'), t('hostPattern'), t('imageSelector'), t('extraAttributes'), t('archiveCollection')].forEach((label, index) => { if (fieldLabels[index]) fieldLabels[index].textContent = label; });
+  const fieldHints = [...document.querySelectorAll('#settingsView .settings-field small')];
+  [t('includeSelectorsHint'), t('excludeSelectorsHint')].forEach((hint, index) => { if (fieldHints[index]) fieldHints[index].textContent = hint; });
+  const scanToggles = [...document.querySelectorAll('#settingsView .settings-toggle-grid label > span')];
+  [t('scanCssBackground'), t('scanVideoPosters'), t('includeIframes')].forEach((label, index) => { if (scanToggles[index]) scanToggles[index].textContent = label; });
+  setText(els.saveScanRules, t('saveScanRules')); setText(els.saveSiteAdapter, t('saveSiteAdapter')); setText(els.clearSiteAdapter, t('clearForm')); setText(els.saveSyncSettings, t('saveSyncSettings'));
+  const syncLabel = document.querySelector('#syncSettings + span strong'); if (syncLabel) syncLabel.textContent = t('useChromeSync');
+  const syncDescription = document.querySelector('#syncSettings + span small'); if (syncDescription) syncDescription.textContent = t('syncDescription');
+  if (els.includeSelectors) els.includeSelectors.placeholder = state.language === 'en' ? '.gallery img, picture source' : '例如：.gallery img, picture source';
+  if (els.excludeSelectors) els.excludeSelectors.placeholder = state.language === 'en' ? '.avatar, .icon' : '例如：.avatar, .icon';
+  if (els.adapterHost) els.adapterHost.placeholder = state.language === 'en' ? '*.example.com or example.com' : '例如：xiaohongshu.com 或 *.example.com';
+  if (els.adapterSelector) els.adapterSelector.placeholder = state.language === 'en' ? '.note-container img' : '例如：.note-container img';
+  if (els.adapterAttributes) els.adapterAttributes.placeholder = state.language === 'en' ? 'data-original,data-full' : '例如：data-original,data-full';
   updateSliderUI('width'); updateSliderUI('height');
   els.widthValue?.setAttribute('title', `${t('widthMin')} / ${t('widthMax')}`);
   els.heightValue?.setAttribute('title', `${t('heightMin')} / ${t('heightMax')}`);
