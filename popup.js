@@ -26,8 +26,10 @@ const state = {
   dynamicScanTimer: null,
   filterValues: {
     width: { min: null, max: null },
-    height: { min: null, max: null }
+    height: { min: null, max: null },
+    size: { min: null, max: null }
   },
+  aspectRange: { min: 0.25, max: 5 },
   toastTimer: null,
   downloadJobId: null,
   retryImages: [],
@@ -37,13 +39,16 @@ const state = {
   filterPresets: [],
   selectionPresets: [],
   libraryCollection: '',
+  librarySmartCollection: '',
   collections: [],
   preview: null,
   previewZoom: 1,
   previewObjectUrl: '',
   taskRecords: [],
   librarySelected: new Set(), libraryFormat: 'all', libraryMinWidth: '', libraryMaxWidth: '', libraryMinHeight: '', libraryMaxHeight: '', libraryMinSize: '', libraryMaxSize: '', librarySort: 'updated', storageStats: null,
-  libraryRefreshToken: 0
+  libraryRefreshToken: 0,
+  pageRenderLimit: 120,
+  libraryRenderLimit: 120
 };
 
 let filterRenderFrame = null;
@@ -92,18 +97,22 @@ const els = {
   widthValue: $('#widthValue'), heightValue: $('#heightValue'), widthTrack: $('#widthTrack'), heightTrack: $('#heightTrack'),
   widthEditor: $('#widthEditor'), heightEditor: $('#heightEditor'),
   widthMinValue: $('#widthMinValue'), widthMaxValue: $('#widthMaxValue'), heightMinValue: $('#heightMinValue'), heightMaxValue: $('#heightMaxValue'),
+  sizeValue: $('#sizeValue'), sizeTrack: $('#sizeTrack'), minSize: $('#minSize'), maxSize: $('#maxSize'), sizeEditor: $('#sizeEditor'), sizeMinValue: $('#sizeMinValue'), sizeMaxValue: $('#sizeMaxValue'),
+  aspectVisualTabs: [...document.querySelectorAll('.aspect-visual-tab')], minAspect: $('#minAspect'), maxAspect: $('#maxAspect'), aspectTrack: $('#aspectTrack'), aspectRangeValue: $('#aspectRangeValue'),
   clearFilters: $('#clearFilters'), selectAll: $('#selectAll'), resultCount: $('#resultCount'),
   selectedSummary: $('#selectedSummary'), searchInput: $('#searchInput'), sortSelect: $('#sortSelect'),
   originalOnly: $('#originalOnly'), aspectRatio: $('#aspectRatio'), zipLayout: $('#zipLayout'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'),
   pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'), taskViewButton: $('#taskViewButton'), settingsViewButton: $('#settingsViewButton'),
-  libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryScope: $('#libraryScope'),
+  libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryScope: $('#libraryScope'), librarySmartCollection: $('#librarySmartCollection'),
   librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), exportLibraryResultsJson: $('#exportLibraryResultsJson'), exportLibraryResultsCsv: $('#exportLibraryResultsCsv'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'), libraryBatchToolbar: $('#libraryBatchToolbar'), selectAllLibrary: $('#selectAllLibrary'), librarySelectedSummary: $('#librarySelectedSummary'), bulkFavorite: $('#bulkFavorite'), bulkTag: $('#bulkTag'), bulkCollection: $('#bulkCollection'), bulkDelete: $('#bulkDelete'), libraryDownloadSelected: $('#libraryDownloadSelected'), libraryZipSelected: $('#libraryZipSelected'), libraryFormat: $('#libraryFormat'), libraryMinWidth: $('#libraryMinWidth'), libraryMaxWidth: $('#libraryMaxWidth'), libraryMinHeight: $('#libraryMinHeight'), libraryMaxHeight: $('#libraryMaxHeight'), libraryMinSize: $('#libraryMinSize'), libraryMaxSize: $('#libraryMaxSize'), librarySort: $('#librarySort'),
+  libraryMinSizeRange: $('#libraryMinSizeRange'), libraryMaxSizeRange: $('#libraryMaxSizeRange'), librarySizeTrack: $('#librarySizeTrack'), librarySizeRangeValue: $('#librarySizeRangeValue'), libraryMinAspectRange: $('#libraryMinAspectRange'), libraryMaxAspectRange: $('#libraryMaxAspectRange'), libraryAspectTrack: $('#libraryAspectTrack'), libraryAspectRangeValue: $('#libraryAspectRangeValue'),
   historyView: $('#historyView'), clearHistory: $('#clearHistory'), refreshHistory: $('#refreshHistory'), scanHistory: $('#scanHistory'),
   downloadHistory: $('#downloadHistory'), historyEmpty: $('#historyEmpty'),
   taskView: $('#taskView'), refreshTasks: $('#refreshTasks'), retryAllTasks: $('#retryAllTasks'), taskSummary: $('#taskSummary'), taskList: $('#taskList'), taskEmpty: $('#taskEmpty'), settingsView: $('#settingsView'), settingsViewButton: $('#settingsViewButton'), refreshStorage: $('#refreshStorage'), storageStats: $('#storageStats'), clearLibrary: $('#clearLibrary'), resetSettings: $('#resetSettings'),
   exportJson: $('#exportJson'), exportCsv: $('#exportCsv'),
   formatTabs: [...document.querySelectorAll('[data-format]')],
   grid: $('#imageGrid'), empty: $('#emptyState'), loading: $('#loadingState'), loadingLabel: $('#loadingLabel'), error: $('#errorState'),
+  loadMoreImages: $('#loadMoreImages'), loadMoreLibrary: $('#loadMoreLibrary'),
   saveAs: $('#saveAs'), download: $('#downloadButton'), zip: $('#zipButton'), selectedCount: $('#selectedCount'),
   downloadProgress: $('#downloadProgress'), progressLabel: $('#progressLabel'), progressValue: $('#progressValue'),
   progressBar: $('#progressBar'), progressDetail: $('#progressDetail'), cancelButton: $('#cancelButton'), retryButton: $('#retryButton'),
@@ -175,8 +184,14 @@ async function init() {
   state.autoScroll = Boolean(saved.autoScroll);
   state.filterValues = {
     width: { min: normalizeLimit(savedFilters.minWidth), max: normalizeLimit(savedFilters.maxWidth) },
-    height: { min: normalizeLimit(savedFilters.minHeight), max: normalizeLimit(savedFilters.maxHeight) }
+    height: { min: normalizeLimit(savedFilters.minHeight), max: normalizeLimit(savedFilters.maxHeight) },
+    size: { min: normalizeLimit(savedFilters.minSize), max: normalizeLimit(savedFilters.maxSize) }
   };
+  state.aspectRange = {
+    min: Math.max(0.25, Math.min(5, Number(savedFilters.minAspect) || 0.25)),
+    max: Math.max(0.25, Math.min(5, Number(savedFilters.maxAspect) || 5))
+  };
+  if (state.aspectRange.min > state.aspectRange.max) state.aspectRange.max = state.aspectRange.min;
   for (const axis of ['width', 'height']) {
     const limits = state.filterValues[axis];
     if (limits.min !== null && limits.max !== null && limits.min > limits.max) limits.max = limits.min;
@@ -227,6 +242,10 @@ function bindEvents() {
     state.libraryScope = els.libraryScope.value;
     refreshLibraryData();
   });
+  on(els.librarySmartCollection, 'change', () => {
+    state.librarySmartCollection = els.librarySmartCollection.value;
+    refreshLibraryData();
+  });
   on(els.libraryCollection, 'change', () => {
     state.libraryCollection = els.libraryCollection.value;
     refreshLibraryData();
@@ -236,6 +255,14 @@ function bindEvents() {
   };
   [els.libraryFormat, els.libraryMinWidth, els.libraryMaxWidth, els.libraryMinHeight, els.libraryMaxHeight, els.libraryMinSize, els.libraryMaxSize, els.librarySort].forEach((control) => on(control, 'input', syncLibraryFilters));
   on(els.librarySort, 'change', syncLibraryFilters);
+  on(els.libraryMinSizeRange, 'input', (event) => syncLibraryMetricRange('size', event));
+  on(els.libraryMaxSizeRange, 'input', (event) => syncLibraryMetricRange('size', event));
+  on(els.libraryMinAspectRange, 'input', (event) => syncLibraryMetricRange('aspect', event));
+  on(els.libraryMaxAspectRange, 'input', (event) => syncLibraryMetricRange('aspect', event));
+  on(els.libraryMinSize, 'change', () => syncLibraryNumericSizeRange());
+  on(els.libraryMaxSize, 'change', () => syncLibraryNumericSizeRange());
+  on(els.loadMoreImages, 'click', () => { state.pageRenderLimit += 120; render(); });
+  on(els.loadMoreLibrary, 'click', () => { state.libraryRenderLimit += 120; renderLibrary(); });
   on(els.selectAllLibrary, 'change', () => {
     if (els.selectAllLibrary.checked) state.libraryResults.forEach((record) => state.librarySelected.add(record.url));
     else state.libraryResults.forEach((record) => state.librarySelected.delete(record.url));
@@ -279,14 +306,20 @@ function bindEvents() {
     if (els.maxWidth) els.maxWidth.value = els.maxWidth.max;
     if (els.minHeight) els.minHeight.value = 0;
     if (els.maxHeight) els.maxHeight.value = els.maxHeight.max;
+    if (els.minSize) els.minSize.value = 0;
+    if (els.maxSize) els.maxSize.value = els.maxSize.max;
+    if (els.minAspect) els.minAspect.value = els.minAspect.min;
+    if (els.maxAspect) els.maxAspect.value = els.maxAspect.max;
     if (els.searchInput) els.searchInput.value = '';
     if (els.sortSelect) els.sortSelect.value = 'page';
     if (els.originalOnly) els.originalOnly.checked = false;
     if (els.aspectRatio) els.aspectRatio.value = 'all';
     state.filterValues = {
       width: { min: null, max: null },
-      height: { min: null, max: null }
+      height: { min: null, max: null },
+      size: { min: null, max: null }
     };
+    state.aspectRange = { min: 0.25, max: 5 };
     state.searchQuery = '';
     state.sort = 'page';
     state.originalOnly = false;
@@ -301,7 +334,9 @@ function bindEvents() {
   on(els.maxWidth, 'input', () => handleRangeInput('width', 'max'));
   on(els.minHeight, 'input', () => handleRangeInput('height', 'min'));
   on(els.maxHeight, 'input', () => handleRangeInput('height', 'max'));
-  for (const axis of ['width', 'height']) {
+  on(els.minSize, 'input', () => handleRangeInput('size', 'min'));
+  on(els.maxSize, 'input', () => handleRangeInput('size', 'max'));
+  for (const axis of ['width', 'height', 'size']) {
     const valueButton = els[`${axis}Value`];
     const track = els[`${axis}Track`];
     const editor = els[`${axis}Editor`];
@@ -318,9 +353,26 @@ function bindEvents() {
     on(els[`${axis}MaxValue`], 'keydown', (event) => { if (event.key === 'Enter') applyDimensionEditor(axis, 'max'); });
     on(editor, 'click', (event) => event.stopPropagation());
   }
+  on(els.minAspect, 'input', () => handleAspectRangeInput('min'));
+  on(els.maxAspect, 'input', () => handleAspectRangeInput('max'));
+  on(els.aspectTrack, 'click', setAspectFromTrack);
+  els.aspectVisualTabs.forEach((tab) => on(tab, 'click', () => {
+    state.aspectRatio = tab.dataset.aspect || 'all';
+    if (els.aspectRatio) els.aspectRatio.value = state.aspectRatio;
+    safeStorageSet({ aspectRatio: state.aspectRatio });
+    updateAspectUI();
+    applyFilters();
+  }));
   on(document, 'click', (event) => {
     if (event.target.closest('.dimension-slider')) return;
     closeDimensionEditors();
+  });
+  on(document, 'click', (event) => {
+    if (event.target.closest('.dimension-slider')) return;
+    if (els.sizeEditor) {
+      els.sizeEditor.hidden = true;
+      els.sizeValue?.setAttribute('aria-expanded', 'false');
+    }
   });
   on(els.searchInput, 'input', () => {
     state.searchQuery = els.searchInput.value.trim();
@@ -340,6 +392,7 @@ function bindEvents() {
   on(els.aspectRatio, 'change', () => {
     state.aspectRatio = ['all', 'landscape', 'portrait', 'square'].includes(els.aspectRatio.value) ? els.aspectRatio.value : 'all';
     safeStorageSet({ aspectRatio: state.aspectRatio });
+    updateAspectUI();
     applyFilters();
   });
   on(els.zipLayout, 'change', () => {
@@ -416,10 +469,12 @@ async function refreshLibraryData() {
   try {
     const [records, collections] = await Promise.all([ImageCollectorDB.listImages(), ImageCollectorDB.listCollections()]);
     if (refreshToken !== state.libraryRefreshToken) return;
+    updateLibraryMetricLimits(records);
     state.collections = collections;
     state.libraryRecords = new Map(records.map((record) => [record.url, record]));
     state.libraryResults = records.filter((record) => {
       if (state.libraryScope === 'favorites' && !record.favorite) return false;
+      if (!matchesSmartCollection(record, state.librarySmartCollection)) return false;
       if (state.libraryCollection === '__uncategorized' && record.collectionIds?.length) return false;
       if (state.libraryCollection && state.libraryCollection !== '__uncategorized' && !record.collectionIds?.includes(state.libraryCollection)) return false;
       if (state.libraryFormat !== 'all' && formatCategory(record.format) !== state.libraryFormat) return false;
@@ -429,7 +484,13 @@ async function refreshLibraryData() {
       if (state.libraryMaxHeight && record.height && record.height > Number(state.libraryMaxHeight)) return false;
       const size = Number(record.size) || 0;
       if (state.libraryMinSize && (!size || size < Number(state.libraryMinSize) * 1024)) return false;
-      if (state.libraryMaxSize && size && size > Number(state.libraryMaxSize) * 1024) return false;
+      const rangeMinSize = Number(els.libraryMinSizeRange?.value || 0) * 1024;
+      const rangeMaxSize = Number(els.libraryMaxSizeRange?.value || els.libraryMaxSizeRange?.max || 0) * 1024;
+      if ((rangeMinSize > 0 && (!size || size < rangeMinSize)) || (rangeMaxSize > 0 && rangeMaxSize < Number(els.libraryMaxSizeRange?.max || 0) * 1024 && (!size || size > rangeMaxSize))) return false;
+      const aspect = record.width && record.height ? record.width / record.height : 0;
+      const minAspect = Number(els.libraryMinAspectRange?.value || 0.25);
+      const maxAspect = Number(els.libraryMaxAspectRange?.value || 5);
+      if ((minAspect > 0.25 || maxAspect < 5) && (!aspect || aspect < minAspect || aspect > maxAspect)) return false;
       if (!state.librarySearch) return true;
       const query = state.librarySearch.toLowerCase();
       return [record.url, record.domain, record.format, record.alt, ...record.tags]
@@ -444,6 +505,8 @@ async function refreshLibraryData() {
     state.librarySelected.forEach((url) => { if (!visibleUrls.has(url)) state.librarySelected.delete(url); });
     els.favoriteCount.textContent = records.filter((record) => record.favorite).length;
     els.libraryScope.value = state.libraryScope;
+    renderSmartCollectionOptions(records);
+    els.librarySmartCollection.value = state.librarySmartCollection;
     renderCollectionOptions();
     els.libraryCollection.value = state.libraryCollection;
     els.libraryFormat.value = state.libraryFormat; els.libraryMinWidth.value = state.libraryMinWidth; els.libraryMaxWidth.value = state.libraryMaxWidth; els.libraryMinHeight.value = state.libraryMinHeight; els.libraryMaxHeight.value = state.libraryMaxHeight; els.libraryMinSize.value = state.libraryMinSize; els.libraryMaxSize.value = state.libraryMaxSize; els.librarySort.value = state.librarySort;
@@ -463,8 +526,37 @@ async function refreshLibraryData() {
   }
 }
 
+function updateLibraryMetricLimits(records) {
+  if (!els.libraryMinSizeRange || !els.libraryMaxSizeRange) return;
+  const oldMax = Number(els.libraryMaxSizeRange.max) || 1024;
+  const wasUnlimited = Number(els.libraryMaxSizeRange.value) >= oldMax;
+  const largest = records.reduce((max, record) => Math.max(max, Number(record.size) / 1024), 1024);
+  const nextMax = Math.max(1024, Math.ceil(largest / 100) * 100);
+  els.libraryMinSizeRange.max = String(nextMax);
+  els.libraryMaxSizeRange.max = String(nextMax);
+  const numericMin = Number(state.libraryMinSize);
+  const numericMax = Number(state.libraryMaxSize);
+  els.libraryMinSizeRange.value = state.libraryMinSize ? String(Math.min(numericMin, nextMax)) : els.libraryMinSizeRange.value;
+  if (state.libraryMaxSize) els.libraryMaxSizeRange.value = String(Math.min(numericMax, nextMax));
+  else if (wasUnlimited) els.libraryMaxSizeRange.value = String(nextMax);
+  if (Number(els.libraryMinSizeRange.value) > nextMax) els.libraryMinSizeRange.value = String(nextMax);
+  syncLibraryMetricRange('size', null, false);
+  syncLibraryMetricRange('aspect', null, false);
+}
+
+function syncLibraryNumericSizeRange() {
+  if (!els.libraryMinSizeRange || !els.libraryMaxSizeRange) return;
+  const max = Number(els.libraryMaxSizeRange.max) || 1024;
+  const min = Math.max(0, Math.min(max, Number(els.libraryMinSize.value) || 0));
+  const upper = Math.max(min, Math.min(max, Number(els.libraryMaxSize.value) || max));
+  els.libraryMinSizeRange.value = String(min);
+  els.libraryMaxSizeRange.value = String(upper);
+  syncLibraryMetricRange('size');
+}
+
 function scheduleLibraryRefresh() {
   clearTimeout(libraryRefreshTimer);
+  state.libraryRenderLimit = 120;
   libraryRefreshTimer = setTimeout(() => {
     libraryRefreshTimer = null;
     refreshLibraryData();
@@ -481,6 +573,44 @@ function renderCollectionOptions() {
     const option = document.createElement('option'); option.value = collection.id; option.textContent = collection.name; els.libraryCollection.append(option);
   });
   els.libraryCollection.value = [...els.libraryCollection.options].some((option) => option.value === current) ? current : '';
+}
+
+function renderSmartCollectionOptions(records = [...state.libraryRecords.values()]) {
+  if (!els.librarySmartCollection) return;
+  const current = state.librarySmartCollection;
+  els.librarySmartCollection.replaceChildren(new Option(t('smartCollections'), ''));
+  const addGroup = (label, items) => {
+    if (!items.length) return;
+    const group = document.createElement('optgroup');
+    group.label = label;
+    items.forEach(([value, text]) => group.append(new Option(text, value)));
+    els.librarySmartCollection.append(group);
+  };
+  addGroup(t('smartDimensions'), [['smart:landscape', t('landscape')], ['smart:portrait', t('portrait')], ['smart:square', t('square')], ['smart:large', t('smartLarge')]]);
+  const formats = [...new Set(records.map((record) => formatCategory(record.format)))].filter((format) => format !== 'other');
+  addGroup(t('smartFormats'), formats.map((format) => [`smart:format:${format}`, format.toUpperCase()]));
+  const domains = [...new Set(records.map((record) => record.domain).filter(Boolean))].sort().slice(0, 12);
+  addGroup(t('smartSites'), domains.map((domain) => [`smart:domain:${domain}`, domain]));
+  addGroup(t('smartDates'), [['smart:today', t('smartToday')], ['smart:week', t('smartWeek')], ['smart:month', t('smartMonth')], ['smart:older', t('smartOlder')]]);
+  els.librarySmartCollection.value = [...els.librarySmartCollection.options].some((option) => option.value === current) ? current : '';
+  if (!els.librarySmartCollection.value && current) state.librarySmartCollection = '';
+}
+
+function matchesSmartCollection(record, value) {
+  if (!value) return true;
+  const ratio = record.width && record.height ? record.width / record.height : 0;
+  if (value === 'smart:landscape') return ratio > 1.05;
+  if (value === 'smart:portrait') return ratio > 0 && ratio < 0.95;
+  if (value === 'smart:square') return ratio > 0 && Math.abs(ratio - 1) <= 0.05;
+  if (value === 'smart:large') return (record.width >= 1920 && record.height >= 1080) || (record.width * record.height >= 2073600);
+  if (value.startsWith('smart:format:')) return formatCategory(record.format) === value.slice(13);
+  if (value.startsWith('smart:domain:')) return record.domain === value.slice(13);
+  const age = Date.now() - (Number(record.updatedAt) || 0);
+  if (value === 'smart:today') return age < 86400000;
+  if (value === 'smart:week') return age < 7 * 86400000;
+  if (value === 'smart:month') return age < 31 * 86400000;
+  if (value === 'smart:older') return age >= 31 * 86400000;
+  return true;
 }
 
 function switchView(view) {
@@ -585,9 +715,14 @@ function renderLibrary() {
   els.libraryDownloadSelected.disabled = selectedCount === 0;
   els.libraryZipSelected.disabled = selectedCount === 0;
   els.libraryEmpty.hidden = results.length !== 0;
+  const visibleResults = results.slice(0, state.libraryRenderLimit);
   const fragment = document.createDocumentFragment();
-  results.forEach((record) => fragment.append(createLibraryCard(record)));
+  visibleResults.forEach((record) => fragment.append(createLibraryCard(record)));
   els.libraryGrid.append(fragment);
+  if (els.loadMoreLibrary) {
+    els.loadMoreLibrary.hidden = visibleResults.length >= results.length;
+    els.loadMoreLibrary.textContent = t('loadMore', { count: Math.min(120, results.length - visibleResults.length) });
+  }
 }
 
 async function toggleFavorite(image) {
@@ -1134,6 +1269,7 @@ async function loadImageMetadata(scanId) {
       image.size = Number(item.size) || 0;
       image.mime = item.mime || '';
     });
+    updateRangeLimits();
     applyFilters();
     try {
       await ImageCollectorDB.upsertImages(state.images);
@@ -1414,10 +1550,13 @@ async function collectPageImages(options = {}) {
 function applyFilters() {
   const minWidth = state.filterValues.width.min, maxWidth = state.filterValues.width.max;
   const minHeight = state.filterValues.height.min, maxHeight = state.filterValues.height.max;
+  const minSize = state.filterValues.size.min, maxSize = state.filterValues.size.max;
   const dimensionMatched = state.images.filter((image) =>
     (minWidth === null || image.width >= minWidth) && (maxWidth === null || image.width <= maxWidth) &&
     (minHeight === null || image.height >= minHeight) && (maxHeight === null || image.height <= maxHeight) &&
-    matchesAspectRatio(image, state.aspectRatio)
+    (minSize === null || (image.size > 0 && image.size >= minSize * 1024)) &&
+    (maxSize === null || (image.size > 0 && image.size <= maxSize * 1024)) &&
+    matchesAspectRatio(image, state.aspectRatio) && matchesAspectRange(image)
   );
   state.dimensionFiltered = dimensionMatched.filter((image) => !state.originalOnly || image.original);
   const formatFiltered = state.format === 'all'
@@ -1433,10 +1572,15 @@ function applyFilters() {
   }));
   chrome.storage.local.set({ filters: {
     minWidth: serializeLimit(state.filterValues.width.min), maxWidth: serializeLimit(state.filterValues.width.max),
-    minHeight: serializeLimit(state.filterValues.height.min), maxHeight: serializeLimit(state.filterValues.height.max)
+    minHeight: serializeLimit(state.filterValues.height.min), maxHeight: serializeLimit(state.filterValues.height.max),
+    minSize: serializeLimit(state.filterValues.size.min), maxSize: serializeLimit(state.filterValues.size.max),
+    minAspect: state.aspectRange.min, maxAspect: state.aspectRange.max
   } });
   updateSliderUI('width');
   updateSliderUI('height');
+  updateSliderUI('size');
+  updateAspectUI();
+  state.pageRenderLimit = 120;
   renderFormatTabs();
   render();
 }
@@ -1455,7 +1599,7 @@ function renderPresets() {
 
 function currentFilterPreset() {
   return {
-    width: { ...state.filterValues.width }, height: { ...state.filterValues.height }, format: state.format,
+    width: { ...state.filterValues.width }, height: { ...state.filterValues.height }, size: { ...state.filterValues.size }, aspectRange: { ...state.aspectRange }, format: state.format,
     searchQuery: state.searchQuery, sort: state.sort, originalOnly: state.originalOnly, aspectRatio: state.aspectRatio
   };
 }
@@ -1472,7 +1616,9 @@ async function saveFilterPreset() {
 function applyFilterPreset() {
   const preset = state.filterPresets.find((item) => item.id === els.filterPreset.value);
   if (!preset) return;
-  state.filterValues = { width: { ...preset.width }, height: { ...preset.height } };
+  state.filterValues = { width: { ...preset.width }, height: { ...preset.height }, size: { ...(preset.size || { min: null, max: null }) } };
+  state.aspectRange = { min: Math.max(0.25, Math.min(5, Number(preset.aspectRange?.min) || 0.25)), max: Math.max(0.25, Math.min(5, Number(preset.aspectRange?.max) || 5)) };
+  if (state.aspectRange.min > state.aspectRange.max) state.aspectRange.max = state.aspectRange.min;
   state.format = preset.format || 'all'; state.searchQuery = preset.searchQuery || ''; state.sort = preset.sort || 'page'; state.originalOnly = Boolean(preset.originalOnly); state.aspectRatio = ['all', 'landscape', 'portrait', 'square'].includes(preset.aspectRatio) ? preset.aspectRatio : 'all';
   els.searchInput.value = state.searchQuery; els.sortSelect.value = state.sort; els.originalOnly.checked = state.originalOnly; if (els.aspectRatio) els.aspectRatio.value = state.aspectRatio;
   updateRangeLimits(); applyFilters();
@@ -1540,6 +1686,13 @@ function matchesAspectRatio(image, ratio) {
   return true;
 }
 
+function matchesAspectRange(image) {
+  if (state.aspectRange.min <= 0.25 && state.aspectRange.max >= 5) return true;
+  if (!image.width || !image.height) return false;
+  const value = image.width / image.height;
+  return value >= state.aspectRange.min && value <= state.aspectRange.max;
+}
+
 function formatCategory(format) { return ['jpeg', 'png', 'webp', 'avif'].includes(format) ? format : 'other'; }
 
 function updateRangeLimits() {
@@ -1564,8 +1717,19 @@ function updateRangeLimits() {
       else maxInput.value = minInput.value;
     }
   }
+  const sizeValues = state.images.map((image) => Number(image.size) / 1024).filter((value) => value > 0);
+  const sizeLargest = sizeValues.length ? Math.max(...sizeValues) : 1024;
+  const sizeRequested = Math.max(state.filterValues.size.min || 0, state.filterValues.size.max || 0);
+  const sizeMax = Math.max(1024, Math.ceil(Math.max(sizeLargest, sizeRequested) / 100) * 100);
+  els.minSize.max = sizeMax;
+  els.maxSize.max = sizeMax;
+  els.minSize.value = state.filterValues.size.min === null ? 0 : Math.min(state.filterValues.size.min, sizeMax);
+  els.maxSize.value = state.filterValues.size.max === null ? sizeMax : Math.min(state.filterValues.size.max, sizeMax);
+  if (Number(els.minSize.value) > Number(els.maxSize.value)) els.maxSize.value = els.minSize.value;
   updateSliderUI('width');
   updateSliderUI('height');
+  updateSliderUI('size');
+  updateAspectUI();
 }
 
 function handleRangeInput(axis, changedSide) {
@@ -1594,7 +1758,7 @@ function toggleDimensionEditor(axis) {
 }
 
 function closeDimensionEditors() {
-  for (const axis of ['width', 'height']) {
+  for (const axis of ['width', 'height', 'size']) {
     const editor = els[`${axis}Editor`];
     if (!editor) continue;
     editor.hidden = true;
@@ -1672,6 +1836,69 @@ function updateSliderUI(axis) {
   syncDimensionEditor(axis);
 }
 
+function handleAspectRangeInput(changedSide) {
+  if (!els.minAspect || !els.maxAspect) return;
+  if (changedSide === 'min' && Number(els.minAspect.value) > Number(els.maxAspect.value)) els.maxAspect.value = els.minAspect.value;
+  if (changedSide === 'max' && Number(els.maxAspect.value) < Number(els.minAspect.value)) els.minAspect.value = els.maxAspect.value;
+  state.aspectRange = { min: Number(els.minAspect.value), max: Number(els.maxAspect.value) };
+  updateAspectUI();
+  scheduleApplyFilters();
+}
+
+function setAspectFromTrack(event) {
+  if (!els.aspectTrack || event.target?.closest?.('input')) return;
+  const rect = els.aspectTrack.getBoundingClientRect();
+  if (!rect.width) return;
+  const value = 0.25 + Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * 4.75;
+  const changedSide = Math.abs(value - Number(els.minAspect.value)) <= Math.abs(value - Number(els.maxAspect.value)) ? 'min' : 'max';
+  els[changedSide === 'min' ? 'minAspect' : 'maxAspect'].value = value.toFixed(2);
+  handleAspectRangeInput(changedSide);
+}
+
+function updateAspectUI() {
+  if (!els.minAspect || !els.maxAspect) return;
+  const min = Number(els.minAspect.value);
+  const max = Number(els.maxAspect.value);
+  const start = ((min - 0.25) / 4.75) * 100;
+  const end = ((max - 0.25) / 4.75) * 100;
+  els.aspectTrack?.style.setProperty('--start', String(start) + '%');
+  els.aspectTrack?.style.setProperty('--end', String(end) + '%');
+  if (els.aspectRangeValue) els.aspectRangeValue.textContent = min <= 0.25 && max >= 5 ? t('unlimited') : min.toFixed(2) + ' : 1 – ' + max.toFixed(2) + ' : 1';
+  els.aspectVisualTabs.forEach((tab) => {
+    const active = (tab.dataset.aspect || 'all') === state.aspectRatio;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
+function syncLibraryMetricRange(axis, sourceEvent, shouldRefresh = true) {
+  const isSize = axis === 'size';
+  const minInput = isSize ? els.libraryMinSizeRange : els.libraryMinAspectRange;
+  const maxInput = isSize ? els.libraryMaxSizeRange : els.libraryMaxAspectRange;
+  if (!minInput || !maxInput) return;
+  if (Number(minInput.value) > Number(maxInput.value)) {
+    if (sourceEvent?.target === minInput) maxInput.value = minInput.value;
+    else minInput.value = maxInput.value;
+  }
+  const min = Number(minInput.value);
+  const max = Number(maxInput.value);
+  const isUnlimited = isSize ? min === 0 && max === Number(maxInput.max) : min <= 0.25 && max >= 5;
+  const value = isUnlimited ? t('unlimited') : isSize ? String(min) + ' – ' + String(max) + ' KB' : min.toFixed(2) + ' : 1 – ' + max.toFixed(2) + ' : 1';
+  const track = isSize ? els.librarySizeTrack : els.libraryAspectTrack;
+  const label = isSize ? els.librarySizeRangeValue : els.libraryAspectRangeValue;
+  const base = Number(minInput.min);
+  const span = Number(minInput.max) - base || 1;
+  track?.style.setProperty('--start', String(((min - base) / span) * 100) + '%');
+  track?.style.setProperty('--end', String(((max - base) / span) * 100) + '%');
+  if (label) label.textContent = value;
+  if (isSize) {
+    els.libraryMinSize.value = min ? String(min) : '';
+    els.libraryMaxSize.value = max < Number(maxInput.max) ? String(max) : '';
+  }
+  state.libraryRenderLimit = 120;
+  if (shouldRefresh) scheduleLibraryRefresh();
+}
+
 function normalizeLimit(value) {
   if (typeof value === 'number') return Number.isFinite(value) && value >= 0 ? value : null;
   if (typeof value !== 'string' || value.trim() === '') return null;
@@ -1693,9 +1920,14 @@ function render() {
   els.resultCount.textContent = t('imageCount', { count: state.filtered.length });
   els.empty.hidden = state.filtered.length !== 0 || !els.loading.hidden;
   els.selectAll.checked = state.filtered.length > 0 && state.filtered.every((image) => state.selected.has(image.id));
+  const visibleImages = state.filtered.slice(0, state.pageRenderLimit);
   const fragment = document.createDocumentFragment();
-  for (const image of state.filtered) fragment.append(createCard(image));
+  for (const image of visibleImages) fragment.append(createCard(image));
   els.grid.append(fragment);
+  if (els.loadMoreImages) {
+    els.loadMoreImages.hidden = visibleImages.length >= state.filtered.length;
+    els.loadMoreImages.textContent = t('loadMore', { count: Math.min(120, state.filtered.length - visibleImages.length) });
+  }
   const selected = selectedImages();
   els.selectedCount.textContent = selected.length;
   els.selectedSummary.textContent = t('selectedCount', { count: selected.length });
@@ -1900,6 +2132,13 @@ const TRANSLATIONS = {
   }
 };
 
+Object.assign(TRANSLATIONS.zh, {
+  smartCollections: '智能集合', smartDimensions: '按尺寸', smartFormats: '按格式', smartSites: '按网站', smartDates: '按日期', smartLarge: '大图（≥ 1920×1080）', smartToday: '今天新增', smartWeek: '最近 7 天', smartMonth: '最近 31 天', smartOlder: '更早素材', loadMore: '加载更多（{count}）', fileSize: '文件大小', aspectRange: '宽高比范围', all: '全部', ratioLandscape: '横向', ratioPortrait: '纵向', ratioSquare: '方形', sizeMin: '最小文件大小', sizeMax: '最大文件大小'
+});
+Object.assign(TRANSLATIONS.en, {
+  smartCollections: 'Smart collections', smartDimensions: 'By dimensions', smartFormats: 'By format', smartSites: 'By website', smartDates: 'By date', smartLarge: 'Large images (≥ 1920×1080)', smartToday: 'Added today', smartWeek: 'Last 7 days', smartMonth: 'Last 31 days', smartOlder: 'Older assets', loadMore: 'Load more ({count})', fileSize: 'File size', aspectRange: 'Aspect ratio range', all: 'All', ratioLandscape: 'Landscape', ratioPortrait: 'Portrait', ratioSquare: 'Square', sizeMin: 'Minimum file size', sizeMax: 'Maximum file size'
+});
+
 function t(key, values = {}) {
   const raw = TRANSLATIONS[state.language]?.[key] ?? TRANSLATIONS.zh[key] ?? key;
   const text = Array.isArray(raw) ? raw : String(raw);
@@ -2018,6 +2257,12 @@ function applyLanguage() {
   if (els.resetSettings) els.resetSettings.textContent = t('resetSettings');
   const settingsNote = document.querySelector('.settings-note'); if (settingsNote) settingsNote.textContent = t('settingsNote');
   const scanLabel = document.querySelector('.scan-options label:first-child > span'); if (scanLabel) scanLabel.textContent = t('scanLimit');
+  const sizeLabel = document.querySelector('.metric-slider .slider-label > span'); if (sizeLabel) sizeLabel.textContent = t('fileSize');
+  const aspectRangeLabel = document.querySelector('.aspect-range-filter .slider-label > span'); if (aspectRangeLabel) aspectRangeLabel.textContent = t('aspectRange');
+  const aspectNames = { all: t('all'), landscape: t('ratioLandscape'), portrait: t('ratioPortrait'), square: t('ratioSquare') };
+  els.aspectVisualTabs.forEach((tab) => { const text = tab.querySelector('span'); if (text) text.textContent = aspectNames[tab.dataset.aspect] || tab.dataset.aspect; });
+  const librarySizeLabel = document.querySelector('.library-visual-filters .mini-range-control:first-child > span'); if (librarySizeLabel) librarySizeLabel.textContent = t('fileSize');
+  const libraryAspectLabel = document.querySelector('.library-visual-filters .mini-range-control:last-child > span'); if (libraryAspectLabel) libraryAspectLabel.textContent = t('aspectRatio');
   const scrollLabel = document.querySelector('.scan-options label:nth-child(2) > span'); if (scrollLabel) scrollLabel.textContent = t('autoScroll');
   const scanOptions = t('imageOptions'); [...(els.scanLimit?.options || [])].forEach((option, index) => { if (scanOptions[index]) option.textContent = scanOptions[index]; });
   const libraryFormatOptions = state.language === 'en' ? ['All formats', 'JPEG', 'PNG', 'WEBP', 'AVIF', 'Other'] : ['全部格式', 'JPEG', 'PNG', 'WEBP', 'AVIF', '其它']; [...(els.libraryFormat?.options || [])].forEach((option, index) => { if (libraryFormatOptions[index]) option.textContent = libraryFormatOptions[index]; });
@@ -2032,6 +2277,7 @@ function applyLanguage() {
   }
   const initialProgressDetail = els.progressDetail; if (initialProgressDetail && (!initialProgressDetail.textContent || initialProgressDetail.textContent === '等待任务开始')) initialProgressDetail.textContent = t('waitingTask');
   renderCollectionOptions();
+  renderSmartCollectionOptions();
   updateSliderUI('width'); updateSliderUI('height');
   els.widthValue?.setAttribute('title', `${t('widthMin')} / ${t('widthMax')}`);
   els.heightValue?.setAttribute('title', `${t('heightMin')} / ${t('heightMax')}`);
@@ -2059,3 +2305,11 @@ function updateScanStatus() {
 function fileName(url) { try { return decodeURIComponent(new URL(url).pathname.split('/').pop() || 'image'); } catch { return 'image'; } }
 function getDomainLetter(url) { try { return new URL(url).hostname.replace(/^www\./, '').slice(0, 1).toUpperCase() || '◎'; } catch { return '◎'; } }
 function showToast(message) { clearTimeout(state.toastTimer); els.toast.textContent = message; els.toast.classList.add('show'); state.toastTimer = setTimeout(() => els.toast.classList.remove('show'), 3200); }
+
+// Keep the size slider label in KB while preserving the existing px labels.
+function displayLimit(axis, value, side) {
+  const maxInput = axis === 'size' ? els.maxSize : els['max' + capitalize(axis)];
+  const max = Number(maxInput?.max) || 5000;
+  const unit = axis === 'size' ? 'KB' : 'px';
+  return value === 0 && side === 'min' ? t('unlimited') : value === max && side === 'max' ? t('unlimited') : String(value) + unit;
+}

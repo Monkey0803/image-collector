@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Image Collector",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "识别当前网页图片，按尺寸筛选并下载为文件或 ZIP，支持本地缓存与中英文界面。",
   "permissions": [
     "activeTab",

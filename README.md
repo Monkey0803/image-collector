@@ -61,6 +61,9 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 预览成功或 ZIP 读取成功后自动缓存图片，网页地址失效时仍可从素材库预览
 - 预览失败时支持重新加载，或使用网页地址在新标签页打开
 - 设置页显示本地缓存数量和占用空间，缓存会按最近使用时间自动清理
+- 素材库提供智能集合，可按尺寸、格式、网站和日期自动归档筛选
+- 当前页面和素材库支持文件大小、宽高比的可视化范围滑块
+- 大页面采用分批卡片渲染，点击“加载更多”后继续显示，减少打开扩展时的卡顿
 
 ### 安装方式
 
@@ -520,6 +523,12 @@ On a webpage, right-click to open the Image Collector menu. It provides **Scan c
 - The Settings view shows cached image count and cache usage. Cached entries are evicted by least-recently-used order when the limit is reached, and clearing the library also clears cached files.
 - When preview loading fails, use **Reload** to retry all candidates or **Use page URL** to open the page-provided image URL in a new tab.
 - Scanning now reports separate page-reading, image-discovery, and dimension-checking stages. A dimension-check timeout no longer leaves the loading indicator active forever.
+
+#### 1.9.0 smart collections and large-page performance
+
+- The Library view includes Smart collections. These are generated from the current local metadata and group images by dimensions, format, hostname, or update date; they do not create duplicate files or require manual tagging.
+- The current-page filter panel includes visual range controls for file size and aspect ratio. The Library view exposes the same controls and keeps the numeric KB inputs for precise adjustment.
+- Image grids render an initial batch and reveal more cards only when requested. This keeps filtering and selection responsive when a page or library contains hundreds of images.
 
 The default ZIP filename is generated in this format:
 

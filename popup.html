@@ -76,6 +76,31 @@
             <label><span>最大</span><span class="dimension-input"><input id="heightMaxValue" type="number" min="0" step="1" inputmode="numeric" /><em>px</em></span></label>
           </div>
         </div>
+        <div class="dimension-slider metric-slider">
+          <div class="slider-label"><span>文件大小</span><button id="sizeValue" class="slider-value" type="button" aria-expanded="false" aria-controls="sizeEditor">不限</button></div>
+          <div class="range-slider" id="sizeTrack">
+            <input id="minSize" type="range" min="0" max="1024" step="1" value="0" aria-label="最小文件大小 KB" />
+            <input id="maxSize" type="range" min="0" max="1024" step="1" value="1024" aria-label="最大文件大小 KB" />
+          </div>
+          <div id="sizeEditor" class="dimension-editor" hidden>
+            <label><span>最小</span><span class="dimension-input"><input id="sizeMinValue" type="number" min="0" step="1" inputmode="numeric" /><em>KB</em></span></label>
+            <span class="dimension-separator">–</span>
+            <label><span>最大</span><span class="dimension-input"><input id="sizeMaxValue" type="number" min="0" step="1" inputmode="numeric" /><em>KB</em></span></label>
+          </div>
+        </div>
+        <div class="aspect-range-filter">
+          <div class="slider-label"><span>宽高比范围</span><span id="aspectRangeValue" class="format-hint">不限</span></div>
+          <div class="aspect-visual-tabs" id="aspectVisualTabs" role="group" aria-label="按宽高比筛选">
+            <button type="button" class="aspect-visual-tab active" data-aspect="all" aria-pressed="true"><i class="ratio-shape ratio-all"></i><span>全部</span></button>
+            <button type="button" class="aspect-visual-tab" data-aspect="landscape" aria-pressed="false"><i class="ratio-shape ratio-landscape"></i><span>横向</span></button>
+            <button type="button" class="aspect-visual-tab" data-aspect="portrait" aria-pressed="false"><i class="ratio-shape ratio-portrait"></i><span>纵向</span></button>
+            <button type="button" class="aspect-visual-tab" data-aspect="square" aria-pressed="false"><i class="ratio-shape ratio-square"></i><span>方形</span></button>
+          </div>
+          <div class="range-slider aspect-range-slider" id="aspectTrack">
+            <input id="minAspect" type="range" min="0.25" max="5" step="0.05" value="0.25" aria-label="最小宽高比" />
+            <input id="maxAspect" type="range" min="0.25" max="5" step="0.05" value="5" aria-label="最大宽高比" />
+          </div>
+        </div>
         <div class="format-filter">
           <div class="slider-label"><span>格式</span><span class="format-hint">按文件类型查看</span></div>
           <div id="formatTabs" class="format-tabs" role="group" aria-label="按图片格式筛选">
@@ -88,7 +113,7 @@
           </div>
         </div>
         <label class="original-filter"><input id="originalOnly" type="checkbox" /><span>仅显示原图候选</span><small>优先使用页面提供的高清地址</small></label>
-        <label class="aspect-filter"><span>宽高比</span><select id="aspectRatio" aria-label="按宽高比筛选"><option value="all">全部比例</option><option value="landscape">横向图片</option><option value="portrait">纵向图片</option><option value="square">正方形</option></select></label>
+        <label class="aspect-filter" hidden><span>宽高比</span><select id="aspectRatio" aria-label="按宽高比筛选"><option value="all">全部比例</option><option value="landscape">横向图片</option><option value="portrait">纵向图片</option><option value="square">正方形</option></select></label>
         <div class="scan-options">
           <label><span>扫描上限</span><select id="scanLimit" aria-label="最大扫描图片数量"><option value="200">200 张</option><option value="500" selected>500 张</option><option value="1000">1000 张</option><option value="0">不限</option></select></label>
           <label><input id="autoScroll" type="checkbox" /><span>自动滚动加载懒加载图片</span></label>
@@ -125,6 +150,7 @@
           <button id="invertSelection" class="subtle-button" type="button">反选</button>
         </div>
         <div id="imageGrid" class="image-grid"></div>
+        <button id="loadMoreImages" class="load-more-button" type="button" hidden>加载更多</button>
         <div id="emptyState" class="empty-state" hidden>
           <div class="empty-icon">◌</div>
           <strong>没有符合条件的图片</strong>
@@ -192,6 +218,7 @@
             <option value="favorites">我的收藏</option>
             <option value="all">全部图片</option>
           </select>
+          <select id="librarySmartCollection" aria-label="智能集合筛选"><option value="">智能集合</option></select>
           <select id="libraryCollection" aria-label="按集合筛选"><option value="">全部集合</option></select>
           <label class="search-box" aria-label="搜索素材库">
             <span aria-hidden="true">⌕</span>
@@ -220,8 +247,13 @@
           <input id="libraryMaxSize" type="number" min="0" step="1" placeholder="最大 KB" aria-label="素材库最大文件大小 KB" />
           <select id="librarySort" aria-label="素材库排序"><option value="updated">最近更新</option><option value="width">宽度</option><option value="height">高度</option><option value="size">文件大小</option></select>
         </div>
+        <div class="library-visual-filters">
+          <div class="mini-range-control"><span>文件大小</span><div class="range-slider" id="librarySizeTrack"><input id="libraryMinSizeRange" type="range" min="0" max="1024" step="1" value="0" aria-label="素材库最小文件大小 KB" /><input id="libraryMaxSizeRange" type="range" min="0" max="1024" step="1" value="1024" aria-label="素材库最大文件大小 KB" /></div><strong id="librarySizeRangeValue">不限</strong></div>
+          <div class="mini-range-control"><span>宽高比</span><div class="range-slider" id="libraryAspectTrack"><input id="libraryMinAspectRange" type="range" min="0.25" max="5" step="0.05" value="0.25" aria-label="素材库最小宽高比" /><input id="libraryMaxAspectRange" type="range" min="0.25" max="5" step="0.05" value="5" aria-label="素材库最大宽高比" /></div><strong id="libraryAspectRangeValue">不限</strong></div>
+        </div>
         <p id="librarySummary" class="library-summary">正在读取素材库…</p>
         <div id="libraryGrid" class="image-grid library-grid"></div>
+        <button id="loadMoreLibrary" class="load-more-button" type="button" hidden>加载更多</button>
         <div id="libraryEmpty" class="empty-state" hidden>
           <div class="empty-icon">☆</div>
           <strong>素材库还是空的</strong>

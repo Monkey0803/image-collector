@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录 `1.8.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
+本文档记录 `1.9.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
 
 ## 1.0.1
 
@@ -192,8 +192,22 @@ This document tracks `1.8.0` and future releases. Completed items use `[x]`.
 - [x] Permanently cache image data so library previews survive expired source URLs.
 - [x] Add manual preview retry, cached fallback, and page-URL opening actions.
 - [x] Expose page-reading, image-discovery, and dimension-checking scan states with a timeout guard.
-- [ ] Add smart collections that automatically group images by dimensions, format, hostname, or date.
-- [ ] Add visual range controls for file size and aspect ratio.
+- [x] Add smart collections that automatically group images by dimensions, format, hostname, or date.
+- [x] Add visual range controls for file size and aspect ratio.
+
+## 1.9.0
+
+### 智能集合、可视化筛选与大页面性能
+
+- [x] 素材库根据尺寸、格式、网站和更新时间动态生成智能集合。
+- [x] 当前页面和素材库支持文件大小、宽高比范围滑块，并保留精确数值输入。
+- [x] 图片网格采用分批渲染和“加载更多”，降低大页面的首次渲染压力。
+
+## 1.9.0 smart collections, visual filters, and large-page performance
+
+- [x] Generate smart collections from dimensions, formats, hostnames, and update dates.
+- [x] Add visual file-size and aspect-ratio range sliders while keeping precise numeric inputs.
+- [x] Render image grids in batches with a Load more action to keep large pages responsive.
 
 ## 1.8.0 local cache and preview reliability
 
