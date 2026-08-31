@@ -33,6 +33,7 @@ const state = {
   aspectRange: { min: 0.25, max: 5 },
   toastTimer: null,
   pageBatchBusy: false,
+  libraryBatchBusy: false,
   downloadJobId: null,
   retryImages: [],
   retryAsZip: false,
@@ -113,6 +114,9 @@ let eventsBound = false;
 let languageTouched = false;
 let previewLoadToken = 0;
 let interactionReady = false;
+let batchDialogResolver = null;
+let batchDialogAction = '';
+let batchDialogReturnFocus = null;
 
 function blockInteractionDuringInit(event) {
   if (interactionReady || !event.target.closest?.('button, input, select, textarea')) return;
@@ -173,7 +177,7 @@ const els = {
   saveAs: $('#saveAs'), download: $('#downloadButton'), zip: $('#zipButton'), selectedCount: $('#selectedCount'),
   downloadProgress: $('#downloadProgress'), progressLabel: $('#progressLabel'), progressValue: $('#progressValue'),
   progressBar: $('#progressBar'), progressDetail: $('#progressDetail'), cancelButton: $('#cancelButton'), retryButton: $('#retryButton'),
-  retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewError: $('#previewError'), previewErrorText: $('#previewErrorText'), retryPreview: $('#retryPreview'), openPreviewPage: $('#openPreviewPage'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), previewPrevious: $('#previewPrevious'), previewNext: $('#previewNext'), previewPosition: $('#previewPosition'), copyFilteredUrls: $('#copyFilteredUrls'), pageFavoriteSelected: $('#pageFavoriteSelected'), pageTagSelected: $('#pageTagSelected'), pageArchiveSelected: $('#pageArchiveSelected'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
+  retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewError: $('#previewError'), previewErrorText: $('#previewErrorText'), retryPreview: $('#retryPreview'), openPreviewPage: $('#openPreviewPage'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), previewPrevious: $('#previewPrevious'), previewNext: $('#previewNext'), previewPosition: $('#previewPosition'), copyFilteredUrls: $('#copyFilteredUrls'), pageFavoriteSelected: $('#pageFavoriteSelected'), pageTagSelected: $('#pageTagSelected'), pageArchiveSelected: $('#pageArchiveSelected'), batchActionModal: $('#batchActionModal'), batchActionForm: $('#batchActionForm'), batchActionClose: $('#batchActionClose'), batchActionTitle: $('#batchActionTitle'), batchActionDescription: $('#batchActionDescription'), batchActionTagField: $('#batchActionTagField'), batchActionTagLabel: $('#batchActionTagLabel'), batchActionTagInput: $('#batchActionTagInput'), batchActionCollectionField: $('#batchActionCollectionField'), batchActionCollectionLabel: $('#batchActionCollectionLabel'), batchActionCollectionSelect: $('#batchActionCollectionSelect'), batchActionError: $('#batchActionError'), batchActionCancel: $('#batchActionCancel'), batchActionConfirm: $('#batchActionConfirm'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -545,6 +549,12 @@ function bindEvents() {
   on(els.pageFavoriteSelected, 'click', () => bulkUpdateCurrentPage('favorite'));
   on(els.pageTagSelected, 'click', () => bulkUpdateCurrentPage('tag'));
   on(els.pageArchiveSelected, 'click', () => bulkUpdateCurrentPage('collection'));
+  on(els.batchActionForm, 'submit', (event) => { event.preventDefault(); confirmBatchActionDialog(); });
+  on(els.batchActionCancel, 'click', () => closeBatchActionDialog());
+  on(els.batchActionClose, 'click', () => closeBatchActionDialog());
+  on(els.batchActionModal, 'click', (event) => { if (event.target.matches('[data-close-batch-action]')) closeBatchActionDialog(); });
+  on(els.batchActionTagInput, 'input', clearBatchActionError);
+  on(els.batchActionCollectionSelect, 'change', clearBatchActionError);
   on(els.closePreview, 'click', closePreview);
   on(els.previewModal, 'click', (event) => { if (event.target.matches('[data-close-preview]')) closePreview(); });
   on(els.copyImageUrl, 'click', copyPreviewUrl);
@@ -560,6 +570,11 @@ function bindEvents() {
   on(els.zoomOut, 'click', () => changePreviewZoom(-.25));
   on(els.zoomReset, 'click', () => { state.previewZoom = 1; updatePreviewZoom(); });
   document.addEventListener('keydown', (event) => {
+    if (!els.batchActionModal.hidden) {
+      if (event.key === 'Escape') { event.preventDefault(); closeBatchActionDialog(); }
+      else if (event.key === 'Tab') trapBatchActionFocus(event);
+      return;
+    }
     if (els.previewModal.hidden) return;
     if (event.key === 'Escape') { closePreview(); return; }
     if (event.key === 'ArrowLeft') { event.preventDefault(); navigatePreview(-1); return; }
@@ -872,6 +887,100 @@ async function copyFilteredImageUrls() {
   }
 }
 
+function clearBatchActionError() {
+  if (!els.batchActionError) return;
+  els.batchActionError.hidden = true;
+  els.batchActionError.textContent = '';
+}
+
+function showBatchActionError(message) {
+  if (!els.batchActionError) return;
+  els.batchActionError.hidden = false;
+  els.batchActionError.textContent = message;
+}
+
+function closeBatchActionDialog(result = null) {
+  if (!els.batchActionModal || els.batchActionModal.hidden) return;
+  const resolve = batchDialogResolver;
+  const returnFocus = batchDialogReturnFocus;
+  batchDialogResolver = null;
+  batchDialogAction = '';
+  batchDialogReturnFocus = null;
+  els.batchActionModal.hidden = true;
+  clearBatchActionError();
+  if (returnFocus?.isConnected) returnFocus.focus();
+  if (resolve) resolve(result);
+}
+
+function openBatchActionDialog(action, count) {
+  if (!els.batchActionModal) return Promise.resolve(null);
+  closeBatchActionDialog();
+  batchDialogAction = action;
+  batchDialogReturnFocus = document.activeElement;
+  setText(els.batchActionTitle, action === 'tag' ? t('pageTagDialogTitle') : t('pageArchiveDialogTitle'));
+  setText(els.batchActionDescription, t('batchDialogSelected', { count }));
+  setText(els.batchActionTagLabel, t('batchDialogTagLabel'));
+  setText(els.batchActionCollectionLabel, t('batchDialogCollectionLabel'));
+  setText(els.batchActionCancel, t('batchDialogCancel'));
+  setText(els.batchActionConfirm, t('batchDialogConfirm'));
+  els.batchActionTagField.hidden = action !== 'tag';
+  els.batchActionCollectionField.hidden = action !== 'collection';
+  els.batchActionTagInput.value = '';
+  els.batchActionTagInput.placeholder = t('batchDialogTagPlaceholder');
+  els.batchActionCollectionSelect.replaceChildren();
+  if (action === 'collection') {
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = t('batchDialogChooseCollection');
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    els.batchActionCollectionSelect.append(placeholder);
+    state.collections.forEach((collection) => {
+      const option = document.createElement('option');
+      option.value = collection.id;
+      option.textContent = collection.name;
+      els.batchActionCollectionSelect.append(option);
+    });
+  }
+  clearBatchActionError();
+  els.batchActionModal.hidden = false;
+  requestAnimationFrame(() => {
+    if (action === 'tag') els.batchActionTagInput.focus();
+    else els.batchActionCollectionSelect.focus();
+  });
+  return new Promise((resolve) => { batchDialogResolver = resolve; });
+}
+
+function trapBatchActionFocus(event) {
+  const focusable = [...els.batchActionModal.querySelectorAll('button, input, select')]
+    .filter((element) => !element.hidden && !element.disabled && element.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function confirmBatchActionDialog() {
+  if (!batchDialogResolver) return;
+  if (batchDialogAction === 'tag') {
+    const tag = els.batchActionTagInput.value.trim();
+    if (!tag) { showBatchActionError(t('batchDialogTagRequired')); els.batchActionTagInput.focus(); return; }
+    closeBatchActionDialog({ tag: tag.slice(0, 40) });
+    return;
+  }
+  if (batchDialogAction === 'collection') {
+    const collection = state.collections.find((item) => item.id === els.batchActionCollectionSelect.value);
+    if (!collection) { showBatchActionError(t('batchDialogCollectionRequired')); els.batchActionCollectionSelect.focus(); return; }
+    closeBatchActionDialog({ collection });
+  }
+}
+
 async function bulkUpdateCurrentPage(action) {
   if (state.pageBatchBusy) return;
   const images = selectedImages();
@@ -884,18 +993,15 @@ async function bulkUpdateCurrentPage(action) {
     if (action === 'favorite') {
       updates = { favorite: true };
     } else if (action === 'tag') {
-      const tag = window.prompt(t('pageTagPrompt'));
-      if (!tag?.trim()) return;
-      const cleanTag = tag.trim().slice(0, 40);
-      updates = (record) => ({ tags: [...new Set([...(record.tags || []), cleanTag])] });
+      const result = await openBatchActionDialog('tag', urls.length);
+      if (!result) return;
+      updates = (record) => ({ tags: [...new Set([...(record.tags || []), result.tag])] });
     } else if (action === 'collection') {
       state.collections = await ImageCollectorDB.listCollections();
       if (!state.collections.length) { showToast(t('createCollectionFirst')); return; }
-      const names = state.collections.map((collection, index) => String(index + 1) + '. ' + collection.name).join('\n');
-      const choice = Number(window.prompt(t('pageArchivePrompt') + '\n' + names));
-      const collection = state.collections[choice - 1];
-      if (!collection) return;
-      updates = (record) => ({ collectionIds: [...new Set([...(record.collectionIds || []), collection.id])] });
+      const result = await openBatchActionDialog('collection', urls.length);
+      if (!result) return;
+      updates = (record) => ({ collectionIds: [...new Set([...(record.collectionIds || []), result.collection.id])] });
     } else {
       return;
     }
@@ -998,6 +1104,10 @@ function renderLibrary() {
   els.selectAllLibrary.checked = results.length > 0 && results.every((record) => state.librarySelected.has(record.url));
   els.libraryDownloadSelected.disabled = selectedCount === 0;
   els.libraryZipSelected.disabled = selectedCount === 0;
+  els.bulkFavorite.disabled = selectedCount === 0 || state.libraryBatchBusy;
+  els.bulkTag.disabled = selectedCount === 0 || state.libraryBatchBusy;
+  els.bulkCollection.disabled = selectedCount === 0 || state.libraryBatchBusy;
+  els.bulkDelete.disabled = selectedCount === 0 || state.libraryBatchBusy;
   els.libraryEmpty.hidden = results.length !== 0;
   const visibleResults = results.slice(0, state.libraryRenderLimit);
   const fragment = document.createDocumentFragment();
@@ -1036,8 +1146,11 @@ async function setImageCollections(record, collectionIds) {
 }
 
 async function bulkUpdateLibrary(action) {
+  if (state.libraryBatchBusy) return;
   const urls = [...state.librarySelected];
   if (!urls.length) { showToast(t('selectBeforeAction')); return; }
+  state.libraryBatchBusy = true;
+  renderLibrary();
   try {
     if (action === 'favorite') {
       await ImageCollectorDB.bulkUpdateImages(urls, { favorite: true });
@@ -1060,6 +1173,10 @@ async function bulkUpdateLibrary(action) {
     }
     await refreshLibraryData();
   } catch { showToast(t('bulkActionFailed')); }
+  finally {
+    state.libraryBatchBusy = false;
+    renderLibrary();
+  }
 }
 
 async function loadStorageStats() {
@@ -2635,6 +2752,12 @@ Object.assign(TRANSLATIONS.zh, {
 Object.assign(TRANSLATIONS.en, {
   pageFavoriteSelected: 'Favorite selected', pageTagSelected: 'Tag selected', pageArchiveSelected: 'Archive selected', selectPageImages: 'Select images on the current page first', pageFavoriteDone: 'Favorited {count} image(s)', pageTagPrompt: 'Tag to add', pageTagDone: 'Added a tag to {count} image(s)', pageArchivePrompt: 'Enter the collection number', pageArchiveDone: 'Archived {count} image(s)', pageBatchFailed: 'Current-page bulk action failed'
 });
+Object.assign(TRANSLATIONS.zh, {
+  pageTagDialogTitle: '给选中图片添加标签', pageArchiveDialogTitle: '归档到本地集合', batchDialogSelected: '已选择 {count} 张图片', batchDialogTagLabel: '标签名称', batchDialogTagPlaceholder: '例如：产品、灵感、待处理', batchDialogCollectionLabel: '目标集合', batchDialogChooseCollection: '请选择集合', batchDialogTagRequired: '请输入标签', batchDialogCollectionRequired: '请选择集合', batchDialogCancel: '取消', batchDialogConfirm: '确认', batchDialogClose: '关闭'
+});
+Object.assign(TRANSLATIONS.en, {
+  pageTagDialogTitle: 'Tag selected images', pageArchiveDialogTitle: 'Archive to a local collection', batchDialogSelected: '{count} image(s) selected', batchDialogTagLabel: 'Tag name', batchDialogTagPlaceholder: 'For example: product, inspiration, review', batchDialogCollectionLabel: 'Target collection', batchDialogChooseCollection: 'Choose a collection', batchDialogTagRequired: 'Enter a tag', batchDialogCollectionRequired: 'Choose a collection', batchDialogCancel: 'Cancel', batchDialogConfirm: 'Confirm', batchDialogClose: 'Close'
+});
 
 function t(key, values = {}) {
   const raw = TRANSLATIONS[state.language]?.[key] ?? TRANSLATIONS.zh[key] ?? key;
@@ -2725,6 +2848,8 @@ function applyLanguage() {
   const dateText = document.querySelector('.date-folder-setting span'); if (dateText) dateText.textContent = t('dateFolder');
   setText(els.exportJson, t('json')); setText(els.exportCsv, t('csv')); setText(els.copyFilteredUrls, t('copyFilteredUrls'));
   setText(els.pageFavoriteSelected, t('pageFavoriteSelected')); setText(els.pageTagSelected, t('pageTagSelected')); setText(els.pageArchiveSelected, t('pageArchiveSelected'));
+  setText(els.batchActionTagLabel, t('batchDialogTagLabel')); setText(els.batchActionCollectionLabel, t('batchDialogCollectionLabel')); setText(els.batchActionCancel, t('batchDialogCancel')); setText(els.batchActionConfirm, t('batchDialogConfirm'));
+  if (els.batchActionClose) els.batchActionClose.setAttribute('aria-label', t('batchDialogClose'));
   if (els.download) {
     els.download.innerHTML = `${t('downloadSelected')} <span id="selectedCount">${els.selectedCount?.textContent || '0'}</span>`;
     els.selectedCount = $('#selectedCount');

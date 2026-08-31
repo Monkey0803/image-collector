@@ -285,6 +285,18 @@ image_2026.08.20.zip
 - 批量归档会让用户按序号选择本地集合，并将选中图片加入该集合，不会删除图片已有的其它集合关系。
 - 这些操作和素材库使用同一个本地 IndexedDB，完成后可以立即在“素材库”视图中查看结果。
 
+#### 2.4.0 current-page batch action dialog
+
+- Current-page tag and collection actions use an in-extension dialog instead of the browser's native prompt.
+- The dialog shows the selected image count, validates empty input, and supports Escape, backdrop click, Cancel, and Confirm actions.
+- Collection archiving reloads the latest local collections before opening the chooser, so newly created collections are available immediately.
+
+#### 2.4.0 当前页面批量操作体验
+
+- 当前页面的批量加标签和批量归档改用扩展内对话框，不再依赖浏览器原生输入框。
+- 对话框显示已选图片数量，校验空标签，并支持按 Esc、点击遮罩、取消和确认操作。
+- 打开集合选择器前会读取最新的本地集合，新建集合后可以立即用于归档。
+
 ### 权限说明
 
 扩展在 `manifest.json` 中声明了以下权限：

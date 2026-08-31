@@ -286,3 +286,17 @@ This document tracks `1.8.0` and future releases. Completed items use `[x]`.
 - [x] Add a tag to selected current-page images without removing existing tags.
 - [x] Archive selected current-page images into a local collection without removing existing memberships.
 - [x] Share the same IndexedDB records with the Library view so batch changes appear immediately.
+
+## 2.4.0 current-page batch action dialog
+
+### 中文
+
+- [x] 使用扩展内对话框替代当前页面批量标签和集合归档的原生 prompt。
+- [x] 显示已选图片数量，校验空输入，并支持确认、取消、遮罩点击和 Esc 关闭。
+- [x] 批量归档前重新读取本地集合，避免集合加载时序导致选择列表过期。
+
+### English
+
+- [x] Replace native prompts with an in-extension dialog for current-page bulk tagging and collection archiving.
+- [x] Show the selected image count, validate empty input, and support confirm, cancel, backdrop click, and Escape dismissal.
+- [x] Reload local collections before bulk archiving so the chooser does not use stale initialization data.

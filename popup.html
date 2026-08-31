@@ -366,6 +366,17 @@
           <div class="preview-actions"><button id="copyImageUrl" class="secondary-button" type="button">复制原图地址</button><button id="openImageUrl" class="primary-button" type="button">在新标签页打开</button></div>
         </div>
       </div>
+      <div id="batchActionModal" class="batch-action-modal" hidden role="dialog" aria-modal="true" aria-labelledby="batchActionTitle" aria-describedby="batchActionDescription">
+        <div class="batch-action-backdrop" data-close-batch-action></div>
+        <form id="batchActionForm" class="batch-action-dialog">
+          <div class="batch-action-header"><div><p class="eyebrow">BATCH ACTION</p><strong id="batchActionTitle">批量操作</strong></div><button id="batchActionClose" class="icon-button light" type="button" aria-label="关闭">×</button></div>
+          <p id="batchActionDescription" class="batch-action-description">已选择 0 张图片</p>
+          <label id="batchActionTagField" class="batch-action-field"><span id="batchActionTagLabel">标签名称</span><input id="batchActionTagInput" type="text" maxlength="40" autocomplete="off" /></label>
+          <label id="batchActionCollectionField" class="batch-action-field"><span id="batchActionCollectionLabel">目标集合</span><select id="batchActionCollectionSelect"></select></label>
+          <p id="batchActionError" class="batch-action-error" role="alert" hidden></p>
+          <div class="batch-action-actions"><button id="batchActionCancel" class="secondary-button" type="button">取消</button><button id="batchActionConfirm" class="primary-button" type="submit">确认</button></div>
+        </form>
+      </div>
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
     </main>
     <script src="library.js"></script>
