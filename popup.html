@@ -112,6 +112,17 @@
             <button class="format-tab" type="button" data-format="other" aria-pressed="false">其它 <strong data-count>0</strong></button>
           </div>
         </div>
+        <div class="source-filter">
+          <div class="slider-label"><span>来源</span><span class="format-hint">按图片发现方式查看</span></div>
+          <div id="sourceTabs" class="format-tabs source-tabs" role="group" aria-label="按图片来源筛选">
+            <button class="format-tab active" type="button" data-source="all" aria-pressed="true">全部 <strong data-source-count>0</strong></button>
+            <button class="format-tab" type="button" data-source="IMG" aria-pressed="false">IMG <strong data-source-count>0</strong></button>
+            <button class="format-tab" type="button" data-source="CSS" aria-pressed="false">CSS <strong data-source-count>0</strong></button>
+            <button class="format-tab" type="button" data-source="VIDEO" aria-pressed="false">VIDEO <strong data-source-count>0</strong></button>
+            <button class="format-tab" type="button" data-source="RULE" aria-pressed="false">规则 <strong data-source-count>0</strong></button>
+            <button class="format-tab" type="button" data-source="other" aria-pressed="false">其它 <strong data-source-count>0</strong></button>
+          </div>
+        </div>
         <label class="original-filter"><input id="originalOnly" type="checkbox" /><span>仅显示原图候选</span><small>优先使用页面提供的高清地址</small></label>
         <label class="aspect-filter" hidden><span>宽高比</span><select id="aspectRatio" aria-label="按宽高比筛选"><option value="all">全部比例</option><option value="landscape">横向图片</option><option value="portrait">纵向图片</option><option value="square">正方形</option></select></label>
         <div class="scan-options">
@@ -326,6 +337,12 @@
           <div class="settings-card-heading"><div><p class="eyebrow">SYNC</p><h3>可选设置同步</h3></div><span class="settings-card-hint">不上传图片</span></div>
           <label class="sync-option"><input id="syncSettings" type="checkbox" /><span><strong>使用 Chrome 同步设置</strong><small>仅同步扫描规则、站点适配器和偏好，不同步图片、缓存或历史记录。</small></span></label>
           <button id="saveSyncSettings" class="subtle-button" type="button">保存同步设置</button>
+        </section>
+        <section class="settings-card" aria-label="扫描配置迁移">
+          <div class="settings-card-heading"><div><p class="eyebrow">PORTABILITY</p><h3>扫描配置迁移</h3></div><span class="settings-card-hint">JSON</span></div>
+          <p class="settings-migration-note">导出或导入扫描规则、站点适配器和下载偏好，不包含图片、缓存、集合或历史记录。</p>
+          <div class="settings-inline-actions"><button id="exportScanConfig" class="subtle-button" type="button">导出扫描配置</button><button id="importScanConfig" class="subtle-button" type="button">导入扫描配置</button></div>
+          <input id="importScanConfigFile" type="file" accept="application/json,.json" hidden />
         </section>
         <div class="settings-actions"><button id="clearLibrary" class="subtle-button danger" type="button">清空素材库</button><button id="resetSettings" class="subtle-button" type="button">重置设置</button></div>
         <p class="settings-note">清空素材库会删除图片、收藏、标签和集合，但不会影响当前网页。</p>

@@ -3,6 +3,7 @@ const state = {
   dimensionFiltered: [],
   filtered: [],
   format: 'all',
+  source: 'all',
   selected: new Set(),
   tabId: null,
   saveAs: true,
@@ -153,7 +154,7 @@ const els = {
   aspectVisualTabs: [...document.querySelectorAll('.aspect-visual-tab')], minAspect: $('#minAspect'), maxAspect: $('#maxAspect'), aspectTrack: $('#aspectTrack'), aspectRangeValue: $('#aspectRangeValue'),
   clearFilters: $('#clearFilters'), selectAll: $('#selectAll'), resultCount: $('#resultCount'),
   selectedSummary: $('#selectedSummary'), searchInput: $('#searchInput'), sortSelect: $('#sortSelect'),
-  originalOnly: $('#originalOnly'), aspectRatio: $('#aspectRatio'), zipLayout: $('#zipLayout'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'),
+  originalOnly: $('#originalOnly'), aspectRatio: $('#aspectRatio'), zipLayout: $('#zipLayout'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'), sourceTabs: [...document.querySelectorAll('[data-source]')],
   pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'), taskViewButton: $('#taskViewButton'), settingsViewButton: $('#settingsViewButton'),
   libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryScope: $('#libraryScope'), librarySmartCollection: $('#librarySmartCollection'),
   librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), exportLibraryResultsJson: $('#exportLibraryResultsJson'), exportLibraryResultsCsv: $('#exportLibraryResultsCsv'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'), libraryBatchToolbar: $('#libraryBatchToolbar'), selectAllLibrary: $('#selectAllLibrary'), librarySelectedSummary: $('#librarySelectedSummary'), bulkFavorite: $('#bulkFavorite'), bulkTag: $('#bulkTag'), bulkCollection: $('#bulkCollection'), bulkDelete: $('#bulkDelete'), libraryDownloadSelected: $('#libraryDownloadSelected'), libraryZipSelected: $('#libraryZipSelected'), libraryFormat: $('#libraryFormat'), libraryMinWidth: $('#libraryMinWidth'), libraryMaxWidth: $('#libraryMaxWidth'), libraryMinHeight: $('#libraryMinHeight'), libraryMaxHeight: $('#libraryMaxHeight'), libraryMinSize: $('#libraryMinSize'), libraryMaxSize: $('#libraryMaxSize'), librarySort: $('#librarySort'),
@@ -162,7 +163,7 @@ const els = {
   downloadHistory: $('#downloadHistory'), historyEmpty: $('#historyEmpty'),
   taskView: $('#taskView'), refreshTasks: $('#refreshTasks'), retryAllTasks: $('#retryAllTasks'), taskSummary: $('#taskSummary'), taskList: $('#taskList'), taskEmpty: $('#taskEmpty'), settingsView: $('#settingsView'), settingsViewButton: $('#settingsViewButton'), refreshStorage: $('#refreshStorage'), storageStats: $('#storageStats'), clearLibrary: $('#clearLibrary'), resetSettings: $('#resetSettings'),
   exportJson: $('#exportJson'), exportCsv: $('#exportCsv'),
-  includeSelectors: $('#includeSelectors'), excludeSelectors: $('#excludeSelectors'), scanCssBackground: $('#scanCssBackground'), scanVideoPosters: $('#scanVideoPosters'), includeIframes: $('#includeIframes'), saveScanRules: $('#saveScanRules'), adapterHost: $('#adapterHost'), adapterSelector: $('#adapterSelector'), adapterAttributes: $('#adapterAttributes'), adapterCollection: $('#adapterCollection'), saveSiteAdapter: $('#saveSiteAdapter'), clearSiteAdapter: $('#clearSiteAdapter'), siteAdapterList: $('#siteAdapterList'), syncSettings: $('#syncSettings'), saveSyncSettings: $('#saveSyncSettings'),
+  includeSelectors: $('#includeSelectors'), excludeSelectors: $('#excludeSelectors'), scanCssBackground: $('#scanCssBackground'), scanVideoPosters: $('#scanVideoPosters'), includeIframes: $('#includeIframes'), saveScanRules: $('#saveScanRules'), adapterHost: $('#adapterHost'), adapterSelector: $('#adapterSelector'), adapterAttributes: $('#adapterAttributes'), adapterCollection: $('#adapterCollection'), saveSiteAdapter: $('#saveSiteAdapter'), clearSiteAdapter: $('#clearSiteAdapter'), siteAdapterList: $('#siteAdapterList'), syncSettings: $('#syncSettings'), saveSyncSettings: $('#saveSyncSettings'), exportScanConfig: $('#exportScanConfig'), importScanConfig: $('#importScanConfig'), importScanConfigFile: $('#importScanConfigFile'),
   formatTabs: [...document.querySelectorAll('[data-format]')],
   grid: $('#imageGrid'), empty: $('#emptyState'), loading: $('#loadingState'), loadingLabel: $('#loadingLabel'), error: $('#errorState'),
   loadMoreImages: $('#loadMoreImages'), loadMoreLibrary: $('#loadMoreLibrary'),
@@ -411,6 +412,8 @@ function bindEvents() {
     state.originalOnly = false;
     state.aspectRatio = 'all';
     state.format = 'all';
+    state.source = 'all';
+    renderSourceTabs();
     scheduleApplyFilters();
   });
   on(els.filterPreset, 'change', applyFilterPreset);
@@ -494,8 +497,16 @@ function bindEvents() {
     state.dateFolder = els.dateFolder.checked;
     saveRuleConfiguration();
   });
+  on(els.exportScanConfig, 'click', exportScanConfiguration);
+  on(els.importScanConfig, 'click', () => els.importScanConfigFile?.click());
+  on(els.importScanConfigFile, 'change', importScanConfiguration);
   els.formatTabs.forEach((tab) => on(tab, 'click', () => {
     state.format = tab.dataset.format || 'all';
+    applyFilters();
+  }));
+  els.sourceTabs.forEach((tab) => on(tab, 'click', () => {
+    state.source = tab.dataset.source || 'all';
+    renderSourceTabs();
     applyFilters();
   }));
   on(els.selectAll, 'change', () => {
@@ -708,6 +719,53 @@ async function saveScanRules() {
     includeIframes: els.includeIframes?.checked
   });
   if (await saveRuleConfiguration()) { showToast(t('scanRulesSaved')); await scanPage(); }
+}
+
+function exportScanConfiguration() {
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    settings: syncConfigurationPayload()
+  };
+  const filename = 'image-collector-scan-config-' + dateStamp() + '.json';
+  downloadTextFile(JSON.stringify(payload, null, 2), filename, 'application/json');
+  showToast(t('scanConfigExported'));
+}
+
+async function importScanConfiguration(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+  try {
+    const payload = JSON.parse(await file.text());
+    if (!payload || typeof payload !== 'object' || !payload.settings || typeof payload.settings !== 'object') {
+      throw new Error('Invalid scan configuration');
+    }
+    const settings = payload.settings;
+    state.scanRules = normalizeScanRules(settings.scanRules);
+    state.siteAdapters = normalizeSiteAdapters(settings.siteAdapters);
+    state.scanLimit = [0, 200, 500, 1000].includes(Number(settings.scanLimit)) ? Number(settings.scanLimit) : 500;
+    state.autoScroll = Boolean(settings.autoScroll);
+    state.zipLayout = ['flat', 'domain', 'format', 'domain-format'].includes(settings.zipLayout) ? settings.zipLayout : 'flat';
+    state.filenameTemplate = typeof settings.filenameTemplate === 'string' && settings.filenameTemplate.trim() ? settings.filenameTemplate.trim() : '{name}';
+    state.dateFolder = Boolean(settings.dateFolder);
+    if (els.scanLimit) els.scanLimit.value = String(state.scanLimit);
+    if (els.autoScroll) els.autoScroll.checked = state.autoScroll;
+    if (els.zipLayout) els.zipLayout.value = state.zipLayout;
+    if (els.filenameTemplate) els.filenameTemplate.value = state.filenameTemplate;
+    if (els.dateFolder) els.dateFolder.checked = state.dateFolder;
+    if (els.includeSelectors) els.includeSelectors.value = state.scanRules.includeSelectors;
+    if (els.excludeSelectors) els.excludeSelectors.value = state.scanRules.excludeSelectors;
+    if (els.scanCssBackground) els.scanCssBackground.checked = state.scanRules.scanCssBackground;
+    if (els.scanVideoPosters) els.scanVideoPosters.checked = state.scanRules.scanVideoPosters;
+    if (els.includeIframes) els.includeIframes.checked = state.scanRules.includeIframes;
+    renderSiteAdapters();
+    if (!await saveRuleConfiguration()) throw new Error('Could not save scan configuration');
+    showToast(t('scanConfigImported'));
+    await scanPage();
+  } catch {
+    showToast(t('scanConfigImportFailed'));
+  }
 }
 
 async function saveSiteAdapter() {
@@ -1301,11 +1359,13 @@ async function scanPage(options = {}) {
     state.dimensionFiltered = [];
     state.filtered = [];
     state.format = 'all';
+    state.source = 'all';
     state.selected.clear();
     state.duplicateCount = 0;
     state.retryImages = [];
     updateRetryUI();
     renderFormatTabs();
+    renderSourceTabs();
     render();
   }
   try {
@@ -1826,9 +1886,12 @@ function applyFilters() {
     matchesAspectRatio(image, state.aspectRatio) && matchesAspectRange(image)
   );
   state.dimensionFiltered = dimensionMatched.filter((image) => !state.originalOnly || image.original);
-  const formatFiltered = state.format === 'all'
+  const sourceFiltered = state.source === 'all'
     ? state.dimensionFiltered
-    : state.dimensionFiltered.filter((image) => formatCategory(image.format) === state.format);
+    : state.dimensionFiltered.filter((image) => sourceCategory(image.source) === state.source);
+  const formatFiltered = state.format === 'all'
+    ? sourceFiltered
+    : sourceFiltered.filter((image) => formatCategory(image.format) === state.format);
   const query = state.searchQuery.toLowerCase();
   state.filtered = sortImages(formatFiltered.filter((image) => {
     if (!query) return true;
@@ -1849,6 +1912,7 @@ function applyFilters() {
   updateAspectUI();
   state.pageRenderLimit = 120;
   renderFormatTabs();
+  renderSourceTabs();
   render();
 }
 
@@ -1866,7 +1930,7 @@ function renderPresets() {
 
 function currentFilterPreset() {
   return {
-    width: { ...state.filterValues.width }, height: { ...state.filterValues.height }, size: { ...state.filterValues.size }, aspectRange: { ...state.aspectRange }, format: state.format,
+    width: { ...state.filterValues.width }, height: { ...state.filterValues.height }, size: { ...state.filterValues.size }, aspectRange: { ...state.aspectRange }, format: state.format, source: state.source,
     searchQuery: state.searchQuery, sort: state.sort, originalOnly: state.originalOnly, aspectRatio: state.aspectRatio
   };
 }
@@ -1886,7 +1950,7 @@ function applyFilterPreset() {
   state.filterValues = { width: { ...preset.width }, height: { ...preset.height }, size: { ...(preset.size || { min: null, max: null }) } };
   state.aspectRange = { min: Math.max(0.25, Math.min(5, Number(preset.aspectRange?.min) || 0.25)), max: Math.max(0.25, Math.min(5, Number(preset.aspectRange?.max) || 5)) };
   if (state.aspectRange.min > state.aspectRange.max) state.aspectRange.max = state.aspectRange.min;
-  state.format = preset.format || 'all'; state.searchQuery = preset.searchQuery || ''; state.sort = preset.sort || 'page'; state.originalOnly = Boolean(preset.originalOnly); state.aspectRatio = ['all', 'landscape', 'portrait', 'square'].includes(preset.aspectRatio) ? preset.aspectRatio : 'all';
+  state.format = preset.format || 'all'; state.source = ['all', 'IMG', 'CSS', 'VIDEO', 'RULE', 'other'].includes(preset.source) ? preset.source : 'all'; state.searchQuery = preset.searchQuery || ''; state.sort = preset.sort || 'page'; state.originalOnly = Boolean(preset.originalOnly); state.aspectRatio = ['all', 'landscape', 'portrait', 'square'].includes(preset.aspectRatio) ? preset.aspectRatio : 'all';
   els.searchInput.value = state.searchQuery; els.sortSelect.value = state.sort; els.originalOnly.checked = state.originalOnly; if (els.aspectRatio) els.aspectRatio.value = state.aspectRatio;
   updateRangeLimits(); applyFilters();
 }
@@ -1940,6 +2004,27 @@ function renderFormatTabs() {
     tab.classList.toggle('active', state.format === format);
     tab.setAttribute('aria-pressed', state.format === format ? 'true' : 'false');
     tab.hidden = format !== 'all' && count === 0 && state.format !== format;
+  });
+}
+
+function sourceCategory(source) {
+  return ['IMG', 'CSS', 'VIDEO', 'RULE'].includes(String(source || '').toUpperCase()) ? String(source).toUpperCase() : 'other';
+}
+
+function renderSourceTabs() {
+  const counts = { all: state.dimensionFiltered.length, IMG: 0, CSS: 0, VIDEO: 0, RULE: 0, other: 0 };
+  state.dimensionFiltered.forEach((image) => { counts[sourceCategory(image.source)] += 1; });
+  const labels = { all: t('all'), IMG: 'IMG', CSS: 'CSS', VIDEO: 'VIDEO', RULE: t('sourceRule'), other: t('other') };
+  els.sourceTabs.forEach((tab) => {
+    const source = tab.dataset.source || 'all';
+    const active = state.source === source;
+    const count = counts[source] || 0;
+    const counter = tab.querySelector('[data-source-count]');
+    if (tab.childNodes[0]) tab.childNodes[0].textContent = (labels[source] || source) + ' ';
+    if (counter) counter.textContent = count;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-pressed', active ? 'true' : 'false');
+    tab.hidden = source !== 'all' && count === 0 && !active;
   });
 }
 
@@ -2411,6 +2496,12 @@ Object.assign(TRANSLATIONS.zh, {
 Object.assign(TRANSLATIONS.en, {
   noAutoArchive: 'No auto archive', noSiteAdapters: 'No site rules yet', autoArchive: 'Auto archive', removeSiteAdapter: 'Remove site rule', siteAdapterRemoved: 'Site rule removed', siteAdapterSaved: 'Site rule saved', siteAdapterRequired: 'Enter a host pattern and image selector', siteAdapterLimit: 'Up to 30 site rules can be saved', scanRulesSaved: 'Scan rules saved', syncEnabled: 'Settings sync enabled', syncDisabled: 'Settings sync disabled', syncSaved: 'Sync settings saved', syncSaveFailed: 'Could not save sync settings', customScanRules: 'Custom scan rules', appliesToSite: 'Applied to the current site', includeSelectors: 'Include selectors', excludeSelectors: 'Exclude selectors', includeSelectorsHint: 'One CSS selector per line; leave empty to use the default scanner.', excludeSelectorsHint: 'Matching elements and their descendants are excluded.', scanCssBackground: 'Scan CSS backgrounds', scanVideoPosters: 'Scan video posters', includeIframes: 'Scan iframes', saveScanRules: 'Save scan rules', siteAdapters: 'Site adapters & auto archive', matchesByHost: 'Matched by host', hostPattern: 'Host pattern', imageSelector: 'Image selector', extraAttributes: 'Extra image attributes', archiveCollection: 'Auto archive to collection', saveSiteAdapter: 'Save site rule', clearForm: 'Clear form', syncTitle: 'Optional settings sync', noImageSync: 'No images uploaded', useChromeSync: 'Use Chrome sync', syncDescription: 'Only scan rules, site adapters, and preferences are synced. Images, cache, and history stay local.', saveSyncSettings: 'Save sync settings'
 });
+Object.assign(TRANSLATIONS.zh, {
+  sourceFilter: '来源', sourceFilterHint: '按图片发现方式查看', sourceRule: '规则', configMigration: '扫描配置迁移', configMigrationNote: '导出或导入扫描规则、站点适配器和下载偏好，不包含图片、缓存、集合或历史记录。', exportScanConfig: '导出扫描配置', importScanConfig: '导入扫描配置', scanConfigExported: '扫描配置已导出', scanConfigImported: '扫描配置已导入', scanConfigImportFailed: '导入失败，请选择有效的扫描配置 JSON 文件'
+});
+Object.assign(TRANSLATIONS.en, {
+  sourceFilter: 'Source', sourceFilterHint: 'Filter by how each image was discovered', sourceRule: 'Rule', configMigration: 'Scan configuration portability', configMigrationNote: 'Export or import scan rules, site adapters, and download preferences. Images, cache, collections, and history are not included.', exportScanConfig: 'Export scan config', importScanConfig: 'Import scan config', scanConfigExported: 'Scan configuration exported', scanConfigImported: 'Scan configuration imported', scanConfigImportFailed: 'Import failed. Choose a valid scan configuration JSON file.'
+});
 
 function t(key, values = {}) {
   const raw = TRANSLATIONS[state.language]?.[key] ?? TRANSLATIONS.zh[key] ?? key;
@@ -2443,6 +2534,7 @@ function applyLanguage() {
   els.minWidth?.setAttribute('aria-label', t('widthMin')); els.maxWidth?.setAttribute('aria-label', t('widthMax'));
   els.minHeight?.setAttribute('aria-label', t('heightMin')); els.maxHeight?.setAttribute('aria-label', t('heightMax'));
   els.formatTabs.forEach((tab) => tab.closest('.format-tabs')?.setAttribute('aria-label', t('formatFilter')));
+  els.sourceTabs.forEach((tab) => tab.closest('.format-tabs')?.setAttribute('aria-label', t('sourceFilter')));
   els.scanLimit?.setAttribute('aria-label', t('maxImages'));
   document.querySelector('.save-option .help')?.setAttribute('title', t('saveHelp'));
   if (els.filenameTemplate) els.filenameTemplate.title = t('filenameTemplateHint');
@@ -2477,6 +2569,8 @@ function applyLanguage() {
   editorLabels.forEach((label, index) => { label.textContent = index % 2 === 0 ? t('minimum') : t('maximum'); });
   const formatLabelNode = document.querySelector('.format-filter .slider-label > span'); if (formatLabelNode) formatLabelNode.textContent = t('format');
   const formatHint = document.querySelector('.format-hint'); if (formatHint) formatHint.textContent = t('formatHint');
+  const sourceLabelNode = document.querySelector('.source-filter .slider-label > span'); if (sourceLabelNode) sourceLabelNode.textContent = t('sourceFilter');
+  const sourceHint = document.querySelector('.source-filter .format-hint'); if (sourceHint) sourceHint.textContent = t('sourceFilterHint');
   const originalLabel = document.querySelector('.original-filter span'); if (originalLabel) originalLabel.textContent = t('originalOnly');
   const originalHint = document.querySelector('.original-filter small'); if (originalHint) originalHint.textContent = t('originalHint');
   const aspectLabel = document.querySelector('.aspect-filter > span'); if (aspectLabel) aspectLabel.textContent = t('aspectRatio');
@@ -2487,6 +2581,7 @@ function applyLanguage() {
   const sortOptions = [t('pageOrder'), t('widthDesc'), t('heightDesc'), t('areaDesc'), t('nameAsc')]; [...(els.sortSelect?.options || [])].forEach((option, index) => { if (sortOptions[index]) option.textContent = sortOptions[index]; });
   [...els.formatTabs].forEach((tab) => { const format = tab.dataset.format; const labels = { all: t('all'), jpeg: 'JPEG', png: 'PNG', webp: 'WEBP', avif: 'AVIF', other: t('other') }; const count = tab.querySelector('[data-count]')?.textContent || '0'; tab.innerHTML = `${labels[format] || format} <strong data-count>${count}</strong>`; });
   if (els.loading?.lastChild) els.loading.lastChild.textContent = ` ${t('scanning')}`;
+  renderSourceTabs();
   const saveText = document.querySelector('.save-option > span'); if (saveText) saveText.textContent = t('saveLocation');
   const downloadCaption = document.querySelector('.download-caption-note'); if (downloadCaption) downloadCaption.textContent = t('downloadSupport');
   const settingLabels = [...document.querySelectorAll('.download-settings > label > span')]; if (settingLabels[0]) settingLabels[0].textContent = t('zipLayout'); if (settingLabels[1]) settingLabels[1].textContent = t('filenameTemplate');
@@ -2561,7 +2656,11 @@ function applyLanguage() {
   if (cardHints[0]) cardHints[0].textContent = t('appliesToSite');
   if (cardHints[1]) cardHints[1].textContent = t('matchesByHost');
   if (cardHints[2]) cardHints[2].textContent = t('noImageSync');
-  [t('customScanRules'), t('siteAdapters'), t('syncTitle')].forEach((label, index) => { if (settingsCards[index]) settingsCards[index].setAttribute('aria-label', label); });
+  if (cardHeadings[3]) cardHeadings[3].textContent = t('configMigration');
+  if (cardHints[3]) cardHints[3].textContent = t('json');
+  [t('customScanRules'), t('siteAdapters'), t('syncTitle'), t('configMigration')].forEach((label, index) => { if (settingsCards[index]) settingsCards[index].setAttribute('aria-label', label); });
+  const migrationNote = document.querySelector('.settings-migration-note'); if (migrationNote) migrationNote.textContent = t('configMigrationNote');
+  setText(els.exportScanConfig, t('exportScanConfig')); setText(els.importScanConfig, t('importScanConfig'));
   const fieldLabels = [...document.querySelectorAll('#settingsView .settings-field > span')];
   [t('includeSelectors'), t('excludeSelectors'), t('hostPattern'), t('imageSelector'), t('extraAttributes'), t('archiveCollection')].forEach((label, index) => { if (fieldLabels[index]) fieldLabels[index].textContent = label; });
   const fieldHints = [...document.querySelectorAll('#settingsView .settings-field small')];

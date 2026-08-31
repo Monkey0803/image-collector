@@ -299,6 +299,10 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 .sync-option span { display: grid; gap: 4px; }
 .sync-option strong { color: #596570; font-size: 9px; }
 .settings-sync-card .subtle-button { justify-self: start; height: 28px; font-size: 9px; }
+.source-filter { display: grid; gap: 6px; margin-top: 9px; }
+.source-tabs { margin-top: 0; }
+.source-tabs .format-tab { min-width: 0; }
+.settings-migration-note { margin: -2px 0 0; color: #89949c; font-size: 9px; line-height: 1.45; }
 .settings-note { margin-top: 10px; color: #a0a8af; font-size: 9px; line-height: 1.5; }
 .toast { position: fixed; z-index: 5; right: 20px; bottom: 15px; left: 20px; padding: 9px 12px; transform: translateY(12px); border-radius: 8px; color: #fff; background: rgba(23,32,42,.9); font-size: 11px; opacity: 0; pointer-events: none; transition: .2s; }
 .toast.show { transform: translateY(0); opacity: 1; }

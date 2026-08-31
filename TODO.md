@@ -236,3 +236,21 @@ This document tracks `1.8.0` and future releases. Completed items use `[x]`.
 - [x] Evict the least recently used cached entries automatically and clear cached data with the library.
 - [x] Add reload and page-URL actions to the preview failure state, including localized labels.
 - [x] Show explicit page-reading, image-discovery, and dimension-checking states; dimension timeouts no longer leave the UI loading forever.
+
+## 2.1.0 source filters and configuration portability
+
+### 中文
+
+- [x] 按 `IMG`、`CSS`、`VIDEO`、自定义规则和其它来源筛选当前页面图片，并显示来源数量。
+- [x] 来源筛选与尺寸、格式、宽高比、原图候选和搜索条件组合使用，清除筛选和重新扫描时恢复默认状态。
+- [x] 导出扫描规则、站点适配器和下载偏好为 JSON 配置文件。
+- [x] 从 JSON 配置文件导入扫描规则、站点适配器和下载偏好，导入后自动重新扫描当前页面。
+- [x] 配置迁移不包含图片、缓存、素材集合和历史记录。
+
+### English
+
+- [x] Filter current-page images by `IMG`, `CSS`, `VIDEO`, custom rules, and other discovery sources with per-source counts.
+- [x] Combine source filters with dimensions, format, aspect ratio, original candidates, and search; reset source selection when filters are cleared or a scan restarts.
+- [x] Export scan rules, site adapters, and download preferences as a JSON configuration file.
+- [x] Import scan rules, site adapters, and download preferences from JSON and rescan the current page after import.
+- [x] Keep images, cache, collections, and history out of configuration migration files.

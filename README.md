@@ -243,6 +243,22 @@ image_2026.08.20.zip
 
 扫描流程为：读取配置 → 匹配当前域名的站点规则 → 采集默认和自定义图片地址 → 应用排除规则 → 探测元数据 → 自动归档。格式错误的选择器会被忽略，不会阻塞默认扫描。
 
+#### 2.1.0 来源筛选与配置迁移
+
+- 在当前页面筛选面板中，可以按图片来源筛选：`IMG`（页面图片元素）、`CSS`（CSS 背景图）、`VIDEO`（视频封面）、`规则`（自定义扫描规则）或“其它”。每个来源标签会显示当前尺寸筛选后的数量。
+- 来源筛选会与宽度、高度、文件大小、宽高比、格式、原图候选和搜索条件叠加使用；清除筛选或重新扫描时会恢复为“全部来源”。
+- 在“设置”→“扫描配置迁移”中点击“导出扫描配置”，可以备份扫描规则、站点适配器、扫描上限、自动滚动、ZIP 分组、文件名模板和日期目录设置。
+- 在另一台设备或重新安装扩展后，点击“导入扫描配置”选择 JSON 文件即可恢复这些设置。导入成功后会自动重新扫描当前页面。
+- 配置迁移文件不包含图片、图片缓存、素材集合或历史记录；配置文件只保存在用户选择的本地位置。
+
+#### 2.1.0 source filters and configuration portability
+
+- The current-page filter panel can filter images by discovery source: `IMG` (page image elements), `CSS` (CSS backgrounds), `VIDEO` (video posters), `Rule` (custom scan rules), or `Other`. Each source tab shows the count after the active dimension filters.
+- Source filtering can be combined with width, height, file-size, aspect-ratio, format, original-candidate, and search filters. Clearing filters or rescanning returns to all sources.
+- Open **Settings** → **Scan configuration portability** and choose **Export scan config** to back up scan rules, site adapters, scan limits, auto-scroll, ZIP layout, filename templates, and date-folder preferences.
+- After reinstalling the extension or moving to another device, choose **Import scan config** and select the JSON file. The current page is rescanned after a successful import.
+- Configuration files do not include images, image cache, collections, or history; they are downloaded to the local location selected by the user.
+
 ### 权限说明
 
 扩展在 `manifest.json` 中声明了以下权限：
