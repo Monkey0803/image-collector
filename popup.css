@@ -43,6 +43,7 @@ h2 { font-size: 15px; letter-spacing: -.02em; }
 .page-copy strong, .page-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page-copy strong { font-size: 12px; }
 .page-copy span { color: var(--muted); font-size: 10px; }
+.scan-stats { min-height: 12px; overflow: hidden; color: #9aa5ad; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .view-switcher { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 15px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: #e9eef0; }
 .view-tab { height: 30px; padding: 0 7px; border: 0; border-radius: 8px; color: #7b8790; background: transparent; font-size: 10px; font-weight: 800; transition: color .15s, background .15s, box-shadow .15s; }
 .view-tab:hover { color: #44515b; background: rgba(255,255,255,.7); }
@@ -163,6 +164,7 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 .progress-track { height: 5px; overflow: hidden; margin-top: 7px; border-radius: 99px; background: #f1e2de; }
 .progress-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--accent); transition: width .2s ease; }
 .progress-detail { margin-top: 6px; color: #a18b85; font-size: 9px; }
+.progress-metrics { min-height: 12px; margin-top: 5px; color: #9d8982; font-size: 9px; }
 .progress-actions { display: flex; align-items: center; gap: 5px; }
 .cancel-button, .retry-button { padding: 3px 6px; border: 0; border-radius: 5px; font-size: 9px; font-weight: 800; }
 .cancel-button { color: #6e7a83; background: #eef1f2; }

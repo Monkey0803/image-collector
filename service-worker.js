@@ -12,6 +12,8 @@ const downloadQueue = [];
 let queueRunning = false;
 const metadataCache = new Map();
 const METADATA_CACHE_TTL = 5 * 60 * 1000;
+const IMAGE_REQUEST_TIMEOUT_MS = 15000;
+const METADATA_REQUEST_TIMEOUT_MS = 10000;
 
 const WORKER_TRANSLATIONS = {
   zh: {
@@ -21,7 +23,7 @@ const WORKER_TRANSLATIONS = {
     prepareRead: '准备读取图片', reading: '正在读取 {current}/{total}：{name}', readCount: '已读取 {count}/{total} 张图片', noZipImages: '没有可加入 ZIP 的图片', cannotRead: '图片无法读取，可能受跨域或防盗链限制', compressing: '正在压缩 {count} 张图片', zipSubmitted: 'ZIP 已提交下载，共 {count} 张图片', zipFailed: 'ZIP 下载失败',
     taskComplete: '任务完成', taskFailed: '下载任务失败', paused: '任务已暂停，当前项目完成后等待继续', resumed: '任务继续执行',
     downloadFailed: '下载失败', readFailed: '读取失败', queueFailed: '下载任务失败',
-    loginRequired: '需要登录后才能访问', forbidden: '服务器拒绝访问，可能存在防盗链', notFound: '图片不存在或链接已失效', tooMany: '请求过于频繁，请稍后重试', serverError: '图片服务器暂时不可用', networkError: '网络请求失败或被跨域策略阻止'
+    loginRequired: '需要登录后才能访问', forbidden: '服务器拒绝访问，可能存在防盗链', notFound: '图片不存在或链接已失效', tooMany: '请求过于频繁，请稍后重试', serverError: '图片服务器暂时不可用', networkError: '网络请求失败或被跨域策略阻止', requestTimeout: '图片请求超时，可能是网络较慢或服务器未响应'
   },
   en: {
     scan: 'Scan current page', downloadImage: 'Download this image', favoriteImage: 'Favorite this image',
@@ -30,7 +32,7 @@ const WORKER_TRANSLATIONS = {
     prepareRead: 'Preparing to read images', reading: 'Reading {current}/{total}: {name}', readCount: 'Read {count}/{total} image(s)', noZipImages: 'No images could be added to the ZIP', cannotRead: 'Images could not be read; cross-origin or hotlink protection may be blocking access', compressing: 'Compressing {count} image(s)', zipSubmitted: 'ZIP download submitted with {count} image(s)', zipFailed: 'ZIP download failed',
     taskComplete: 'Task complete', taskFailed: 'Download task failed', paused: 'Task paused; it will continue after the current item', resumed: 'Task resumed',
     downloadFailed: 'Download failed', readFailed: 'Read failed', queueFailed: 'Download task failed',
-    loginRequired: 'Sign-in is required to access this image', forbidden: 'The server rejected the request; hotlink protection may be enabled', notFound: 'The image does not exist or the link has expired', tooMany: 'Too many requests; try again later', serverError: 'The image server is temporarily unavailable', networkError: 'The network request failed or was blocked by cross-origin policy'
+    loginRequired: 'Sign-in is required to access this image', forbidden: 'The server rejected the request; hotlink protection may be enabled', notFound: 'The image does not exist or the link has expired', tooMany: 'Too many requests; try again later', serverError: 'The image server is temporarily unavailable', networkError: 'The network request failed or was blocked by cross-origin policy', requestTimeout: 'The image request timed out; the network may be slow or the server may not respond'
   }
 };
 
@@ -81,6 +83,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'resumeDownload') {
     resumeDownload(message.jobId);
     sendResponse({ ok: true });
+    return true;
+  }
+  if (message.type === 'recoverDownloadTasks') {
+    ImageCollectorDB.recoverInterruptedDownloads([...activeJobs.keys()])
+      .then((recovered) => sendResponse({ ok: true, recovered }))
+      .catch(() => sendResponse({ ok: false, recovered: 0 }));
     return true;
   }
   if (message.type === 'languageChanged') {
@@ -240,6 +248,11 @@ async function readImageWithFallback(image, job) {
   for (const url of imageCandidates(image)) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const controller = new AbortController();
+      let timedOut = false;
+      const timeoutId = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, IMAGE_REQUEST_TIMEOUT_MS);
       job.controllers.add(controller);
       try {
         const response = await fetch(url, { credentials: 'omit', redirect: 'follow', signal: controller.signal });
@@ -250,8 +263,15 @@ async function readImageWithFallback(image, job) {
           data: new Uint8Array(await response.arrayBuffer())
         };
       } catch (error) {
-        lastError = error;
+        if (timedOut) {
+          const timeoutError = new Error('Image request timed out');
+          timeoutError.name = 'TimeoutError';
+          lastError = timeoutError;
+        } else {
+          lastError = error;
+        }
       } finally {
+        clearTimeout(timeoutId);
         job.controllers.delete(controller);
       }
       if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 250));
@@ -365,11 +385,13 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
 
 async function inspectImages(images) {
   const source = [...new Map(images.slice(0, 300).filter((image) => image?.url).map((image) => [image.url, image])).values()];
+  const deadline = Date.now() + 9000;
   const inspectOne = async (image) => {
+    if (Date.now() >= deadline) return { url: image.url, size: 0, mime: '' };
     const cached = metadataCache.get(image.url);
     if (cached && Date.now() - cached.timestamp < METADATA_CACHE_TTL) return cached.item;
     try {
-      const response = await fetch(image.url, { method: 'HEAD', credentials: 'omit', redirect: 'follow' });
+      const response = await fetchWithTimeout(image.url, { method: 'HEAD', credentials: 'omit', redirect: 'follow' }, Math.min(METADATA_REQUEST_TIMEOUT_MS, Math.max(1000, deadline - Date.now())));
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const contentLength = Number(response.headers.get('content-length')) || 0;
       const item = { url: image.url, size: contentLength, mime: (response.headers.get('content-type') || '').split(';')[0] };
@@ -382,8 +404,27 @@ async function inspectImages(images) {
     }
   };
   const items = [];
-  for (let index = 0; index < source.length; index += 8) items.push(...await Promise.all(source.slice(index, index + 8).map(inspectOne)));
+  for (let index = 0; index < source.length && Date.now() < deadline; index += 8) items.push(...await Promise.all(source.slice(index, index + 8).map(inspectOne)));
   return { ok: true, items };
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (!timedOut) throw error;
+    const timeoutError = new Error('Image metadata request timed out');
+    timeoutError.name = 'TimeoutError';
+    throw timeoutError;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function beginJob(jobId, language = 'zh') {
@@ -604,6 +645,7 @@ function normalizeConflictAction(value) {
 
 function failureCode(error) {
   if (error?.name === 'AbortError') return 'cancelled';
+  if (error?.name === 'TimeoutError') return 'timeout';
   const message = String(error?.message || error || '').trim();
   const status = message.match(/HTTP\s+(\d{3})\b/i)?.[1];
   if (status) return `http-${status}`;
@@ -614,6 +656,7 @@ function failureCode(error) {
 
 function readableError(error, fallback, language = 'zh') {
   if (error?.name === 'AbortError') return workerText(language, 'cancelTask');
+  if (error?.name === 'TimeoutError') return workerText(language, 'requestTimeout');
   const message = String(error?.message || error || '').trim();
   if (/HTTP\s+401\b/i.test(message)) return workerText(language, 'loginRequired');
   if (/HTTP\s+403\b/i.test(message)) return workerText(language, 'forbidden');

@@ -325,6 +325,16 @@ image_2026.08.20.zip
 - 可以在任务卡片中使用“复制失败 URL”，或在任务中心使用“导出错误报告”，方便在扩展外继续排查。
 - 预览失败时会显示已尝试的图片地址数量，并提示防盗链、登录限制、链接失效和跨域策略等常见原因。
 
+#### 2.7.0 稳定性与任务可靠性
+
+- 扫描状态会明确区分读取页面、发现图片、探测尺寸、完成、取消和失败，不会因为单个阶段异常而永久显示 loading。
+- 页面扫描和图片请求带有超时、取消及最终状态保护；即使尺寸探测失败，已经发现的图片仍然可以继续使用。
+- 侧边栏重新打开或 Service Worker 重启后，任务中心会恢复本地任务记录；中断任务会被标记为失败，并可以只重试未完成项目。
+- 预览失败时会显示尝试地址数量和可读的失败原因，并提供重新加载及打开网页地址操作。
+- 下载任务保持队列化处理，避免同时读取过多图片；下载前会显示图片数量、已知大小和未知大小数量，大任务会给出提示。
+- 下载进度会显示已处理数量、处理速度和预计剩余时间。
+- 大页面会分批渲染，并显示发现、跳过、去重、尺寸探测和失败数量，降低界面卡顿。
+
 ### 权限说明
 
 扩展在 `manifest.json` 中声明了以下权限：
@@ -659,6 +669,16 @@ Version 2.0.0 adds a configurable scanning layer for websites whose image struct
 - **Use Chrome sync** synchronizes only scan rules, site adapters, scan limits, auto-scroll, ZIP layout, filename templates, and date-folder preference. Images, IndexedDB cache, collections, and history remain local to each browser profile.
 
 The scan flow is: load saved configuration → match adapters for the current host → collect default and custom sources → apply exclusions → inspect metadata → archive matching results. Invalid selectors are ignored so the normal page scan can continue.
+
+#### 2.7.0 stability and task reliability
+
+- Scanning clearly distinguishes page reading, image discovery, dimension probing, completed, cancelled, and failed states, so one failed stage cannot leave loading active forever.
+- Page scans and image requests have timeout, cancellation, and terminal-state guards; discovered images remain usable even when metadata probing fails.
+- Reopening the side panel or restarting the Service Worker preserves local task records. Interrupted tasks are marked as failed and can retry only unfinished items.
+- Preview failures show the number of attempted addresses and readable causes, with actions to reload or open the page-provided URL.
+- Downloads remain queue-controlled to avoid reading too many images at once. Before downloading, the UI shows image count, known size, and unknown-size count, with a warning for large tasks.
+- Download progress shows processed count, processing speed, and estimated time remaining.
+- Large pages render in batches and report discovered, skipped, deduplicated, dimension-checked, and failed counts to reduce UI stalls.
 
 ### Permissions
 

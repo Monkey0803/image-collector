@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录 `1.9.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记。
+本文档记录当前 `2.6.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
 
 ## 1.0.1
 
@@ -98,8 +98,8 @@
 - [x] 图片永久缓存，原地址失效后仍可在素材库预览。
 - [x] 预览失败时提供手动重试、缓存回退和网页地址打开操作。
 - [x] 扫描过程区分页面读取、图片发现和尺寸探测状态，并为尺寸探测设置超时保护。
-- [ ] 智能集合，根据尺寸、格式、域名和日期自动归档。
-- [ ] 增加文件大小和宽高比的可视化范围筛选。
+- [x] 智能集合，根据尺寸、格式、域名和日期自动归档（已在 1.9.0 完成）。
+- [x] 增加文件大小和宽高比的可视化范围筛选（已在 1.9.0 完成）。
 
 ## 1.8.0
 
@@ -113,7 +113,7 @@
 
 ## English
 
-This document tracks `1.8.0` and future releases. Completed items use `[x]`.
+This document tracks the current `2.6.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
 
 ### 1.0.1 core experience
 
@@ -332,3 +332,93 @@ This document tracks `1.8.0` and future releases. Completed items use `[x]`.
 - [x] Retry only failed items instead of downloading already successful images again.
 - [x] Copy failed image URLs and export a JSON error report.
 - [x] Show the number of attempted preview URLs and common failure causes when a preview fails.
+
+## 2.7.0 stability and task reliability
+
+### 中文
+
+- [x] 统一扫描状态机，明确区分读取页面、发现图片、探测尺寸、完成、取消和失败状态。
+- [x] 为页面读取、图片发现、尺寸探测和预览请求增加超时、取消和最终状态保护，避免界面永久显示 loading。
+- [x] 在侧边栏或 Service Worker 重启后恢复任务状态，并保留已完成、失败和取消的任务记录。
+- [x] 优化预览失败状态：显示尝试过的地址、可读失败原因、HTTP 状态（如果可获得），并提供重试和打开原网页操作。
+- [x] 限制普通下载和 ZIP 读取的并发数量，避免大批量下载时占用过多内存或触发网站限制。
+- [x] 下载前显示图片数量、可估算的总大小和 ZIP 风险提示；下载过程中显示速度和预计剩余时间。
+- [x] 大页面使用虚拟列表或更细粒度的分批渲染，并显示发现、去重、跳过和失败数量统计。
+- [x] 增加刷新、语言切换、空结果、预览失败、下载失败和 Service Worker 重启场景的回归检查。
+
+### English
+
+- [x] Unify the scan state machine and distinguish page reading, image discovery, dimension probing, completed, cancelled, and failed states.
+- [x] Add timeout, cancellation, and terminal-state guards for page reading, image discovery, dimension probing, and preview requests so the UI cannot remain in loading forever.
+- [x] Restore task state after the side panel or Service Worker restarts, while keeping completed, failed, and cancelled task records.
+- [x] Improve preview failure states with attempted URLs, readable failure reasons, HTTP status when available, retry, and open-source-page actions.
+- [x] Limit concurrency for regular downloads and ZIP reads to reduce memory pressure and avoid triggering site limits.
+- [x] Show the image count, estimated total size, and ZIP risk warnings before downloading; show speed and estimated time remaining during downloads.
+- [x] Use virtualized or finer-grained batched rendering for large pages and show discovered, deduplicated, skipped, and failed counts.
+- [x] Add regression checks for refresh, language switching, empty results, preview failures, download failures, and Service Worker restarts.
+
+## 2.8.0 smart collections and visual filters
+
+### 中文
+
+- [ ] 支持根据尺寸、格式、域名、来源、文件大小、宽高比和日期创建智能集合。
+- [ ] 支持智能集合的 AND / OR 条件组合、启用/禁用、规则编辑和删除。
+- [ ] 提供智能集合命中预览，并支持手动重新应用规则。
+- [ ] 支持将智能集合规则保存到配置迁移文件，并在导入后校验规则版本。
+- [ ] 为文件大小和宽高比增加可视化范围滑块，同时保留精确数值输入。
+- [ ] 在范围滑块上显示图片数量分布，并提供小于 100 KB、100 KB～1 MB、横图、竖图和正方形等快捷预设。
+- [ ] 让当前页面、素材库和智能集合共用筛选组件与筛选状态，避免同一条件在不同视图中表现不一致。
+
+### English
+
+- [ ] Create smart collections from dimensions, formats, hostnames, discovery sources, file sizes, aspect ratios, and dates.
+- [ ] Support AND / OR condition groups, enabling, disabling, editing, and deleting smart-collection rules.
+- [ ] Provide a rule-match preview and allow users to reapply smart-collection rules manually.
+- [ ] Include smart-collection rules in configuration migration and validate their rule version after import.
+- [ ] Add visual range sliders for file size and aspect ratio while keeping precise numeric inputs.
+- [ ] Show image-count distribution on range controls and provide presets such as under 100 KB, 100 KB–1 MB, landscape, portrait, and square.
+- [ ] Share filter components and filter state between the current page, Library, and smart collections so the same conditions behave consistently.
+
+## 2.9.0 asset management and deduplication
+
+### 中文
+
+- [ ] 增加基于文件内容哈希的精确去重，并在无法读取文件内容时回退到 URL 去重。
+- [ ] 增加基于感知哈希的相似图片分组，支持调整相似度阈值。
+- [ ] 显示重复图片组，并支持自动保留尺寸最大、文件最大或原图候选优先的版本。
+- [ ] 增加图片详情面板，展示完整 URL、候选地址、来源元素、iframe、MIME、文件大小、缓存状态和所属集合。
+- [ ] 支持从详情面板复制地址、打开来源页面、下载图片、编辑标签和调整集合关系。
+- [ ] 增加“仅清理失效图片”“仅清理未收藏图片”和“仅清理重复图片”等安全清理策略。
+- [ ] 明确区分“全选当前筛选结果”和“仅选择当前已加载结果”，并支持批量移动、移除标签和导出。
+
+### English
+
+- [ ] Add exact deduplication based on file-content hashes, falling back to URL deduplication when file content cannot be read.
+- [ ] Group visually similar images with perceptual hashes and allow users to adjust the similarity threshold.
+- [ ] Show duplicate groups and allow automatic retention of the largest-dimension, largest-file, or original-candidate version.
+- [ ] Add an image details panel with full URLs, candidate URLs, source element, iframe, MIME type, file size, cache state, and collections.
+- [ ] Allow copying addresses, opening the source page, downloading, editing tags, and changing collection memberships from the details panel.
+- [ ] Add safe cleanup modes for invalid images, non-favorited images, and duplicate images.
+- [ ] Clearly distinguish “select all filtered results” from “select currently loaded results” and support bulk moving, tag removal, and export.
+
+## 3.0.0 multi-page collection workflows
+
+### 中文
+
+- [ ] 支持采集当前标签页、选中的多个标签页或整个窗口中的图片。
+- [ ] 支持将多个页面的结果合并到同一下载任务，并按域名、页面或日期创建 ZIP 子目录。
+- [ ] 增加站点级采集历史和增量扫描，只处理上次扫描后新增或变化的图片。
+- [ ] 支持从扫描历史恢复筛选条件、重新打开来源页面和重新执行下载任务。
+- [ ] 支持导出为 Markdown 图库、HTML 图库和图片联系表。
+- [ ] 增加可配置快捷键和右键菜单中的“保存到指定集合”操作。
+- [ ] 完善深色模式、紧凑模式、焦点状态和键盘操作，提升无障碍体验。
+
+### English
+
+- [ ] Collect images from the current tab, selected tabs, or the entire window.
+- [ ] Merge results from multiple pages into one download task and create ZIP subfolders by hostname, page, or date.
+- [ ] Add site-level scan history and incremental scanning that processes only new or changed images.
+- [ ] Restore filters from scan history, reopen source pages, and rerun download tasks.
+- [ ] Export image galleries as Markdown, HTML, or contact sheets.
+- [ ] Add configurable keyboard shortcuts and a context-menu action to save an image to a selected collection.
+- [ ] Improve dark mode, compact mode, focus states, and keyboard interaction for accessibility.

@@ -8,6 +8,7 @@ const state = {
   tabId: null,
   saveAs: true,
   scanId: 0,
+  scanPhase: 'idle',
   searchQuery: '',
   sort: 'page',
   originalOnly: false,
@@ -51,6 +52,10 @@ const state = {
   previewZoom: 1,
   previewObjectUrl: '',
   taskRecords: [],
+  taskRecoveryPromise: null,
+  taskRefreshTimer: null,
+  scanStats: { discovered: 0, duplicates: 0, skipped: 0, dimensionsChecked: 0, dimensionsFailed: 0, partial: false },
+  downloadMetrics: { startedAt: 0, total: 0 },
   librarySelected: new Set(), libraryFormat: 'all', libraryMinWidth: '', libraryMaxWidth: '', libraryMinHeight: '', libraryMaxHeight: '', libraryMinSize: '', libraryMaxSize: '', librarySort: 'updated', storageStats: null,
   libraryRefreshToken: 0,
   pageRenderLimit: 120,
@@ -154,7 +159,7 @@ const setText = (element, value) => { if (element) element.textContent = value; 
 const els = {
   refresh: $('#refreshButton'),
   scanStatus: $('#scanStatus'),
-  pageTitle: $('#pageTitle'), pageUrl: $('#pageUrl'), pageIcon: $('#pageIcon'),
+  pageTitle: $('#pageTitle'), pageUrl: $('#pageUrl'), pageIcon: $('#pageIcon'), scanStats: $('#scanStats'),
   minWidth: $('#minWidth'), maxWidth: $('#maxWidth'), minHeight: $('#minHeight'), maxHeight: $('#maxHeight'),
   widthValue: $('#widthValue'), heightValue: $('#heightValue'), widthTrack: $('#widthTrack'), heightTrack: $('#heightTrack'),
   widthEditor: $('#widthEditor'), heightEditor: $('#heightEditor'),
@@ -178,7 +183,7 @@ const els = {
   loadMoreImages: $('#loadMoreImages'), loadMoreLibrary: $('#loadMoreLibrary'),
   saveAs: $('#saveAs'), download: $('#downloadButton'), zip: $('#zipButton'), selectedCount: $('#selectedCount'),
   downloadProgress: $('#downloadProgress'), progressLabel: $('#progressLabel'), progressValue: $('#progressValue'),
-  progressBar: $('#progressBar'), progressDetail: $('#progressDetail'), cancelButton: $('#cancelButton'), retryButton: $('#retryButton'),
+  progressBar: $('#progressBar'), progressDetail: $('#progressDetail'), progressMetrics: $('#progressMetrics'), cancelButton: $('#cancelButton'), retryButton: $('#retryButton'),
   retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewError: $('#previewError'), previewErrorText: $('#previewErrorText'), previewErrorDetail: $('#previewErrorDetail'), retryPreview: $('#retryPreview'), openPreviewPage: $('#openPreviewPage'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), previewPrevious: $('#previewPrevious'), previewNext: $('#previewNext'), previewPosition: $('#previewPosition'), copyFilteredUrls: $('#copyFilteredUrls'), pageFavoriteSelected: $('#pageFavoriteSelected'), pageTagSelected: $('#pageTagSelected'), pageArchiveSelected: $('#pageArchiveSelected'), batchActionModal: $('#batchActionModal'), batchActionForm: $('#batchActionForm'), batchActionClose: $('#batchActionClose'), batchActionTitle: $('#batchActionTitle'), batchActionDescription: $('#batchActionDescription'), batchActionTagField: $('#batchActionTagField'), batchActionTagLabel: $('#batchActionTagLabel'), batchActionTagInput: $('#batchActionTagInput'), batchActionCollectionField: $('#batchActionCollectionField'), batchActionCollectionLabel: $('#batchActionCollectionLabel'), batchActionCollectionSelect: $('#batchActionCollectionSelect'), batchActionError: $('#batchActionError'), batchActionCancel: $('#batchActionCancel'), batchActionConfirm: $('#batchActionConfirm'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
 };
 
@@ -188,16 +193,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === 'downloadProgress' && message.jobId === state.downloadJobId) updateDownloadProgress(message);
-  if (message?.type === 'downloadProgress' && state.view === 'tasks') loadTasks();
+  if (message?.type === 'downloadProgress' && state.view === 'tasks') scheduleTaskRefresh();
 });
 
 // A side panel stays open while the user changes tabs. Keep the current-page
 // view in sync with the active tab instead of requiring a manual refresh.
 chrome.tabs?.onActivated?.addListener(() => {
-  if (state.view === 'page') scanPage();
+  if (interactionReady && state.view === 'page') scanPage();
 });
 chrome.tabs?.onUpdated?.addListener((tabId, changeInfo) => {
-  if (tabId === state.tabId && changeInfo.status === 'complete' && state.view === 'page') scanPage();
+  if (interactionReady && tabId === state.tabId && changeInfo.status === 'complete' && state.view === 'page') scanPage();
 });
 
 function handleInitError(error) {
@@ -293,6 +298,7 @@ async function init() {
   renderSiteAdapters();
   applyLanguage();
   interactionReady = true;
+  void recoverTaskState();
   // Library data is secondary to the current-page scan. Do not block the
   // scan or the loading state on IndexedDB reads.
   void refreshLibraryData();
@@ -312,6 +318,8 @@ function bindEvents() {
     state.language = state.language === 'zh' ? 'en' : 'zh';
     applyLanguage();
     render();
+    updateScanStats();
+    updateDownloadMetrics({ phase: 'running', completed: 0, total: state.downloadMetrics.total });
     renderLibrary();
     loadHistory();
     loadTasks();
@@ -1301,12 +1309,31 @@ async function loadHistory() {
 
 async function loadTasks() {
   try {
+    await recoverTaskState();
     state.taskRecords = await ImageCollectorDB.listDownloads(50);
     renderTasks();
   } catch {
     state.taskRecords = [];
     renderTasks();
   }
+}
+
+function recoverTaskState() {
+  if (state.taskRecoveryPromise) return state.taskRecoveryPromise;
+  state.taskRecoveryPromise = withTimeout(
+    () => chrome.runtime.sendMessage({ type: 'recoverDownloadTasks' }),
+    1500,
+    '任务状态恢复超时'
+  ).catch(() => null);
+  return state.taskRecoveryPromise;
+}
+
+function scheduleTaskRefresh() {
+  if (state.taskRefreshTimer || state.view !== 'tasks') return;
+  state.taskRefreshTimer = setTimeout(() => {
+    state.taskRefreshTimer = null;
+    void loadTasks();
+  }, 250);
 }
 
 function renderTasks() {
@@ -1335,7 +1362,7 @@ function renderTasks() {
       failedItems.slice(0, 20).forEach((failure) => {
         const row = document.createElement('span');
         const code = document.createElement('strong'); code.textContent = String(failure.code || record.errorCode || 'unknown').toUpperCase();
-        const message = document.createElement('span'); message.textContent = ' ' + (failure.error || record.error || t('unknownFailure')); message.title = failure.url || '';
+        const message = document.createElement('span'); message.textContent = ' ' + failureMessageForUi(failure, record); message.title = failure.url || '';
         row.append(code, message); list.append(row);
       });
       if (failedItems.length > 20) {
@@ -1369,6 +1396,13 @@ function taskStatusLabel(status) {
 function failedItemsFor(record) {
   const stored = Array.isArray(record?.failedItems) ? record.failedItems.filter((item) => item?.url) : [];
   return stored;
+}
+
+function failureMessageForUi(failure, record) {
+  const code = failure?.code || record?.errorCode || '';
+  if (code === 'service-worker-restarted') return t('serviceWorkerRestarted');
+  if (code === 'timeout') return t('requestTimeout');
+  return failure?.error || record?.error || t('unknownFailure');
 }
 
 function failureReportItemsFor(record) {
@@ -1551,14 +1585,23 @@ async function loadPreviewWithFallback(image, options = {}) {
   let candidateIndex = 0;
   let cacheTried = false;
   let usingCachedPreview = false;
+  let attemptToken = 0;
+  let timeoutId = null;
+  const clearPreviewTimeout = () => { if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; } };
   releasePreviewObjectUrl();
   els.previewError.hidden = true;
   if (els.previewErrorDetail) els.previewErrorDetail.textContent = '';
   els.previewImage.hidden = false;
-  els.previewImage.onerror = async () => {
+  const handleFailure = async () => {
     if (token !== previewLoadToken) return;
+    clearPreviewTimeout();
+    attemptToken += 1;
     if (candidateIndex < candidates.length) {
+      const currentAttempt = attemptToken;
       els.previewImage.src = candidates[candidateIndex++];
+      timeoutId = setTimeout(() => {
+        if (token === previewLoadToken && currentAttempt === attemptToken) void handleFailure();
+      }, 6000);
       return;
     }
     if (!cacheTried) {
@@ -1570,13 +1613,22 @@ async function loadPreviewWithFallback(image, options = {}) {
     }
     if (token === previewLoadToken) showPreviewError(t('previewFailureHint', { count: candidates.length }));
   };
+  els.previewImage.onerror = handleFailure;
   els.previewImage.onload = () => {
     if (token !== previewLoadToken) return;
+    clearPreviewTimeout();
+    attemptToken += 1;
     els.previewImage.hidden = false;
     els.previewError.hidden = true;
     if (!usingCachedPreview) void requestImageCache(image);
   };
-  if (candidates.length) els.previewImage.src = candidates[candidateIndex++];
+  if (candidates.length) {
+    const currentAttempt = ++attemptToken;
+    els.previewImage.src = candidates[candidateIndex++];
+    timeoutId = setTimeout(() => {
+      if (token === previewLoadToken && currentAttempt === attemptToken) void handleFailure();
+    }, 6000);
+  }
   else if (!(await loadPreviewFromCache(image, token)) && token === previewLoadToken) showPreviewError(t('previewFailureHint', { count: 0 }));
 }
 
@@ -1693,6 +1745,7 @@ async function scanPage(options = {}) {
     state.source = 'all';
     state.selected.clear();
     state.duplicateCount = 0;
+    state.scanStats = { discovered: 0, duplicates: 0, skipped: 0, dimensionsChecked: 0, dimensionsFailed: 0, partial: false };
     state.retryImages = [];
     updateRetryUI();
     renderFormatTabs();
@@ -1722,10 +1775,12 @@ async function scanPage(options = {}) {
     const merged = new Map();
     let duplicateCount = 0;
     let partialScan = false;
+    let skippedCount = 0;
     for (const result of results || []) {
       const payload = result?.result || {};
       const rawImages = Array.isArray(payload) ? payload : payload.images || [];
       duplicateCount += Array.isArray(payload) ? 0 : Number(payload.duplicateCount || 0);
+      skippedCount += Array.isArray(payload) ? 0 : Number(payload.skipped || 0);
       partialScan = partialScan || Boolean(!Array.isArray(payload) && payload.partial);
       for (const image of rawImages) {
         const existing = merged.get(image.url);
@@ -1738,6 +1793,14 @@ async function scanPage(options = {}) {
       }
     }
     state.duplicateCount = partialScan ? Math.max(state.duplicateCount, duplicateCount) : duplicateCount;
+    state.scanStats = {
+      ...state.scanStats,
+      discovered: merged.size,
+      duplicates: state.duplicateCount,
+      skipped: skippedCount,
+      partial: partialScan
+    };
+    updateScanStats();
     const discovered = [...merged.values()].map((image, index) => ({
       ...image,
       format: image.format || 'other',
@@ -1771,6 +1834,8 @@ async function scanPage(options = {}) {
       state.dimensionFiltered = [];
       state.filtered = [];
       state.selected.clear();
+      state.scanStats.partial = true;
+      updateScanStats();
       render();
       els.error.hidden = false;
       els.error.textContent = `${t('scanFailedPrefix')}${error.message || t('pageAccessError')}`;
@@ -1848,7 +1913,10 @@ async function archiveImagesBySiteAdapters(images, pageUrl) {
 
 async function loadImageMetadata(scanId) {
   const images = state.images.slice(0, 300);
-  if (!images.length) return;
+  if (!images.length) {
+    updateScanStats();
+    return;
+  }
   try {
     const response = await withTimeout(
       () => chrome.runtime.sendMessage({ type: 'inspectImages', images }),
@@ -1857,6 +1925,8 @@ async function loadImageMetadata(scanId) {
     );
     if (scanId !== state.scanId || !Array.isArray(response?.items)) return;
     const metadata = new Map(response.items.map((item) => [item.url, item]));
+    state.scanStats.dimensionsChecked = response.items.length;
+    state.scanStats.dimensionsFailed = response.items.filter((item) => !item.size && !item.mime).length;
     state.images.forEach((image) => {
       const item = metadata.get(image.url);
       if (!item) return;
@@ -1872,8 +1942,12 @@ async function loadImageMetadata(scanId) {
       // Metadata persistence is optional and must not affect the image grid.
     }
   } catch {
+    state.scanStats.dimensionsChecked = 0;
+    state.scanStats.dimensionsFailed = images.length;
+    state.scanStats.partial = true;
     // Metadata is optional; image discovery should remain usable when HEAD is blocked.
   }
+  updateScanStats();
 }
 
 async function collectPageImages(options = {}) {
@@ -1987,10 +2061,11 @@ async function collectPageImages(options = {}) {
 
   const imageLikeUrl = (url) => /\.(?:avif|bmp|gif|jpe?g|png|svg|webp|ico)(?:$|[?#])/i.test(url) || /[?&](?:format|fm|image|img|w|width)=/i.test(url);
 
+  let skippedCount = 0;
   const add = (rawUrl, width, height, source, alt = '', options = {}) => {
-    if (candidateLimit && found.length >= candidateLimit) return;
+    if (candidateLimit && found.length >= candidateLimit) { skippedCount += 1; return; }
     const url = normalizeUrl(rawUrl);
-    if (!url) return;
+    if (!url) { skippedCount += 1; return; }
     const entry = {
       url,
       displayUrl: options.displayUrl || url,
@@ -2202,7 +2277,7 @@ async function collectPageImages(options = {}) {
     if (entryScore > existingScore) unique.set(key, entry);
   }
   const images = [...unique.values()].map(({ contentKey, element, ...image }) => image);
-  return { images: options.limit ? images.slice(0, Number(options.limit)) : images, duplicateCount, partial: expired() };
+  return { images: options.limit ? images.slice(0, Number(options.limit)) : images, duplicateCount, skipped: skippedCount, partial: expired() };
 }
 
 function applyFilters() {
@@ -2691,10 +2766,14 @@ async function downloadImages(images, asZip) {
   state.retryImages = [];
   state.retryAsZip = asZip;
   state.cancelled = false;
+  state.downloadMetrics = { startedAt: Date.now(), total: images.length };
+  const knownBytes = images.reduce((sum, image) => sum + (Number(image.size) || 0), 0);
+  const unknownCount = images.filter((image) => !(Number(image.size) > 0)).length;
+  if (knownBytes > 200 * 1024 * 1024 || images.length > 500) showToast(t('largeDownloadWarning'));
   updateRetryUI();
   els.download.disabled = true;
   els.zip.disabled = true;
-  updateDownloadProgress({ phase: 'starting', completed: 0, total: images.length, failed: 0, percent: 0, detail: asZip ? t('prepareZip') : t('prepareImages') });
+  updateDownloadProgress({ phase: 'starting', completed: 0, total: images.length, failed: 0, percent: 0, detail: t('prepareWithEstimate', { action: asZip ? t('prepareZip') : t('prepareImages'), count: images.length, size: knownBytes ? formatBytes(knownBytes) : t('unknownSize'), unknown: unknownCount }) });
   try {
     const response = await chrome.runtime.sendMessage({
       type: asZip ? 'downloadZip' : 'downloadImages', images, saveAs: state.saveAs,
@@ -2727,7 +2806,36 @@ async function downloadImages(images, asZip) {
   }
 }
 
+function updateDownloadMetrics(progress) {
+  if (['starting', 'queued'].includes(progress.phase) || !state.downloadMetrics.startedAt) {
+    state.downloadMetrics.startedAt = Date.now();
+    state.downloadMetrics.total = Number(progress.total) || state.downloadMetrics.total || 0;
+  }
+  const completed = Math.max(0, Number(progress.completed) || 0);
+  const total = Number(progress.total) || state.downloadMetrics.total || 0;
+  const elapsed = Math.max(0, (Date.now() - state.downloadMetrics.startedAt) / 1000);
+  const speed = completed > 0 && elapsed > 0 ? completed / elapsed : 0;
+  const remaining = speed > 0 ? Math.max(0, (total - completed) / speed) : 0;
+  if (els.progressMetrics) {
+    els.progressMetrics.textContent = t('progressMetrics', {
+      completed,
+      total,
+      speed: speed ? speed.toFixed(1) : '—',
+      eta: speed ? formatDuration(remaining) : '—'
+    });
+  }
+}
+
+function formatDuration(seconds) {
+  const value = Math.max(0, Math.round(Number(seconds) || 0));
+  if (value < 60) return value + 's';
+  const minutes = Math.floor(value / 60);
+  const rest = value % 60;
+  return minutes + 'm ' + String(rest).padStart(2, '0') + 's';
+}
+
 function updateDownloadProgress(progress) {
+  updateDownloadMetrics(progress);
   els.downloadProgress.hidden = false;
   const percent = Math.max(0, Math.min(100, Number(progress.percent) || 0));
   els.progressBar.style.width = `${percent}%`;
@@ -2872,6 +2980,25 @@ Object.assign(TRANSLATIONS.en, {
   exportFailureReport: 'Export error report', failureDetails: 'Failure details ({count})', moreFailures: '{count} more not shown', unknownFailure: 'Unknown error',
   copyFailureUrls: 'Copy failed URLs', failureUrlsCopied: 'Copied {count} failed URL(s)', noFailureReport: 'No failure records', failureReportExported: 'Exported {count} failure record(s)',
   previewFailureHint: 'Tried {count} image URL(s); hotlink protection, sign-in requirements, expired links, or cross-origin policy may be blocking the preview.'
+});
+
+Object.assign(TRANSLATIONS.zh, {
+  scanStats: '发现 {discovered} · 跳过 {skipped} · 已探测 {dimensions} · 失败 {failed}{partial}',
+  scanPartial: '部分完成',
+  requestTimeout: '请求超时，可能是网络较慢或图片服务器未响应',
+  serviceWorkerRestarted: '后台任务因扩展服务重启而中断，请重试失败项',
+  progressMetrics: '{completed}/{total} · {speed} 项/秒 · 剩余 {eta}',
+  prepareWithEstimate: '{action} · {count} 张 · 已知大小 {size} · 未知 {unknown} 张',
+  largeDownloadWarning: '任务较大，已限制下载节奏；请耐心等待完成。'
+});
+Object.assign(TRANSLATIONS.en, {
+  scanStats: 'Found {discovered} · skipped {skipped} · dimensions {dimensions} · failed {failed}{partial}',
+  scanPartial: 'partial',
+  requestTimeout: 'Request timed out; the network may be slow or the image server may not respond',
+  serviceWorkerRestarted: 'The background task was interrupted because the extension worker restarted; retry failed items',
+  progressMetrics: '{completed}/{total} · {speed} items/s · {eta} remaining',
+  prepareWithEstimate: '{action} · {count} image(s) · known size {size} · unknown {unknown}',
+  largeDownloadWarning: 'This is a large task; download pacing is limited. Please wait for it to finish.'
 });
 
 function t(key, values = {}) {
@@ -3061,6 +3188,7 @@ function applyLanguage() {
 }
 
 function setScanPhase(phase) {
+  state.scanPhase = phase;
   const text = t(phase);
   if (text) {
     setText(els.scanStatus, text);
@@ -3074,8 +3202,23 @@ function setLoading(loading, phase = 'scanning') {
     els.grid.replaceChildren();
     els.empty.hidden = true;
     setScanPhase(phase);
+  } else if (!['failed', 'cancelled'].includes(state.scanPhase)) {
+    state.scanPhase = 'complete';
   }
 }
+function updateScanStats() {
+  if (!els.scanStats) return;
+  const stats = state.scanStats || {};
+  const values = {
+    discovered: Number(stats.discovered) || state.images.length,
+    skipped: Number(stats.skipped) || 0,
+    dimensions: Number(stats.dimensionsChecked) || 0,
+    failed: Number(stats.dimensionsFailed) || 0,
+    partial: stats.partial ? ' · ' + t('scanPartial') : ''
+  };
+  els.scanStats.textContent = t('scanStats', values);
+}
+
 function updateScanStatus() {
   els.scanStatus.textContent = `${t('imageCount', { count: state.images.length })}${state.duplicateCount ? ` · ${t('duplicates', { count: state.duplicateCount })}` : ''}`;
 }

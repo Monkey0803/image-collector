@@ -306,6 +306,53 @@
     return records.sort((left, right) => right.createdAt - left.createdAt).slice(0, limit);
   }
 
+  async function recoverInterruptedDownloads(activeJobIds = []) {
+    const active = new Set((Array.isArray(activeJobIds) ? activeJobIds : []).filter(Boolean).map(String));
+    const db = await openDatabase();
+    const transaction = db.transaction(DOWNLOAD_STORE, 'readwrite');
+    const store = transaction.objectStore(DOWNLOAD_STORE);
+    const request = store.openCursor();
+    let recovered = 0;
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      const record = cursor.value;
+      const jobId = String(record.jobId || record.id || '');
+      if (['queued', 'running', 'paused'].includes(record.status) && (!jobId || !active.has(jobId))) {
+        const urls = Array.isArray(record.urls) ? record.urls.filter(Boolean) : [];
+        const existingFailures = Array.isArray(record.failedItems) ? record.failedItems : [];
+        const knownFailureUrls = new Set(existingFailures.map((item) => item?.url).filter(Boolean));
+        const failedItems = [
+          ...existingFailures,
+          ...urls.filter((url) => !knownFailureUrls.has(url)).map((url) => ({
+            url,
+            candidateUrls: [url],
+            code: 'service-worker-restarted',
+            stage: 'download',
+            error: 'Download task was interrupted because the background worker restarted.'
+          }))
+        ].slice(0, 1000);
+        cursor.update({
+          ...record,
+          status: 'failed',
+          phase: 'failed',
+          paused: false,
+          failed: failedItems.length,
+          failedItems,
+          error: 'Download task was interrupted because the background worker restarted.',
+          errorCode: 'service-worker-restarted',
+          detail: 'Download task interrupted; retry the failed items.',
+          completedAt: Date.now(),
+          updatedAt: Date.now()
+        });
+        recovered += 1;
+      }
+      cursor.continue();
+    };
+    await transactionDone(transaction);
+    return recovered;
+  }
+
   async function getScanImages(scanId) {
     const db = await openDatabase();
     const scanTransaction = db.transaction(SCAN_STORE, 'readonly');
@@ -348,6 +395,7 @@
       urls: Array.isArray(record.urls) ? record.urls.slice(0, 1000) : [],
       count: Number(record.count) || 0,
       started: Number(record.started) || 0,
+      completed: Number(record.completed) || 0,
       failed: Number(record.failed) || 0,
       failedItems: Array.isArray(record.failedItems) ? record.failedItems.slice(0, 1000) : [],
       error: record.error || '',
@@ -586,6 +634,7 @@
     setTags,
     saveDownload,
     updateDownload,
+    recoverInterruptedDownloads,
     createCollection,
     listCollections,
     setImageCollections,

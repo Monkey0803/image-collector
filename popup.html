@@ -26,6 +26,7 @@
         <div class="page-copy">
           <strong id="pageTitle">正在读取当前页面</strong>
           <span id="pageUrl">—</span>
+          <small id="scanStats" class="scan-stats" aria-live="polite"></small>
         </div>
       </section>
 
@@ -191,6 +192,7 @@
               <button id="retryButton" class="retry-button" type="button" hidden>重试失败项 <span id="retryCount">0</span></button>
             </div>
           </div>
+          <div id="progressMetrics" class="progress-metrics" aria-live="polite"></div>
         </div>
         <div class="zip-options">
           <div class="download-settings">
