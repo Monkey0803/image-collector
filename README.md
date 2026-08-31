@@ -271,6 +271,20 @@ image_2026.08.20.zip
 - 预览导航会跟随当前视图：当前页面预览浏览页面筛选结果，素材库预览浏览当前素材库结果。
 - 点击下载操作下方的“复制当前结果 URL”可以复制当前结果中每张图片的最佳可用地址；如果已经勾选图片，则只复制已选图片，否则复制当前全部筛选结果，每行一个地址。
 
+#### 2.3.0 current-page batch management
+
+- Select images in the current-page result grid, then use **Favorite selected**, **Tag selected**, or **Archive selected** below the download actions.
+- The favorite action writes selected images to the local library in one operation. The tag action adds one tag to all selected images without removing existing tags.
+- The archive action lets you choose a local collection by number and adds the selected images to that collection without removing their existing collection memberships.
+- These actions reuse the same local IndexedDB library as the Library view, so the updated favorites, tags, and collections are immediately available there.
+
+#### 2.3.0 当前页面批量管理
+
+- 在当前页面结果中勾选图片后，可以使用下载操作下方的“收藏选中”“给选中加标签”和“归档选中”。
+- 批量收藏会一次性将选中图片写入本地素材库；批量加标签会为所有选中图片添加一个标签，不会删除已有标签。
+- 批量归档会让用户按序号选择本地集合，并将选中图片加入该集合，不会删除图片已有的其它集合关系。
+- 这些操作和素材库使用同一个本地 IndexedDB，完成后可以立即在“素材库”视图中查看结果。
+
 ### 权限说明
 
 扩展在 `manifest.json` 中声明了以下权限：

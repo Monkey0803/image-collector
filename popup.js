@@ -32,6 +32,7 @@ const state = {
   },
   aspectRange: { min: 0.25, max: 5 },
   toastTimer: null,
+  pageBatchBusy: false,
   downloadJobId: null,
   retryImages: [],
   retryAsZip: false,
@@ -172,7 +173,7 @@ const els = {
   saveAs: $('#saveAs'), download: $('#downloadButton'), zip: $('#zipButton'), selectedCount: $('#selectedCount'),
   downloadProgress: $('#downloadProgress'), progressLabel: $('#progressLabel'), progressValue: $('#progressValue'),
   progressBar: $('#progressBar'), progressDetail: $('#progressDetail'), cancelButton: $('#cancelButton'), retryButton: $('#retryButton'),
-  retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewError: $('#previewError'), previewErrorText: $('#previewErrorText'), retryPreview: $('#retryPreview'), openPreviewPage: $('#openPreviewPage'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), previewPrevious: $('#previewPrevious'), previewNext: $('#previewNext'), previewPosition: $('#previewPosition'), copyFilteredUrls: $('#copyFilteredUrls'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
+  retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewError: $('#previewError'), previewErrorText: $('#previewErrorText'), retryPreview: $('#retryPreview'), openPreviewPage: $('#openPreviewPage'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), previewPrevious: $('#previewPrevious'), previewNext: $('#previewNext'), previewPosition: $('#previewPosition'), copyFilteredUrls: $('#copyFilteredUrls'), pageFavoriteSelected: $('#pageFavoriteSelected'), pageTagSelected: $('#pageTagSelected'), pageArchiveSelected: $('#pageArchiveSelected'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -541,6 +542,9 @@ function bindEvents() {
   on(els.download, 'click', () => downloadSelected(false));
   on(els.zip, 'click', () => downloadSelected(true));
   on(els.copyFilteredUrls, 'click', copyFilteredImageUrls);
+  on(els.pageFavoriteSelected, 'click', () => bulkUpdateCurrentPage('favorite'));
+  on(els.pageTagSelected, 'click', () => bulkUpdateCurrentPage('tag'));
+  on(els.pageArchiveSelected, 'click', () => bulkUpdateCurrentPage('collection'));
   on(els.closePreview, 'click', closePreview);
   on(els.previewModal, 'click', (event) => { if (event.target.matches('[data-close-preview]')) closePreview(); });
   on(els.copyImageUrl, 'click', copyPreviewUrl);
@@ -865,6 +869,51 @@ async function copyFilteredImageUrls() {
     showToast(t('urlsCopied', { count: urls.length }));
   } catch {
     showToast(t('copyFailed'));
+  }
+}
+
+async function bulkUpdateCurrentPage(action) {
+  if (state.pageBatchBusy) return;
+  const images = selectedImages();
+  if (!images.length) { showToast(t('selectPageImages')); return; }
+  const urls = [...new Set(images.map((image) => image.url).filter(Boolean))];
+  state.pageBatchBusy = true;
+  render();
+  try {
+    let updates;
+    if (action === 'favorite') {
+      updates = { favorite: true };
+    } else if (action === 'tag') {
+      const tag = window.prompt(t('pageTagPrompt'));
+      if (!tag?.trim()) return;
+      const cleanTag = tag.trim().slice(0, 40);
+      updates = (record) => ({ tags: [...new Set([...(record.tags || []), cleanTag])] });
+    } else if (action === 'collection') {
+      state.collections = await ImageCollectorDB.listCollections();
+      if (!state.collections.length) { showToast(t('createCollectionFirst')); return; }
+      const names = state.collections.map((collection, index) => String(index + 1) + '. ' + collection.name).join('\n');
+      const choice = Number(window.prompt(t('pageArchivePrompt') + '\n' + names));
+      const collection = state.collections[choice - 1];
+      if (!collection) return;
+      updates = (record) => ({ collectionIds: [...new Set([...(record.collectionIds || []), collection.id])] });
+    } else {
+      return;
+    }
+    await ImageCollectorDB.bulkUpsertAndUpdateImages(images, updates);
+    if (action === 'favorite') {
+      showToast(t('pageFavoriteDone', { count: urls.length }));
+    } else if (action === 'tag') {
+      showToast(t('pageTagDone', { count: urls.length }));
+    } else if (action === 'collection') {
+      showToast(t('pageArchiveDone', { count: urls.length }));
+    }
+    await refreshLibraryData();
+    render();
+  } catch {
+    showToast(t('pageBatchFailed'));
+  } finally {
+    state.pageBatchBusy = false;
+    render();
   }
 }
 
@@ -2353,6 +2402,9 @@ function render() {
   els.selectedSummary.textContent = t('selectedCount', { count: selected.length });
   els.download.disabled = selected.length === 0;
   els.zip.disabled = selected.length === 0;
+  if (els.pageFavoriteSelected) els.pageFavoriteSelected.disabled = selected.length === 0 || state.pageBatchBusy;
+  if (els.pageTagSelected) els.pageTagSelected.disabled = selected.length === 0 || state.pageBatchBusy;
+  if (els.pageArchiveSelected) els.pageArchiveSelected.disabled = selected.length === 0 || state.pageBatchBusy;
   if (els.copyFilteredUrls) els.copyFilteredUrls.disabled = state.filtered.length === 0;
 }
 
@@ -2577,6 +2629,12 @@ Object.assign(TRANSLATIONS.zh, {
 Object.assign(TRANSLATIONS.en, {
   previousImage: 'Previous image', nextImage: 'Next image', previewPosition: '{current} / {total}', copyFilteredUrls: 'Copy result URLs', noUrlsToCopy: 'There are no image URLs to copy', urlsCopied: 'Copied {count} image URL(s)'
 });
+Object.assign(TRANSLATIONS.zh, {
+  pageFavoriteSelected: '收藏选中', pageTagSelected: '给选中加标签', pageArchiveSelected: '归档选中', selectPageImages: '请先选择当前页面图片', pageFavoriteDone: '已收藏 {count} 张图片', pageTagPrompt: '请输入要添加的标签', pageTagDone: '已为 {count} 张图片添加标签', pageArchivePrompt: '请输入要归档到的集合序号', pageArchiveDone: '已将 {count} 张图片归档', pageBatchFailed: '当前页面批量操作失败'
+});
+Object.assign(TRANSLATIONS.en, {
+  pageFavoriteSelected: 'Favorite selected', pageTagSelected: 'Tag selected', pageArchiveSelected: 'Archive selected', selectPageImages: 'Select images on the current page first', pageFavoriteDone: 'Favorited {count} image(s)', pageTagPrompt: 'Tag to add', pageTagDone: 'Added a tag to {count} image(s)', pageArchivePrompt: 'Enter the collection number', pageArchiveDone: 'Archived {count} image(s)', pageBatchFailed: 'Current-page bulk action failed'
+});
 
 function t(key, values = {}) {
   const raw = TRANSLATIONS[state.language]?.[key] ?? TRANSLATIONS.zh[key] ?? key;
@@ -2666,6 +2724,7 @@ function applyLanguage() {
   const zipOptions = [t('noGrouping'), t('bySite'), t('byFormat'), t('bySiteFormat')]; [...(els.zipLayout?.options || [])].forEach((option, index) => { if (zipOptions[index]) option.textContent = zipOptions[index]; });
   const dateText = document.querySelector('.date-folder-setting span'); if (dateText) dateText.textContent = t('dateFolder');
   setText(els.exportJson, t('json')); setText(els.exportCsv, t('csv')); setText(els.copyFilteredUrls, t('copyFilteredUrls'));
+  setText(els.pageFavoriteSelected, t('pageFavoriteSelected')); setText(els.pageTagSelected, t('pageTagSelected')); setText(els.pageArchiveSelected, t('pageArchiveSelected'));
   if (els.download) {
     els.download.innerHTML = `${t('downloadSelected')} <span id="selectedCount">${els.selectedCount?.textContent || '0'}</span>`;
     els.selectedCount = $('#selectedCount');

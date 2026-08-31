@@ -165,8 +165,7 @@ async function handleContextFavorite(info, tab) {
   const image = contextImage(info, tab);
   if (!image) return;
   try {
-    await ImageCollectorDB.upsertImages([image]);
-    await ImageCollectorDB.setFavorite(image.url, true);
+    await ImageCollectorDB.bulkUpsertAndUpdateImages([image], { favorite: true });
   } catch {
     // The context action should not interrupt the page when local storage is unavailable.
   }

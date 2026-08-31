@@ -270,3 +270,19 @@ This document tracks `1.8.0` and future releases. Completed items use `[x]`.
 - [x] Navigate previews with the left and right arrow keys and show the current position and total count.
 - [x] Copy image URLs for the current filtered results or selected images, one URL per line.
 - [x] Use the current library results as the navigation scope for library previews instead of mixing them with page results.
+
+## 2.3.0 current-page batch management
+
+### 中文
+
+- [x] 支持在当前页面批量收藏已选图片。
+- [x] 支持为当前页面已选图片批量添加标签，并保留原有标签。
+- [x] 支持将当前页面已选图片批量归档到本地集合，并保留原有集合关系。
+- [x] 当前页面批量操作与素材库共享 IndexedDB 数据，操作后立即同步到素材库视图。
+
+### English
+
+- [x] Favorite selected images from the current-page result grid in one operation.
+- [x] Add a tag to selected current-page images without removing existing tags.
+- [x] Archive selected current-page images into a local collection without removing existing memberships.
+- [x] Share the same IndexedDB records with the Library view so batch changes appear immediately.

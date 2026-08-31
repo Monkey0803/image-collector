@@ -109,6 +109,34 @@
     };
   }
 
+  function mergeImageRecord(image, previous) {
+    return {
+      ...image,
+      width: image.width || previous?.width || 0,
+      height: image.height || previous?.height || 0,
+      mime: image.mime || previous?.mime || '',
+      size: image.size || previous?.size || 0,
+      displayUrl: image.displayUrl || previous?.displayUrl || image.url,
+      source: image.source || previous?.source || '',
+      frameUrl: image.frameUrl || previous?.frameUrl || '',
+      alt: image.alt || previous?.alt || '',
+      original: image.original || Boolean(previous?.original),
+      favorite: previous ? Boolean(previous.favorite) : image.favorite,
+      tags: previous ? cleanTags(previous.tags) : image.tags,
+      collectionIds: previous ? cleanCollectionIds(previous.collectionIds) : image.collectionIds,
+      createdAt: previous?.createdAt || Date.now()
+    };
+  }
+
+  function applyImageUpdates(previous, updates) {
+    const changes = updates || {};
+    const record = { ...previous, ...changes, id: previous.id, url: previous.url, updatedAt: Date.now() };
+    record.favorite = changes.favorite === undefined ? Boolean(previous.favorite) : Boolean(changes.favorite);
+    record.tags = changes.tags === undefined ? cleanTags(previous.tags) : cleanTags(changes.tags);
+    record.collectionIds = changes.collectionIds === undefined ? cleanCollectionIds(previous.collectionIds) : cleanCollectionIds(changes.collectionIds);
+    return record;
+  }
+
   async function getImage(url) {
     const db = await openDatabase();
     const transaction = db.transaction(IMAGE_STORE, 'readonly');
@@ -193,37 +221,36 @@
   }
 
   async function upsertImages(images) {
-    const incoming = (Array.isArray(images) ? images : []).map(normalizeImage).filter(Boolean);
+    return bulkUpsertAndUpdateImages(images);
+  }
+
+  async function bulkUpsertAndUpdateImages(images, updates = {}) {
+    const incoming = [...new Map((Array.isArray(images) ? images : [])
+      .map(normalizeImage)
+      .filter(Boolean)
+      .map((image) => [image.id, image])).values()];
     if (!incoming.length) return [];
     const db = await openDatabase();
-    const readTransaction = db.transaction(IMAGE_STORE, 'readonly');
-    const readStore = readTransaction.objectStore(IMAGE_STORE);
-    const readDone = transactionDone(readTransaction);
-    const existing = await Promise.all(incoming.map((image) => requestValue(readStore.get(image.id))));
-    await readDone;
-    const records = incoming.map((image, index) => {
-      const previous = existing[index];
-      return {
-        ...image,
-        width: image.width || previous?.width || 0,
-        height: image.height || previous?.height || 0,
-        mime: image.mime || previous?.mime || '',
-        size: image.size || previous?.size || 0,
-        displayUrl: image.displayUrl || previous?.displayUrl || image.url,
-        source: image.source || previous?.source || '',
-        frameUrl: image.frameUrl || previous?.frameUrl || '',
-        alt: image.alt || previous?.alt || '',
-        original: image.original || Boolean(previous?.original),
-        favorite: previous ? Boolean(previous.favorite) : image.favorite,
-        tags: previous ? cleanTags(previous.tags) : image.tags,
-        collectionIds: previous ? cleanCollectionIds(previous.collectionIds) : image.collectionIds,
-        createdAt: previous?.createdAt || Date.now()
-      };
-    });
     const transaction = db.transaction(IMAGE_STORE, 'readwrite');
     const store = transaction.objectStore(IMAGE_STORE);
-    records.forEach((record) => store.put(record));
-    await transactionDone(transaction);
+    const records = new Array(incoming.length);
+    const requests = incoming.map((image, index) => new Promise((resolve, reject) => {
+      const request = store.get(image.id);
+      request.onsuccess = () => {
+        try {
+          const base = mergeImageRecord(image, request.result);
+          const changes = typeof updates === 'function' ? updates(base) : updates;
+          const record = applyImageUpdates(base, changes);
+          records[index] = record;
+          store.put(record);
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      };
+      request.onerror = () => reject(request.error || new Error('本地图片读取失败'));
+    }));
+    await Promise.all([Promise.all(requests), transactionDone(transaction)]);
     return records;
   }
 
@@ -292,22 +319,15 @@
   }
 
   async function updateImage(url, updates = {}) {
-    const previous = await getImage(url);
-    const base = previous || normalizeImage({ url });
-    if (!base) return null;
-    const record = {
-      ...base,
-      ...updates,
-      id: base.id,
-      url: base.url,
-      favorite: updates.favorite === undefined ? Boolean(base.favorite) : Boolean(updates.favorite),
-      tags: updates.tags === undefined ? cleanTags(base.tags) : cleanTags(updates.tags),
-      collectionIds: updates.collectionIds === undefined ? cleanCollectionIds(base.collectionIds) : cleanCollectionIds(updates.collectionIds),
-      updatedAt: Date.now()
-    };
     const db = await openDatabase();
     const transaction = db.transaction(IMAGE_STORE, 'readwrite');
-    transaction.objectStore(IMAGE_STORE).put(record);
+    const store = transaction.objectStore(IMAGE_STORE);
+    const previous = await requestValue(store.get(imageId(url)));
+    const base = previous || normalizeImage({ url });
+    if (!base) return null;
+    const changes = typeof updates === 'function' ? updates(base) : updates;
+    const record = applyImageUpdates(base, changes);
+    store.put(record);
     await transactionDone(transaction);
     return record;
   }
@@ -315,8 +335,7 @@
   function setFavorite(url, favorite) { return updateImage(url, { favorite }); }
 
   async function toggleFavorite(url) {
-    const previous = await getImage(url);
-    return updateImage(url, { favorite: !previous?.favorite });
+    return updateImage(url, (record) => ({ favorite: !record.favorite }));
   }
 
   function setTags(url, tags) { return updateImage(url, { tags }); }
@@ -404,24 +423,27 @@
     const ids = [...new Set((Array.isArray(urls) ? urls : []).map(imageId).filter(Boolean))];
     if (!ids.length) return [];
     const db = await openDatabase();
-    const readTransaction = db.transaction(IMAGE_STORE, 'readonly');
-    const readStore = readTransaction.objectStore(IMAGE_STORE);
-    const readDone = transactionDone(readTransaction);
-    const records = await Promise.all(ids.map((id) => requestValue(readStore.get(id))));
-    await readDone;
-    const updated = records.filter(Boolean).map((previous) => {
-      const changes = typeof updates === 'function' ? updates(previous) : updates;
-      const record = { ...previous, ...(changes || {}), id: previous.id, url: previous.url, updatedAt: Date.now() };
-      record.favorite = changes?.favorite === undefined ? Boolean(previous.favorite) : Boolean(changes.favorite);
-      record.tags = changes?.tags === undefined ? cleanTags(previous.tags) : cleanTags(changes.tags);
-      record.collectionIds = changes?.collectionIds === undefined ? cleanCollectionIds(previous.collectionIds) : cleanCollectionIds(changes.collectionIds);
-      return record;
-    });
-    if (!updated.length) return [];
     const transaction = db.transaction(IMAGE_STORE, 'readwrite');
     const store = transaction.objectStore(IMAGE_STORE);
-    updated.forEach((record) => store.put(record));
-    await transactionDone(transaction);
+    const updated = [];
+    const requests = ids.map((id) => new Promise((resolve, reject) => {
+      const request = store.get(id);
+      request.onsuccess = () => {
+        try {
+          const previous = request.result;
+          if (!previous) { resolve(); return; }
+          const changes = typeof updates === 'function' ? updates(previous) : updates;
+          const record = applyImageUpdates(previous, changes);
+          updated.push(record);
+          store.put(record);
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      };
+      request.onerror = () => reject(request.error || new Error('本地图片读取失败'));
+    }));
+    await Promise.all([Promise.all(requests), transactionDone(transaction)]);
     return updated;
   }
 
@@ -521,13 +543,13 @@
     }
     for (const image of images) {
       if (!image?.url) continue;
-      const previous = await getImage(image.url);
-      await updateImage(image.url, {
-        ...image,
-        favorite: Boolean(image.favorite || previous?.favorite),
-        tags: cleanTags([...(previous?.tags || []), ...(image.tags || [])]),
-        collectionIds: cleanCollectionIds((image.collectionIds || []).map((id) => collectionMap.get(id) || id))
-      });
+      await bulkUpsertAndUpdateImages([image], (record) => ({
+        favorite: Boolean(image.favorite || record.favorite),
+        tags: cleanTags([...(record.tags || []), ...(image.tags || [])]),
+        collectionIds: cleanCollectionIds((image.collectionIds || [])
+          .map((id) => collectionMap.get(id) || id)
+          .concat(record.collectionIds || []))
+      }));
     }
     return { collections: collectionMap.size, images: images.length };
   }
@@ -551,6 +573,7 @@
     putCachedImage,
     deleteCachedImage,
     upsertImages,
+    bulkUpsertAndUpdateImages,
     saveScan,
     listImages,
     listScans,
