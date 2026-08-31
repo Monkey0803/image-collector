@@ -254,3 +254,19 @@ This document tracks `1.8.0` and future releases. Completed items use `[x]`.
 - [x] Export scan rules, site adapters, and download preferences as a JSON configuration file.
 - [x] Import scan rules, site adapters, and download preferences from JSON and rescan the current page after import.
 - [x] Keep images, cache, collections, and history out of configuration migration files.
+
+## 2.2.0 preview navigation and batch URL copying
+
+### 中文
+
+- [x] 支持在大图预览中浏览当前筛选结果的上一张和下一张图片。
+- [x] 支持使用键盘左右方向键切换预览图片，并显示当前位置和总数量。
+- [x] 支持复制当前筛选结果或已选图片的图片 URL，每行一个地址。
+- [x] 素材库预览使用当前素材库结果作为导航范围，避免与当前页面结果混用。
+
+### English
+
+- [x] Browse previous and next images from the current filtered results in the large preview.
+- [x] Navigate previews with the left and right arrow keys and show the current position and total count.
+- [x] Copy image URLs for the current filtered results or selected images, one URL per line.
+- [x] Use the current library results as the navigation scope for library previews instead of mixing them with page results.

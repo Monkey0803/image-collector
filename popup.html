@@ -212,6 +212,7 @@
           <button id="downloadButton" class="secondary-button" type="button" disabled>下载选中 <span id="selectedCount">0</span></button>
           <button id="zipButton" class="primary-button" type="button" disabled><span class="zip-icon">▣</span> 下载 ZIP</button>
         </div>
+        <div class="download-utility-actions"><button id="copyFilteredUrls" class="subtle-button" type="button" disabled>复制当前结果 URL</button></div>
         <p class="download-note">ZIP 会将当前选中的图片合并为一个文件，适合批量保存。</p>
       </section>
       </div>
@@ -353,6 +354,7 @@
           <div class="preview-header"><strong id="previewTitle">图片预览</strong><button id="closePreview" class="icon-button light" type="button" aria-label="关闭预览">×</button></div>
           <div class="preview-stage"><img id="previewImage" alt="图片预览" /><div id="previewError" class="preview-error" hidden><span id="previewErrorText">预览不可用</span><div class="preview-error-actions"><button id="retryPreview" type="button">重新加载</button><button id="openPreviewPage" type="button">使用网页地址</button></div></div></div>
           <div class="preview-toolbar">
+            <button id="previewPrevious" type="button" aria-label="上一张">‹</button><span id="previewPosition">1 / 1</span><button id="previewNext" type="button" aria-label="下一张">›</button>
             <button id="zoomOut" type="button">−</button><span id="zoomValue">100%</span><button id="zoomIn" type="button">＋</button><button id="zoomReset" type="button">重置</button>
           </div>
           <p id="previewMeta" class="preview-meta"></p>

@@ -259,6 +259,18 @@ image_2026.08.20.zip
 - After reinstalling the extension or moving to another device, choose **Import scan config** and select the JSON file. The current page is rescanned after a successful import.
 - Configuration files do not include images, image cache, collections, or history; they are downloaded to the local location selected by the user.
 
+#### 2.2.0 preview navigation and batch URL copying
+
+- When an image preview is open, use the previous/next buttons or the left/right arrow keys to browse the current filtered results. The position indicator shows the current image and total count.
+- Preview navigation follows the active view: current-page previews browse current filtered results, while library previews browse the current library results.
+- Use **Copy result URLs** below the download actions to copy the best available URL for each current result. If any images are selected, only the selected images are copied; otherwise all current filtered results are copied, one URL per line.
+
+#### 2.2.0 预览导航与批量复制地址
+
+- 打开图片大图预览后，可以使用上一张/下一张按钮或键盘左右方向键浏览当前筛选结果，位置指示器会显示当前图片序号和总数。
+- 预览导航会跟随当前视图：当前页面预览浏览页面筛选结果，素材库预览浏览当前素材库结果。
+- 点击下载操作下方的“复制当前结果 URL”可以复制当前结果中每张图片的最佳可用地址；如果已经勾选图片，则只复制已选图片，否则复制当前全部筛选结果，每行一个地址。
+
 ### 权限说明
 
 扩展在 `manifest.json` 中声明了以下权限：

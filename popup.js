@@ -43,6 +43,8 @@ const state = {
   librarySmartCollection: '',
   collections: [],
   preview: null,
+  previewList: [],
+  previewIndex: -1,
   previewZoom: 1,
   previewObjectUrl: '',
   taskRecords: [],
@@ -170,7 +172,7 @@ const els = {
   saveAs: $('#saveAs'), download: $('#downloadButton'), zip: $('#zipButton'), selectedCount: $('#selectedCount'),
   downloadProgress: $('#downloadProgress'), progressLabel: $('#progressLabel'), progressValue: $('#progressValue'),
   progressBar: $('#progressBar'), progressDetail: $('#progressDetail'), cancelButton: $('#cancelButton'), retryButton: $('#retryButton'),
-  retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewError: $('#previewError'), previewErrorText: $('#previewErrorText'), retryPreview: $('#retryPreview'), openPreviewPage: $('#openPreviewPage'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
+  retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewError: $('#previewError'), previewErrorText: $('#previewErrorText'), retryPreview: $('#retryPreview'), openPreviewPage: $('#openPreviewPage'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), previewPrevious: $('#previewPrevious'), previewNext: $('#previewNext'), previewPosition: $('#previewPosition'), copyFilteredUrls: $('#copyFilteredUrls'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -538,6 +540,7 @@ function bindEvents() {
   on(els.exportCsv, 'click', () => exportImages('csv'));
   on(els.download, 'click', () => downloadSelected(false));
   on(els.zip, 'click', () => downloadSelected(true));
+  on(els.copyFilteredUrls, 'click', copyFilteredImageUrls);
   on(els.closePreview, 'click', closePreview);
   on(els.previewModal, 'click', (event) => { if (event.target.matches('[data-close-preview]')) closePreview(); });
   on(els.copyImageUrl, 'click', copyPreviewUrl);
@@ -547,10 +550,17 @@ function bindEvents() {
     const url = state.preview ? previewCandidates(state.preview, true)[0] : '';
     if (url) chrome.tabs.create({ url });
   });
+  on(els.previewPrevious, 'click', () => navigatePreview(-1));
+  on(els.previewNext, 'click', () => navigatePreview(1));
   on(els.zoomIn, 'click', () => changePreviewZoom(.25));
   on(els.zoomOut, 'click', () => changePreviewZoom(-.25));
   on(els.zoomReset, 'click', () => { state.previewZoom = 1; updatePreviewZoom(); });
-  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !els.previewModal.hidden) closePreview(); });
+  document.addEventListener('keydown', (event) => {
+    if (els.previewModal.hidden) return;
+    if (event.key === 'Escape') { closePreview(); return; }
+    if (event.key === 'ArrowLeft') { event.preventDefault(); navigatePreview(-1); return; }
+    if (event.key === 'ArrowRight') { event.preventDefault(); navigatePreview(1); }
+  });
   document.addEventListener('keydown', (event) => {
     if (event.target.matches('input, textarea, select')) return;
     const key = event.key.toLowerCase();
@@ -844,6 +854,18 @@ function switchView(view) {
   if (view === 'history') loadHistory();
   if (isTasks) loadTasks();
   if (isSettings) loadStorageStats();
+}
+
+async function copyFilteredImageUrls() {
+  const images = selectedImages().length ? selectedImages() : state.filtered;
+  const urls = [...new Set(images.map((image) => previewCandidates(image)[0]).filter(Boolean))];
+  if (!urls.length) { showToast(t('noUrlsToCopy')); return; }
+  try {
+    await navigator.clipboard.writeText(urls.join('\n'));
+    showToast(t('urlsCopied', { count: urls.length }));
+  } catch {
+    showToast(t('copyFailed'));
+  }
 }
 
 async function persistScanRecord(scanId) {
@@ -1201,6 +1223,45 @@ function releasePreviewObjectUrl() {
   state.previewObjectUrl = '';
 }
 
+function renderPreviewNavigation() {
+  const total = state.previewList.length;
+  const current = state.previewIndex >= 0 ? state.previewIndex + 1 : 0;
+  if (els.previewPosition) els.previewPosition.textContent = t('previewPosition', { current, total });
+  if (els.previewPrevious) els.previewPrevious.disabled = state.previewIndex <= 0;
+  if (els.previewNext) els.previewNext.disabled = state.previewIndex < 0 || state.previewIndex >= total - 1;
+}
+
+function updatePreviewContent(image) {
+  const primaryUrl = previewCandidates(image)[0];
+  if (!primaryUrl) return false;
+  state.preview = image;
+  state.previewZoom = 1;
+  els.previewImage.alt = image.alt || t('imagePreview');
+  els.previewTitle.textContent = fileName(primaryUrl);
+  els.previewMeta.textContent = (image.width && image.height ? image.width + ' × ' + image.height + 'px' : t('unknownSize')) + ' · ' + formatLabel(image.format) + (image.original ? ' · ' + t('original') : '');
+  updatePreviewZoom();
+  renderPreviewNavigation();
+  loadPreviewWithFallback(image);
+  return true;
+}
+
+function openPreviewFromList(image) {
+  const list = state.view === 'library' ? state.libraryResults : state.filtered;
+  state.previewList = list.some((item) => item.url === image.url) ? [...list] : [image, ...list];
+  state.previewIndex = state.previewList.findIndex((item) => item.url === image.url);
+  if (!updatePreviewContent(image)) return;
+  els.previewModal.hidden = false;
+  els.closePreview.focus();
+}
+
+function navigatePreview(delta) {
+  if (els.previewModal.hidden || !state.previewList.length) return;
+  const nextIndex = state.previewIndex + delta;
+  if (nextIndex < 0 || nextIndex >= state.previewList.length) return;
+  state.previewIndex = nextIndex;
+  updatePreviewContent(state.previewList[nextIndex]);
+}
+
 function showPreviewError() {
   els.previewImage.hidden = true;
   els.previewError.hidden = false;
@@ -1254,10 +1315,14 @@ async function loadPreviewWithFallback(image, options = {}) {
     if (!usingCachedPreview) void requestImageCache(image);
   };
   if (candidates.length) els.previewImage.src = candidates[candidateIndex++];
-  else if (!(await loadPreviewFromCache(image, token))) showPreviewError();
+  else if (!(await loadPreviewFromCache(image, token)) && token === previewLoadToken) showPreviewError();
 }
 
 function openPreview(image) {
+  return openPreviewFromList(image);
+}
+
+function openPreviewLegacy(image) {
   const primaryUrl = previewCandidates(image)[0];
   if (!primaryUrl) return;
   state.preview = image;
@@ -1281,6 +1346,9 @@ function closePreview() {
   els.previewImage.onload = null;
   els.previewError.hidden = true;
   state.preview = null;
+  state.previewList = [];
+  state.previewIndex = -1;
+  renderPreviewNavigation();
 }
 
 function requestImageCache(image) {
@@ -2285,6 +2353,7 @@ function render() {
   els.selectedSummary.textContent = t('selectedCount', { count: selected.length });
   els.download.disabled = selected.length === 0;
   els.zip.disabled = selected.length === 0;
+  if (els.copyFilteredUrls) els.copyFilteredUrls.disabled = state.filtered.length === 0;
 }
 
 function scheduleApplyFilters() {
@@ -2502,6 +2571,12 @@ Object.assign(TRANSLATIONS.zh, {
 Object.assign(TRANSLATIONS.en, {
   sourceFilter: 'Source', sourceFilterHint: 'Filter by how each image was discovered', sourceRule: 'Rule', configMigration: 'Scan configuration portability', configMigrationNote: 'Export or import scan rules, site adapters, and download preferences. Images, cache, collections, and history are not included.', exportScanConfig: 'Export scan config', importScanConfig: 'Import scan config', scanConfigExported: 'Scan configuration exported', scanConfigImported: 'Scan configuration imported', scanConfigImportFailed: 'Import failed. Choose a valid scan configuration JSON file.'
 });
+Object.assign(TRANSLATIONS.zh, {
+  previousImage: '上一张', nextImage: '下一张', previewPosition: '{current} / {total}', copyFilteredUrls: '复制当前结果 URL', noUrlsToCopy: '没有可复制的图片地址', urlsCopied: '已复制 {count} 个图片地址'
+});
+Object.assign(TRANSLATIONS.en, {
+  previousImage: 'Previous image', nextImage: 'Next image', previewPosition: '{current} / {total}', copyFilteredUrls: 'Copy result URLs', noUrlsToCopy: 'There are no image URLs to copy', urlsCopied: 'Copied {count} image URL(s)'
+});
 
 function t(key, values = {}) {
   const raw = TRANSLATIONS[state.language]?.[key] ?? TRANSLATIONS.zh[key] ?? key;
@@ -2560,6 +2635,9 @@ function applyLanguage() {
   setText(els.previewTitle, state.preview ? fileName(previewCandidates(state.preview)[0]) : t('preview')); setText(els.copyImageUrl, t('copyUrl')); setText(els.openImageUrl, t('openUrl')); setText(els.zoomReset, t('reset'));
   if (els.previewErrorText) els.previewErrorText.textContent = t('previewUnavailable');
   setText(els.retryPreview, t('previewRetry')); setText(els.openPreviewPage, t('openPreviewPage'));
+  if (els.previewPrevious) els.previewPrevious.setAttribute('aria-label', t('previousImage'));
+  if (els.previewNext) els.previewNext.setAttribute('aria-label', t('nextImage'));
+  renderPreviewNavigation();
   setText(document.querySelector('.filter-panel h2'), t('sizeFilterTitle'));
   setText(els.clearFilters, t('clear'));
   const dimensionLabels = [...document.querySelectorAll('.dimension-slider .slider-label > span')];
@@ -2587,7 +2665,7 @@ function applyLanguage() {
   const settingLabels = [...document.querySelectorAll('.download-settings > label > span')]; if (settingLabels[0]) settingLabels[0].textContent = t('zipLayout'); if (settingLabels[1]) settingLabels[1].textContent = t('filenameTemplate');
   const zipOptions = [t('noGrouping'), t('bySite'), t('byFormat'), t('bySiteFormat')]; [...(els.zipLayout?.options || [])].forEach((option, index) => { if (zipOptions[index]) option.textContent = zipOptions[index]; });
   const dateText = document.querySelector('.date-folder-setting span'); if (dateText) dateText.textContent = t('dateFolder');
-  setText(els.exportJson, t('json')); setText(els.exportCsv, t('csv'));
+  setText(els.exportJson, t('json')); setText(els.exportCsv, t('csv')); setText(els.copyFilteredUrls, t('copyFilteredUrls'));
   if (els.download) {
     els.download.innerHTML = `${t('downloadSelected')} <span id="selectedCount">${els.selectedCount?.textContent || '0'}</span>`;
     els.selectedCount = $('#selectedCount');
