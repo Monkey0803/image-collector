@@ -300,3 +300,17 @@ This document tracks `1.8.0` and future releases. Completed items use `[x]`.
 - [x] Replace native prompts with an in-extension dialog for current-page bulk tagging and collection archiving.
 - [x] Show the selected image count, validate empty input, and support confirm, cancel, backdrop click, and Escape dismissal.
 - [x] Reload local collections before bulk archiving so the chooser does not use stale initialization data.
+
+## 2.5.0 library selection and batch safety
+
+### 中文
+
+- [x] 增加素材库当前筛选结果反选和清除全部选择操作。
+- [x] 批量标签自动清理空白、限制长度并去重。
+- [x] 批量归档追加集合关系，不删除图片已有集合；批量操作期间锁定控件并在结束后恢复。
+
+### English
+
+- [x] Add invert-selection and clear-selection actions for the current filtered library results.
+- [x] Normalize, limit, and deduplicate tags during library bulk tagging.
+- [x] Add collection memberships without removing existing ones, and lock library batch controls until the operation finishes.

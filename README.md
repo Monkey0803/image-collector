@@ -297,6 +297,18 @@ image_2026.08.20.zip
 - 对话框显示已选图片数量，校验空标签，并支持按 Esc、点击遮罩、取消和确认操作。
 - 打开集合选择器前会读取最新的本地集合，新建集合后可以立即用于归档。
 
+#### 2.5.0 library selection and batch safety
+
+- In the Library view, use **Invert current results** to invert selection for the current filtered result set, or **Clear selection** to remove all library selections.
+- Library batch tags are trimmed, limited, and deduplicated; batch collection archiving adds a collection without removing existing memberships.
+- Library batch controls are locked while an operation is running and recover after success, cancellation, or failure.
+
+#### 2.5.0 素材库选择与批量安全
+
+- 在“素材库”中可以使用“反选当前结果”反转当前筛选结果的选择状态，或使用“清除选择”取消全部素材选择。
+- 素材库批量标签会自动去除首尾空格、限制长度并去重；批量归档会追加集合，不会删除已有集合关系。
+- 批量操作执行期间控件会暂时锁定，成功、取消或失败后都会恢复。
+
 ### 权限说明
 
 扩展在 `manifest.json` 中声明了以下权限：

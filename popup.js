@@ -164,7 +164,7 @@ const els = {
   originalOnly: $('#originalOnly'), aspectRatio: $('#aspectRatio'), zipLayout: $('#zipLayout'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'), sourceTabs: [...document.querySelectorAll('[data-source]')],
   pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'), taskViewButton: $('#taskViewButton'), settingsViewButton: $('#settingsViewButton'),
   libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryScope: $('#libraryScope'), librarySmartCollection: $('#librarySmartCollection'),
-  librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), exportLibraryResultsJson: $('#exportLibraryResultsJson'), exportLibraryResultsCsv: $('#exportLibraryResultsCsv'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'), libraryBatchToolbar: $('#libraryBatchToolbar'), selectAllLibrary: $('#selectAllLibrary'), librarySelectedSummary: $('#librarySelectedSummary'), bulkFavorite: $('#bulkFavorite'), bulkTag: $('#bulkTag'), bulkCollection: $('#bulkCollection'), bulkDelete: $('#bulkDelete'), libraryDownloadSelected: $('#libraryDownloadSelected'), libraryZipSelected: $('#libraryZipSelected'), libraryFormat: $('#libraryFormat'), libraryMinWidth: $('#libraryMinWidth'), libraryMaxWidth: $('#libraryMaxWidth'), libraryMinHeight: $('#libraryMinHeight'), libraryMaxHeight: $('#libraryMaxHeight'), libraryMinSize: $('#libraryMinSize'), libraryMaxSize: $('#libraryMaxSize'), librarySort: $('#librarySort'),
+  librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), exportLibraryResultsJson: $('#exportLibraryResultsJson'), exportLibraryResultsCsv: $('#exportLibraryResultsCsv'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'), libraryBatchToolbar: $('#libraryBatchToolbar'), selectAllLibrary: $('#selectAllLibrary'), librarySelectedSummary: $('#librarySelectedSummary'), invertLibrarySelection: $('#invertLibrarySelection'), clearLibrarySelection: $('#clearLibrarySelection'), bulkFavorite: $('#bulkFavorite'), bulkTag: $('#bulkTag'), bulkCollection: $('#bulkCollection'), bulkDelete: $('#bulkDelete'), libraryDownloadSelected: $('#libraryDownloadSelected'), libraryZipSelected: $('#libraryZipSelected'), libraryFormat: $('#libraryFormat'), libraryMinWidth: $('#libraryMinWidth'), libraryMaxWidth: $('#libraryMaxWidth'), libraryMinHeight: $('#libraryMinHeight'), libraryMaxHeight: $('#libraryMaxHeight'), libraryMinSize: $('#libraryMinSize'), libraryMaxSize: $('#libraryMaxSize'), librarySort: $('#librarySort'),
   libraryMinSizeRange: $('#libraryMinSizeRange'), libraryMaxSizeRange: $('#libraryMaxSizeRange'), librarySizeTrack: $('#librarySizeTrack'), librarySizeRangeValue: $('#librarySizeRangeValue'), libraryMinAspectRange: $('#libraryMinAspectRange'), libraryMaxAspectRange: $('#libraryMaxAspectRange'), libraryAspectTrack: $('#libraryAspectTrack'), libraryAspectRangeValue: $('#libraryAspectRangeValue'),
   historyView: $('#historyView'), clearHistory: $('#clearHistory'), refreshHistory: $('#refreshHistory'), scanHistory: $('#scanHistory'),
   downloadHistory: $('#downloadHistory'), historyEmpty: $('#historyEmpty'),
@@ -352,6 +352,8 @@ function bindEvents() {
   on(els.bulkTag, 'click', () => bulkUpdateLibrary('tag'));
   on(els.bulkCollection, 'click', () => bulkUpdateLibrary('collection'));
   on(els.bulkDelete, 'click', () => bulkUpdateLibrary('delete'));
+  on(els.invertLibrarySelection, 'click', invertLibrarySelection);
+  on(els.clearLibrarySelection, 'click', clearLibrarySelection);
   on(els.libraryDownloadSelected, 'click', () => downloadImages(selectedLibraryImages(), false));
   on(els.libraryZipSelected, 'click', () => downloadImages(selectedLibraryImages(), true));
   on(els.exportLibraryResultsJson, 'click', () => exportLibraryResults('json'));
@@ -1102,6 +1104,8 @@ function renderLibrary() {
   els.libraryBatchToolbar.hidden = results.length === 0;
   els.librarySelectedSummary.textContent = `${t('selected')} ${selectedCount}`;
   els.selectAllLibrary.checked = results.length > 0 && results.every((record) => state.librarySelected.has(record.url));
+  els.invertLibrarySelection.disabled = results.length === 0 || state.libraryBatchBusy;
+  els.clearLibrarySelection.disabled = selectedCount === 0 || state.libraryBatchBusy;
   els.libraryDownloadSelected.disabled = selectedCount === 0;
   els.libraryZipSelected.disabled = selectedCount === 0;
   els.bulkFavorite.disabled = selectedCount === 0 || state.libraryBatchBusy;
@@ -1117,6 +1121,21 @@ function renderLibrary() {
     els.loadMoreLibrary.hidden = visibleResults.length >= results.length;
     els.loadMoreLibrary.textContent = t('loadMore', { count: Math.min(120, results.length - visibleResults.length) });
   }
+}
+
+function invertLibrarySelection() {
+  if (state.libraryBatchBusy) return;
+  state.libraryResults.forEach((record) => {
+    if (state.librarySelected.has(record.url)) state.librarySelected.delete(record.url);
+    else state.librarySelected.add(record.url);
+  });
+  renderLibrary();
+}
+
+function clearLibrarySelection() {
+  if (state.libraryBatchBusy) return;
+  state.librarySelected.clear();
+  renderLibrary();
 }
 
 async function toggleFavorite(image) {
@@ -1158,14 +1177,16 @@ async function bulkUpdateLibrary(action) {
     } else if (action === 'tag') {
       const tag = window.prompt(t('bulkTagPrompt'));
       if (!tag?.trim()) return;
-      await ImageCollectorDB.bulkUpdateImages(urls, (record) => ({ tags: [...(record.tags || []), tag] }));
+      const cleanTag = tag.trim().slice(0, 40);
+      await ImageCollectorDB.bulkUpdateImages(urls, (record) => ({ tags: [...new Set([...(record.tags || []), cleanTag])] }));
       showToast(t('bulkTagDone'));
     } else if (action === 'collection') {
+      state.collections = await ImageCollectorDB.listCollections();
       if (!state.collections.length) { showToast(t('createCollectionFirst')); return; }
       const names = state.collections.map((collection, index) => `${index + 1}. ${collection.name}`).join('\n');
       const choice = Number(window.prompt(`${t('bulkCollectionPrompt')}\n${names}`));
       const collection = state.collections[choice - 1]; if (!collection) return;
-      await ImageCollectorDB.bulkUpdateImages(urls, { collectionIds: [collection.id] });
+      await ImageCollectorDB.bulkUpdateImages(urls, (record) => ({ collectionIds: [...new Set([...(record.collectionIds || []), collection.id])] }));
       showToast(t('bulkCollectionDone'));
     } else if (action === 'delete') {
       if (!window.confirm(t('bulkDeleteConfirm'))) return;
@@ -2758,6 +2779,12 @@ Object.assign(TRANSLATIONS.zh, {
 Object.assign(TRANSLATIONS.en, {
   pageTagDialogTitle: 'Tag selected images', pageArchiveDialogTitle: 'Archive to a local collection', batchDialogSelected: '{count} image(s) selected', batchDialogTagLabel: 'Tag name', batchDialogTagPlaceholder: 'For example: product, inspiration, review', batchDialogCollectionLabel: 'Target collection', batchDialogChooseCollection: 'Choose a collection', batchDialogTagRequired: 'Enter a tag', batchDialogCollectionRequired: 'Choose a collection', batchDialogCancel: 'Cancel', batchDialogConfirm: 'Confirm', batchDialogClose: 'Close'
 });
+Object.assign(TRANSLATIONS.zh, {
+  invertLibrarySelection: '反选当前结果', clearLibrarySelection: '清除选择'
+});
+Object.assign(TRANSLATIONS.en, {
+  invertLibrarySelection: 'Invert current results', clearLibrarySelection: 'Clear selection'
+});
 
 function t(key, values = {}) {
   const raw = TRANSLATIONS[state.language]?.[key] ?? TRANSLATIONS.zh[key] ?? key;
@@ -2897,7 +2924,7 @@ function applyLanguage() {
   const scanOptions = t('imageOptions'); [...(els.scanLimit?.options || [])].forEach((option, index) => { if (scanOptions[index]) option.textContent = scanOptions[index]; });
   const libraryFormatOptions = state.language === 'en' ? ['All formats', 'JPEG', 'PNG', 'WEBP', 'AVIF', 'Other'] : ['全部格式', 'JPEG', 'PNG', 'WEBP', 'AVIF', '其它']; [...(els.libraryFormat?.options || [])].forEach((option, index) => { if (libraryFormatOptions[index]) option.textContent = libraryFormatOptions[index]; });
   const librarySortOptions = state.language === 'en' ? ['Recently updated', 'Width', 'Height', 'File size'] : ['最近更新', '宽度', '高度', '文件大小']; [...(els.librarySort?.options || [])].forEach((option, index) => { if (librarySortOptions[index]) option.textContent = librarySortOptions[index]; });
-  setText(els.selectAllLibrary?.nextElementSibling, t('selectAll')); setText(els.bulkFavorite, t('bulkFavorite')); setText(els.bulkTag, t('bulkTag')); setText(els.bulkCollection, t('bulkCollection')); setText(els.bulkDelete, t('bulkDelete')); setText(els.libraryDownloadSelected, t('libraryDownloadSelected')); setText(els.libraryZipSelected, t('libraryZipSelected'));
+  setText(els.selectAllLibrary?.nextElementSibling, t('selectAll')); setText(els.invertLibrarySelection, t('invertLibrarySelection')); setText(els.clearLibrarySelection, t('clearLibrarySelection')); setText(els.bulkFavorite, t('bulkFavorite')); setText(els.bulkTag, t('bulkTag')); setText(els.bulkCollection, t('bulkCollection')); setText(els.bulkDelete, t('bulkDelete')); setText(els.libraryDownloadSelected, t('libraryDownloadSelected')); setText(els.libraryZipSelected, t('libraryZipSelected'));
   const taskEmptyTitle = document.querySelector('#taskEmpty strong'); if (taskEmptyTitle) taskEmptyTitle.textContent = t('taskEmpty');
   const taskEmptyHint = document.querySelector('#taskEmpty span'); if (taskEmptyHint) taskEmptyHint.textContent = t('taskEmptyHint');
   setText(els.cancelButton, t('cancel'));
