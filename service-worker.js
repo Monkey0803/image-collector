@@ -198,6 +198,8 @@ async function saveDownloadRecord(kind, images, result, jobId = '', language = '
       urls: images.map((image) => image.url),
       count: images.length,
       started: result.started || 0,
+      completed: Array.isArray(result.completedUrls) ? result.completedUrls.length : (result.ok ? images.length - (result.failed?.length || 0) : 0),
+      completedUrls: Array.isArray(result.completedUrls) ? result.completedUrls : [],
       failed: Array.isArray(result.failed) ? result.failed.length : 0,
       failedItems: Array.isArray(result.failed) ? result.failed : [],
       error: result.error || '',
@@ -296,6 +298,7 @@ async function cacheImage(image) {
 async function downloadImages(images, saveAs, jobId, settings = {}) {
   const language = normalizeLanguage(settings.language || await getLanguage());
   const failed = [];
+  const completedUrls = [];
   let started = 0;
   const total = images.length;
   const job = getJob(jobId);
@@ -303,7 +306,7 @@ async function downloadImages(images, saveAs, jobId, settings = {}) {
   sendProgress(jobId, { phase: 'starting', completed: 0, total, failed: 0, percent: 0, detail: workerText(language, 'prepareDownload') });
   for (const [index, image] of images.entries()) {
     await waitForResume(job);
-    if (job.cancelled) return finishDownloadJob(jobId, { ok: started > 0, started, failed, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
+    if (job.cancelled) return finishDownloadJob(jobId, { ok: started > 0, started, failed, completedUrls, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
     sendProgress(jobId, {
       phase: 'downloading', completed: index, total, failed: failed.length, percent: progressPercent(index, total),
       detail: workerText(language, 'submitting', { current: index + 1, total, name: normalizeName(image, '', settings) })
@@ -313,11 +316,13 @@ async function downloadImages(images, saveAs, jobId, settings = {}) {
       job.downloadIds.add(downloadId);
       if (job.cancelled) {
         await chrome.downloads.cancel(downloadId).catch(() => {});
-        return finishDownloadJob(jobId, { ok: started > 0, started, failed, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
+        return finishDownloadJob(jobId, { ok: started > 0, started, failed, completedUrls, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
       }
       started += 1;
+      completedUrls.push(image.url);
+      job.completedUrls.add(image.url);
     } catch (error) {
-      if (job.cancelled) return finishDownloadJob(jobId, { ok: started > 0, started, failed, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
+      if (job.cancelled) return finishDownloadJob(jobId, { ok: started > 0, started, failed, completedUrls, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
       failed.push({ url: image.url, candidateUrls: imageCandidates(image), error: readableError(error, workerText(language, 'downloadFailed'), language), code: failureCode(error), stage: 'download' });
     }
     const completed = started + failed.length;
@@ -327,13 +332,14 @@ async function downloadImages(images, saveAs, jobId, settings = {}) {
     });
   }
   sendProgress(jobId, { phase: 'complete', completed: total, total, failed: failed.length, percent: 100, detail: workerText(language, 'submitted', { count: started }) });
-  return finishJob(jobId, { ok: started > 0, started, failed, error: started ? '' : workerText(language, 'noStart'), errorCode: started ? '' : (failed[0]?.code || 'unknown') });
+  return finishJob(jobId, { ok: started > 0, started, failed, completedUrls, error: started ? '' : workerText(language, 'noStart'), errorCode: started ? '' : (failed[0]?.code || 'unknown') });
 }
 
 async function downloadZip(images, saveAs, jobId, settings = {}) {
   const language = normalizeLanguage(settings.language || await getLanguage());
   const entries = [];
   const failed = [];
+  const completedUrls = [];
   const usedNames = new Set();
   const total = images.length;
   const job = getJob(jobId);
@@ -341,7 +347,7 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
   sendProgress(jobId, { phase: 'starting', completed: 0, total, failed: 0, percent: 0, detail: workerText(language, 'prepareRead') });
   for (const [index, image] of images.entries()) {
     await waitForResume(job);
-    if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
+    if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, completedUrls, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
     sendProgress(jobId, {
       phase: 'reading', completed: index, total, failed: failed.length, percent: progressPercent(index, total),
       detail: workerText(language, 'reading', { current: index + 1, total, name: normalizeName(image, '', settings) })
@@ -352,6 +358,8 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
       const filename = normalizeName(image, contentType, { ...settings, dateFolder: false });
       const name = uniqueName(zipPath(image, filename, settings.zipLayout || 'flat', settings, contentType), usedNames);
       entries.push({ name, data });
+      completedUrls.push(image.url);
+      job.completedUrls.add(image.url);
     } catch (error) {
       if (!job.cancelled) failed.push({ url: image.url, candidateUrls: imageCandidates(image), error: readableError(error, workerText(language, 'readFailed'), language), code: failureCode(error), stage: 'read' });
     }
@@ -361,7 +369,7 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
       detail: workerText(language, 'readCount', { count: completed, total })
     });
   }
-  if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
+  if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, completedUrls, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
   if (!entries.length) {
     sendProgress(jobId, { phase: 'failed', completed: total, total, failed: failed.length, percent: 100, detail: workerText(language, 'noZipImages') });
     return finishJob(jobId, { ok: false, failed, error: workerText(language, 'cannotRead'), errorCode: failed[0]?.code || 'no-readable-images' });
@@ -375,11 +383,11 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
     const downloadId = await chrome.downloads.download({ url: dataUrl, filename, saveAs, conflictAction: normalizeConflictAction(settings.conflictAction) });
     job.downloadIds.add(downloadId);
     sendProgress(jobId, { phase: 'complete', completed: total, total, failed: failed.length, percent: 100, detail: workerText(language, 'zipSubmitted', { count: entries.length }) });
-    return finishJob(jobId, { ok: true, started: 1, failed, filename });
+    return finishJob(jobId, { ok: true, started: 1, failed, completedUrls, filename });
   } catch (error) {
     const reason = readableError(error, workerText(language, 'zipFailed'), language);
     sendProgress(jobId, { phase: 'failed', completed: total, total, failed: failed.length, percent: 100, detail: reason });
-    return finishJob(jobId, { ok: false, failed, error: reason, errorCode: failureCode(error) });
+    return finishJob(jobId, { ok: false, failed, completedUrls, error: reason, errorCode: failureCode(error) });
   }
 }
 
@@ -428,7 +436,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
 }
 
 function beginJob(jobId, language = 'zh') {
-  const job = { cancelled: false, paused: false, language: normalizeLanguage(language), resumeResolvers: new Set(), downloadIds: new Set(), controllers: new Set() };
+  const job = { cancelled: false, paused: false, language: normalizeLanguage(language), resumeResolvers: new Set(), downloadIds: new Set(), controllers: new Set(), completedUrls: new Set() };
   if (jobId) activeJobs.set(jobId, job);
   return job;
 }
@@ -572,10 +580,12 @@ function sendProgress(jobId, progress) {
   if (job) {
     const phase = progress.phase || '';
     const status = phase === 'queued' ? 'queued' : phase === 'paused' ? 'paused' : phase === 'complete' ? 'completed' : phase === 'failed' ? 'failed' : phase === 'cancelled' ? 'cancelled' : 'running';
-    ImageCollectorDB.updateDownload(jobId, {
+    const updates = {
       status, phase, percent: Number(progress.percent) || 0, detail: progress.detail || '', paused: status === 'paused',
       completed: Number(progress.completed) || 0, failed: Number(progress.failed) || 0
-    }).catch(() => {});
+    };
+    if (job.completedUrls) updates.completedUrls = [...job.completedUrls];
+    ImageCollectorDB.updateDownload(jobId, updates).catch(() => {});
   }
 }
 

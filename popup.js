@@ -1320,11 +1320,15 @@ async function loadTasks() {
 
 function recoverTaskState() {
   if (state.taskRecoveryPromise) return state.taskRecoveryPromise;
-  state.taskRecoveryPromise = withTimeout(
+  const attempt = withTimeout(
     () => chrome.runtime.sendMessage({ type: 'recoverDownloadTasks' }),
     1500,
     '任务状态恢复超时'
-  ).catch(() => null);
+  );
+  state.taskRecoveryPromise = attempt.catch(() => {
+    state.taskRecoveryPromise = null;
+    return null;
+  });
   return state.taskRecoveryPromise;
 }
 
@@ -1814,6 +1818,7 @@ async function scanPage(options = {}) {
         combined.set(image.url, previous ? { ...previous, ...image, id: previous.id, index: previous.index } : image);
       });
       state.images = [...combined.values()];
+      state.scanStats.discovered = state.images.length;
     } else {
       state.images = discovered;
     }

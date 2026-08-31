@@ -322,9 +322,11 @@
         const urls = Array.isArray(record.urls) ? record.urls.filter(Boolean) : [];
         const existingFailures = Array.isArray(record.failedItems) ? record.failedItems : [];
         const knownFailureUrls = new Set(existingFailures.map((item) => item?.url).filter(Boolean));
+        const completedUrls = new Set((Array.isArray(record.completedUrls) ? record.completedUrls : []).filter(Boolean));
+        const retryUrls = record.kind === 'images' ? urls.filter((url) => !completedUrls.has(url) && !knownFailureUrls.has(url)) : urls.filter((url) => !knownFailureUrls.has(url));
         const failedItems = [
           ...existingFailures,
-          ...urls.filter((url) => !knownFailureUrls.has(url)).map((url) => ({
+          ...retryUrls.map((url) => ({
             url,
             candidateUrls: [url],
             code: 'service-worker-restarted',
@@ -332,16 +334,19 @@
             error: 'Download task was interrupted because the background worker restarted.'
           }))
         ].slice(0, 1000);
+        const allItemsRecovered = record.kind === 'images' && failedItems.length === 0 && urls.length > 0;
         cursor.update({
           ...record,
-          status: 'failed',
-          phase: 'failed',
+          status: allItemsRecovered ? 'started' : 'failed',
+          phase: allItemsRecovered ? 'complete' : 'failed',
           paused: false,
           failed: failedItems.length,
           failedItems,
-          error: 'Download task was interrupted because the background worker restarted.',
-          errorCode: 'service-worker-restarted',
-          detail: 'Download task interrupted; retry the failed items.',
+          completed: allItemsRecovered ? urls.length : (Number(record.completed) || completedUrls.size),
+          completedUrls: [...completedUrls],
+          error: allItemsRecovered ? '' : 'Download task was interrupted because the background worker restarted.',
+          errorCode: allItemsRecovered ? '' : 'service-worker-restarted',
+          detail: allItemsRecovered ? 'Download task recovered from persisted progress.' : 'Download task interrupted; retry the failed items.',
           completedAt: Date.now(),
           updatedAt: Date.now()
         });
@@ -396,6 +401,7 @@
       count: Number(record.count) || 0,
       started: Number(record.started) || 0,
       completed: Number(record.completed) || 0,
+      completedUrls: Array.isArray(record.completedUrls) ? record.completedUrls.slice(0, 1000) : [],
       failed: Number(record.failed) || 0,
       failedItems: Array.isArray(record.failedItems) ? record.failedItems.slice(0, 1000) : [],
       error: record.error || '',

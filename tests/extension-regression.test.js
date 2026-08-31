@@ -26,7 +26,9 @@ test('loading and progress recovery UI contracts remain wired', () => {
 
 test('background task recovery and request timeouts are implemented', () => {
   assert.match(library, /recoverInterruptedDownloads/);
+  assert.match(library, /completedUrls/);
   assert.match(worker, /recoverDownloadTasks/);
+  assert.match(worker, /job\.completedUrls\.add/);
   assert.match(worker, /IMAGE_REQUEST_TIMEOUT_MS/);
   assert.match(worker, /METADATA_REQUEST_TIMEOUT_MS/);
   assert.match(worker, /TimeoutError/);
