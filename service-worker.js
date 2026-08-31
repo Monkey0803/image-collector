@@ -155,7 +155,7 @@ function contextImage(info, tab) {
 async function handleContextDownload(info, tab) {
   const image = contextImage(info, tab);
   if (!image) return;
-  const settings = await chrome.storage.local.get({ saveAs: true, zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false, language: null });
+  const settings = await chrome.storage.local.get({ saveAs: true, zipLayout: 'flat', conflictAction: 'uniquify', filenameTemplate: '{name}', dateFolder: false, language: null });
   settings.language = settings.language || await getLanguage();
   const jobId = createJobId();
   enqueueJob(jobId, [image], () => runDownloadJob('images', [image], Boolean(settings.saveAs), jobId, settings), 'images', settings.language);
@@ -191,7 +191,9 @@ async function saveDownloadRecord(kind, images, result, jobId = '', language = '
       count: images.length,
       started: result.started || 0,
       failed: Array.isArray(result.failed) ? result.failed.length : 0,
+      failedItems: Array.isArray(result.failed) ? result.failed : [],
       error: result.error || '',
+      errorCode: result.errorCode || '',
       filename: kind === 'zip' ? (result.filename || 'image_' + dateStamp() + '.zip') : '',
       phase: result.cancelled ? 'cancelled' : result.ok ? 'complete' : 'failed',
       percent: 100,
@@ -221,7 +223,7 @@ async function downloadFileWithFallback(image, saveAs, settings) {
           url,
           filename: normalizeName(image, '', settings),
           saveAs,
-          conflictAction: 'uniquify'
+          conflictAction: normalizeConflictAction(settings.conflictAction)
         });
         return { downloadId, url };
       } catch (error) {
@@ -296,7 +298,7 @@ async function downloadImages(images, saveAs, jobId, settings = {}) {
       started += 1;
     } catch (error) {
       if (job.cancelled) return finishDownloadJob(jobId, { ok: started > 0, started, failed, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
-      failed.push({ url: image.url, error: readableError(error, workerText(language, 'downloadFailed'), language), stage: 'download' });
+      failed.push({ url: image.url, candidateUrls: imageCandidates(image), error: readableError(error, workerText(language, 'downloadFailed'), language), code: failureCode(error), stage: 'download' });
     }
     const completed = started + failed.length;
     sendProgress(jobId, {
@@ -305,7 +307,7 @@ async function downloadImages(images, saveAs, jobId, settings = {}) {
     });
   }
   sendProgress(jobId, { phase: 'complete', completed: total, total, failed: failed.length, percent: 100, detail: workerText(language, 'submitted', { count: started }) });
-  return finishJob(jobId, { ok: started > 0, started, failed, error: started ? '' : workerText(language, 'noStart') });
+  return finishJob(jobId, { ok: started > 0, started, failed, error: started ? '' : workerText(language, 'noStart'), errorCode: started ? '' : (failed[0]?.code || 'unknown') });
 }
 
 async function downloadZip(images, saveAs, jobId, settings = {}) {
@@ -331,7 +333,7 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
       const name = uniqueName(zipPath(image, filename, settings.zipLayout || 'flat', settings, contentType), usedNames);
       entries.push({ name, data });
     } catch (error) {
-      if (!job.cancelled) failed.push({ url: image.url, error: readableError(error, workerText(language, 'readFailed'), language), stage: 'read' });
+      if (!job.cancelled) failed.push({ url: image.url, candidateUrls: imageCandidates(image), error: readableError(error, workerText(language, 'readFailed'), language), code: failureCode(error), stage: 'read' });
     }
     const completed = index + 1;
     sendProgress(jobId, {
@@ -342,7 +344,7 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
   if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
   if (!entries.length) {
     sendProgress(jobId, { phase: 'failed', completed: total, total, failed: failed.length, percent: 100, detail: workerText(language, 'noZipImages') });
-    return finishJob(jobId, { ok: false, failed, error: workerText(language, 'cannotRead') });
+    return finishJob(jobId, { ok: false, failed, error: workerText(language, 'cannotRead'), errorCode: failed[0]?.code || 'no-readable-images' });
   }
   if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
   try {
@@ -350,14 +352,14 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
     const zip = makeZip(entries);
     const dataUrl = `data:application/zip;base64,${toBase64(zip)}`;
     const filename = zipDownloadFilename(settings);
-    const downloadId = await chrome.downloads.download({ url: dataUrl, filename, saveAs, conflictAction: 'uniquify' });
+    const downloadId = await chrome.downloads.download({ url: dataUrl, filename, saveAs, conflictAction: normalizeConflictAction(settings.conflictAction) });
     job.downloadIds.add(downloadId);
     sendProgress(jobId, { phase: 'complete', completed: total, total, failed: failed.length, percent: 100, detail: workerText(language, 'zipSubmitted', { count: entries.length }) });
     return finishJob(jobId, { ok: true, started: 1, failed, filename });
   } catch (error) {
     const reason = readableError(error, workerText(language, 'zipFailed'), language);
     sendProgress(jobId, { phase: 'failed', completed: total, total, failed: failed.length, percent: 100, detail: reason });
-    return finishJob(jobId, { ok: false, failed, error: reason });
+    return finishJob(jobId, { ok: false, failed, error: reason, errorCode: failureCode(error) });
   }
 }
 
@@ -594,6 +596,20 @@ function formatFor(image, contentType = '') {
 function extensionFor(image, contentType = '') {
   const mime = String(contentType || image.mime || '').split(';')[0].trim().toLowerCase();
   return MIME_EXTENSIONS[mime] || FORMAT_EXTENSIONS[formatFor(image, contentType)] || '.jpg';
+}
+
+function normalizeConflictAction(value) {
+  return ['uniquify', 'overwrite', 'prompt'].includes(value) ? value : 'uniquify';
+}
+
+function failureCode(error) {
+  if (error?.name === 'AbortError') return 'cancelled';
+  const message = String(error?.message || error || '').trim();
+  const status = message.match(/HTTP\s+(\d{3})\b/i)?.[1];
+  if (status) return `http-${status}`;
+  if (/Failed to fetch|NetworkError|Network request failed|Load failed|跨域/i.test(message)) return 'network';
+  if (/No image URL available/i.test(message)) return 'missing-url';
+  return 'unknown';
 }
 
 function readableError(error, fallback, language = 'zh') {

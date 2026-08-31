@@ -314,3 +314,21 @@ This document tracks `1.8.0` and future releases. Completed items use `[x]`.
 - [x] Add invert-selection and clear-selection actions for the current filtered library results.
 - [x] Normalize, limit, and deduplicate tags during library bulk tagging.
 - [x] Add collection memberships without removing existing ones, and lock library batch controls until the operation finishes.
+
+## 2.6.0 download diagnostics and recovery
+
+### 中文
+
+- [x] 增加文件冲突处理策略：自动重命名、覆盖已有文件或每次询问，并保存到配置迁移和同步设置。
+- [x] 下载任务保存逐项失败信息和错误分类，任务中心展示失败详情。
+- [x] 失败任务只重试失败项，不再重复下载已经成功的图片。
+- [x] 支持复制失败图片 URL，并导出 JSON 错误报告。
+- [x] 预览失败时显示尝试地址数量和常见失败原因提示。
+
+### English
+
+- [x] Add file-conflict strategies: automatic rename, overwrite, or ask every time; include the setting in configuration migration and sync.
+- [x] Store per-item failure details and error categories, then show them in the task center.
+- [x] Retry only failed items instead of downloading already successful images again.
+- [x] Copy failed image URLs and export a JSON error report.
+- [x] Show the number of attempted preview URLs and common failure causes when a preview fails.

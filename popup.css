@@ -252,6 +252,9 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 .task-progress-track { height: 5px; overflow: hidden; margin-top: 9px; border-radius: 99px; background: #e9edef; }
 .task-progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .2s ease; }
 .task-detail { overflow: hidden; margin-top: 6px; color: #89949c; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.task-failure-summary { margin-top: 7px; padding: 6px 7px; border: 1px solid #f3d2c9; border-radius: 7px; color: #a6503b; background: #fff8f5; font-size: 8px; line-height: 1.4; }
+.task-failure-list { display: grid; gap: 3px; max-height: 100px; margin-top: 5px; overflow: auto; }
+.task-failure-list span { overflow: hidden; color: inherit; text-overflow: ellipsis; white-space: nowrap; }
 .task-item-footer { justify-content: flex-start; margin-top: 8px; color: #a0a8af; font-size: 8px; }
 .task-item-footer .subtle-button { margin-left: auto; }
 .task-item-footer .subtle-button + .subtle-button { margin-left: 0; }
@@ -262,6 +265,7 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 .preview-stage { height: min(55vh, 390px); display: grid; place-items: center; overflow: auto; padding: 12px; background: #17232c; }
 .preview-stage img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center; transition: transform .15s ease; }
 .preview-error { display: grid; gap: 9px; margin: 0; padding: 12px 14px; border: 1px solid rgba(255,255,255,.14); border-radius: 9px; color: #c4ced3; background: rgba(255,255,255,.06); font-size: 10px; text-align: center; }
+.preview-error small { max-width: 300px; color: #9daab1; font-size: 9px; line-height: 1.45; }
 .preview-error-actions { display: flex; justify-content: center; gap: 6px; }
 .preview-error-actions button { height: 25px; padding: 0 9px; border: 1px solid rgba(255,255,255,.18); border-radius: 6px; color: #dce5e9; background: rgba(255,255,255,.08); font-size: 9px; cursor: pointer; }
 .preview-error-actions button:hover { border-color: #f0b3a4; color: #fff; background: rgba(240,179,164,.18); }

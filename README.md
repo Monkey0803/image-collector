@@ -309,6 +309,22 @@ image_2026.08.20.zip
 - 素材库批量标签会自动去除首尾空格、限制长度并去重；批量归档会追加集合，不会删除已有集合关系。
 - 批量操作执行期间控件会暂时锁定，成功、取消或失败后都会恢复。
 
+#### 2.6.0 download diagnostics and recovery
+
+- Choose how Chrome handles filename conflicts: **Rename automatically**, **Overwrite existing**, or **Ask every time**. The preference is saved and included in configuration migration and optional sync.
+- The Download task center keeps per-image failure details and classifies common errors such as HTTP status failures, network failures, and missing URLs.
+- Retrying a failed task retries only the failed images, so successful downloads are not duplicated.
+- Use **Copy failed URLs** on a task or **Export error report** in the task center to continue troubleshooting outside the extension.
+- Preview failures now explain how many image addresses were attempted and point to common causes such as hotlink protection, sign-in requirements, expired links, and cross-origin policy.
+
+#### 2.6.0 下载诊断与恢复
+
+- 支持选择文件冲突处理方式：自动重命名、覆盖已有文件或每次询问；设置会保存，并包含在配置迁移和可选同步中。
+- 下载任务中心会保存每张失败图片的详细信息，并对 HTTP 状态错误、网络错误和缺少图片地址等常见问题进行分类。
+- 重试失败任务时只重试失败图片，不会重复下载已经成功的图片。
+- 可以在任务卡片中使用“复制失败 URL”，或在任务中心使用“导出错误报告”，方便在扩展外继续排查。
+- 预览失败时会显示已尝试的图片地址数量，并提示防盗链、登录限制、链接失效和跨域策略等常见原因。
+
 ### 权限说明
 
 扩展在 `manifest.json` 中声明了以下权限：

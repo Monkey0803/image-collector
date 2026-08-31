@@ -200,6 +200,11 @@
               <option value="format">按格式</option>
               <option value="domain-format">按网站 / 格式</option>
             </select></label>
+            <label><span>文件冲突</span><select id="conflictAction" aria-label="文件冲突处理方式">
+              <option value="uniquify">自动重命名</option>
+              <option value="overwrite">覆盖已有文件</option>
+              <option value="prompt">每次询问</option>
+            </select></label>
             <label class="filename-setting"><span>文件名模板</span><input id="filenameTemplate" type="text" value="{name}" placeholder="{name}" title="支持 {name}、{filename}、{domain}、{format}、{width}、{height}、{date}" aria-label="文件名模板" /></label>
             <label class="date-folder-setting"><input id="dateFolder" type="checkbox" /><span>按日期建目录</span></label>
           </div>
@@ -306,7 +311,7 @@
             <p class="eyebrow">DOWNLOADS</p>
             <h2>下载任务中心</h2>
           </div>
-          <div class="task-heading-actions"><button id="retryAllTasks" class="text-button" type="button">重试失败任务</button><button id="refreshTasks" class="text-button" type="button">刷新</button></div>
+          <div class="task-heading-actions"><button id="retryAllTasks" class="text-button" type="button">重试失败任务</button><button id="exportFailureReport" class="text-button" type="button">导出错误报告</button><button id="refreshTasks" class="text-button" type="button">刷新</button></div>
         </div>
         <p class="task-summary" id="taskSummary">正在读取任务…</p>
         <div id="taskList" class="history-list"></div>
@@ -357,7 +362,7 @@
         <div class="preview-backdrop" data-close-preview></div>
         <div class="preview-dialog">
           <div class="preview-header"><strong id="previewTitle">图片预览</strong><button id="closePreview" class="icon-button light" type="button" aria-label="关闭预览">×</button></div>
-          <div class="preview-stage"><img id="previewImage" alt="图片预览" /><div id="previewError" class="preview-error" hidden><span id="previewErrorText">预览不可用</span><div class="preview-error-actions"><button id="retryPreview" type="button">重新加载</button><button id="openPreviewPage" type="button">使用网页地址</button></div></div></div>
+          <div class="preview-stage"><img id="previewImage" alt="图片预览" /><div id="previewError" class="preview-error" hidden><span id="previewErrorText">预览不可用</span><small id="previewErrorDetail"></small><div class="preview-error-actions"><button id="retryPreview" type="button">重新加载</button><button id="openPreviewPage" type="button">使用网页地址</button></div></div></div>
           <div class="preview-toolbar">
             <button id="previewPrevious" type="button" aria-label="上一张">‹</button><span id="previewPosition">1 / 1</span><button id="previewNext" type="button" aria-label="下一张">›</button>
             <button id="zoomOut" type="button">−</button><span id="zoomValue">100%</span><button id="zoomIn" type="button">＋</button><button id="zoomReset" type="button">重置</button>

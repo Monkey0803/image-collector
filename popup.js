@@ -13,6 +13,7 @@ const state = {
   originalOnly: false,
   aspectRatio: 'all',
   zipLayout: 'flat',
+  conflictAction: 'uniquify',
   filenameTemplate: '{name}',
   dateFolder: false,
   view: 'page',
@@ -59,7 +60,7 @@ const state = {
   syncSettings: false
 };
 
-const SYNC_SETTING_KEYS = ['scanRules', 'siteAdapters', 'scanLimit', 'autoScroll', 'zipLayout', 'filenameTemplate', 'dateFolder'];
+const SYNC_SETTING_KEYS = ['scanRules', 'siteAdapters', 'scanLimit', 'autoScroll', 'zipLayout', 'conflictAction', 'filenameTemplate', 'dateFolder'];
 
 function normalizeTextList(value) {
   return [...new Set(String(value || '').split(/[\n,]/).map((item) => item.trim()).filter(Boolean))].slice(0, 40);
@@ -94,6 +95,7 @@ function syncConfigurationPayload() {
     scanLimit: state.scanLimit,
     autoScroll: state.autoScroll,
     zipLayout: state.zipLayout,
+    conflictAction: state.conflictAction,
     filenameTemplate: state.filenameTemplate,
     dateFolder: state.dateFolder
   };
@@ -161,14 +163,14 @@ const els = {
   aspectVisualTabs: [...document.querySelectorAll('.aspect-visual-tab')], minAspect: $('#minAspect'), maxAspect: $('#maxAspect'), aspectTrack: $('#aspectTrack'), aspectRangeValue: $('#aspectRangeValue'),
   clearFilters: $('#clearFilters'), selectAll: $('#selectAll'), resultCount: $('#resultCount'),
   selectedSummary: $('#selectedSummary'), searchInput: $('#searchInput'), sortSelect: $('#sortSelect'),
-  originalOnly: $('#originalOnly'), aspectRatio: $('#aspectRatio'), zipLayout: $('#zipLayout'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'), sourceTabs: [...document.querySelectorAll('[data-source]')],
+  originalOnly: $('#originalOnly'), aspectRatio: $('#aspectRatio'), zipLayout: $('#zipLayout'), conflictAction: $('#conflictAction'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'), sourceTabs: [...document.querySelectorAll('[data-source]')],
   pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'), taskViewButton: $('#taskViewButton'), settingsViewButton: $('#settingsViewButton'),
   libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryScope: $('#libraryScope'), librarySmartCollection: $('#librarySmartCollection'),
   librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), exportLibraryResultsJson: $('#exportLibraryResultsJson'), exportLibraryResultsCsv: $('#exportLibraryResultsCsv'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'), libraryBatchToolbar: $('#libraryBatchToolbar'), selectAllLibrary: $('#selectAllLibrary'), librarySelectedSummary: $('#librarySelectedSummary'), invertLibrarySelection: $('#invertLibrarySelection'), clearLibrarySelection: $('#clearLibrarySelection'), bulkFavorite: $('#bulkFavorite'), bulkTag: $('#bulkTag'), bulkCollection: $('#bulkCollection'), bulkDelete: $('#bulkDelete'), libraryDownloadSelected: $('#libraryDownloadSelected'), libraryZipSelected: $('#libraryZipSelected'), libraryFormat: $('#libraryFormat'), libraryMinWidth: $('#libraryMinWidth'), libraryMaxWidth: $('#libraryMaxWidth'), libraryMinHeight: $('#libraryMinHeight'), libraryMaxHeight: $('#libraryMaxHeight'), libraryMinSize: $('#libraryMinSize'), libraryMaxSize: $('#libraryMaxSize'), librarySort: $('#librarySort'),
   libraryMinSizeRange: $('#libraryMinSizeRange'), libraryMaxSizeRange: $('#libraryMaxSizeRange'), librarySizeTrack: $('#librarySizeTrack'), librarySizeRangeValue: $('#librarySizeRangeValue'), libraryMinAspectRange: $('#libraryMinAspectRange'), libraryMaxAspectRange: $('#libraryMaxAspectRange'), libraryAspectTrack: $('#libraryAspectTrack'), libraryAspectRangeValue: $('#libraryAspectRangeValue'),
   historyView: $('#historyView'), clearHistory: $('#clearHistory'), refreshHistory: $('#refreshHistory'), scanHistory: $('#scanHistory'),
   downloadHistory: $('#downloadHistory'), historyEmpty: $('#historyEmpty'),
-  taskView: $('#taskView'), refreshTasks: $('#refreshTasks'), retryAllTasks: $('#retryAllTasks'), taskSummary: $('#taskSummary'), taskList: $('#taskList'), taskEmpty: $('#taskEmpty'), settingsView: $('#settingsView'), settingsViewButton: $('#settingsViewButton'), refreshStorage: $('#refreshStorage'), storageStats: $('#storageStats'), clearLibrary: $('#clearLibrary'), resetSettings: $('#resetSettings'),
+  taskView: $('#taskView'), refreshTasks: $('#refreshTasks'), retryAllTasks: $('#retryAllTasks'), exportFailureReport: $('#exportFailureReport'), taskSummary: $('#taskSummary'), taskList: $('#taskList'), taskEmpty: $('#taskEmpty'), settingsView: $('#settingsView'), settingsViewButton: $('#settingsViewButton'), refreshStorage: $('#refreshStorage'), storageStats: $('#storageStats'), clearLibrary: $('#clearLibrary'), resetSettings: $('#resetSettings'),
   exportJson: $('#exportJson'), exportCsv: $('#exportCsv'),
   includeSelectors: $('#includeSelectors'), excludeSelectors: $('#excludeSelectors'), scanCssBackground: $('#scanCssBackground'), scanVideoPosters: $('#scanVideoPosters'), includeIframes: $('#includeIframes'), saveScanRules: $('#saveScanRules'), adapterHost: $('#adapterHost'), adapterSelector: $('#adapterSelector'), adapterAttributes: $('#adapterAttributes'), adapterCollection: $('#adapterCollection'), saveSiteAdapter: $('#saveSiteAdapter'), clearSiteAdapter: $('#clearSiteAdapter'), siteAdapterList: $('#siteAdapterList'), syncSettings: $('#syncSettings'), saveSyncSettings: $('#saveSyncSettings'), exportScanConfig: $('#exportScanConfig'), importScanConfig: $('#importScanConfig'), importScanConfigFile: $('#importScanConfigFile'),
   formatTabs: [...document.querySelectorAll('[data-format]')],
@@ -177,7 +179,7 @@ const els = {
   saveAs: $('#saveAs'), download: $('#downloadButton'), zip: $('#zipButton'), selectedCount: $('#selectedCount'),
   downloadProgress: $('#downloadProgress'), progressLabel: $('#progressLabel'), progressValue: $('#progressValue'),
   progressBar: $('#progressBar'), progressDetail: $('#progressDetail'), cancelButton: $('#cancelButton'), retryButton: $('#retryButton'),
-  retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewError: $('#previewError'), previewErrorText: $('#previewErrorText'), retryPreview: $('#retryPreview'), openPreviewPage: $('#openPreviewPage'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), previewPrevious: $('#previewPrevious'), previewNext: $('#previewNext'), previewPosition: $('#previewPosition'), copyFilteredUrls: $('#copyFilteredUrls'), pageFavoriteSelected: $('#pageFavoriteSelected'), pageTagSelected: $('#pageTagSelected'), pageArchiveSelected: $('#pageArchiveSelected'), batchActionModal: $('#batchActionModal'), batchActionForm: $('#batchActionForm'), batchActionClose: $('#batchActionClose'), batchActionTitle: $('#batchActionTitle'), batchActionDescription: $('#batchActionDescription'), batchActionTagField: $('#batchActionTagField'), batchActionTagLabel: $('#batchActionTagLabel'), batchActionTagInput: $('#batchActionTagInput'), batchActionCollectionField: $('#batchActionCollectionField'), batchActionCollectionLabel: $('#batchActionCollectionLabel'), batchActionCollectionSelect: $('#batchActionCollectionSelect'), batchActionError: $('#batchActionError'), batchActionCancel: $('#batchActionCancel'), batchActionConfirm: $('#batchActionConfirm'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
+  retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewError: $('#previewError'), previewErrorText: $('#previewErrorText'), previewErrorDetail: $('#previewErrorDetail'), retryPreview: $('#retryPreview'), openPreviewPage: $('#openPreviewPage'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), previewPrevious: $('#previewPrevious'), previewNext: $('#previewNext'), previewPosition: $('#previewPosition'), copyFilteredUrls: $('#copyFilteredUrls'), pageFavoriteSelected: $('#pageFavoriteSelected'), pageTagSelected: $('#pageTagSelected'), pageArchiveSelected: $('#pageArchiveSelected'), batchActionModal: $('#batchActionModal'), batchActionForm: $('#batchActionForm'), batchActionClose: $('#batchActionClose'), batchActionTitle: $('#batchActionTitle'), batchActionDescription: $('#batchActionDescription'), batchActionTagField: $('#batchActionTagField'), batchActionTagLabel: $('#batchActionTagLabel'), batchActionTagInput: $('#batchActionTagInput'), batchActionCollectionField: $('#batchActionCollectionField'), batchActionCollectionLabel: $('#batchActionCollectionLabel'), batchActionCollectionSelect: $('#batchActionCollectionSelect'), batchActionError: $('#batchActionError'), batchActionCancel: $('#batchActionCancel'), batchActionConfirm: $('#batchActionConfirm'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -221,7 +223,7 @@ async function init() {
   bindEvents();
   applyLanguage();
 
-  const defaults = { filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, aspectRatio: 'all', zipLayout: 'flat', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false, scanRules: normalizeScanRules(), siteAdapters: [], syncSettings: false };
+  const defaults = { filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, aspectRatio: 'all', zipLayout: 'flat', conflictAction: 'uniquify', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false, scanRules: normalizeScanRules(), siteAdapters: [], syncSettings: false };
   let saved = defaults;
   try {
     saved = (await withTimeout(() => chrome.storage.local.get(defaults), 1500, '读取扩展设置超时')) || defaults;
@@ -245,6 +247,7 @@ async function init() {
   state.originalOnly = Boolean(saved.originalOnly);
   state.aspectRatio = ['all', 'landscape', 'portrait', 'square'].includes(saved.aspectRatio) ? saved.aspectRatio : 'all';
   state.zipLayout = ['flat', 'domain', 'format', 'domain-format'].includes(configuration.zipLayout) ? configuration.zipLayout : 'flat';
+  state.conflictAction = ['uniquify', 'overwrite', 'prompt'].includes(configuration.conflictAction) ? configuration.conflictAction : 'uniquify';
   state.filenameTemplate = typeof configuration.filenameTemplate === 'string' && configuration.filenameTemplate.trim() ? configuration.filenameTemplate : '{name}';
   state.dateFolder = Boolean(configuration.dateFolder);
   if (!userChangedLanguage) state.language = saved.language === 'en' || saved.language === 'zh' ? saved.language : detectLanguage();
@@ -275,6 +278,7 @@ async function init() {
   if (els.originalOnly) els.originalOnly.checked = state.originalOnly;
   if (els.aspectRatio) els.aspectRatio.value = state.aspectRatio;
   if (els.zipLayout) els.zipLayout.value = state.zipLayout;
+  if (els.conflictAction) els.conflictAction.value = state.conflictAction;
   if (els.filenameTemplate) els.filenameTemplate.value = state.filenameTemplate;
   if (els.dateFolder) els.dateFolder.checked = state.dateFolder;
   if (els.scanLimit) els.scanLimit.value = String(state.scanLimit);
@@ -365,6 +369,7 @@ function bindEvents() {
   on(els.refreshHistory, 'click', loadHistory);
   on(els.refreshTasks, 'click', loadTasks);
   on(els.retryAllTasks, 'click', retryAllTasks);
+  on(els.exportFailureReport, 'click', exportFailureReport);
   on(els.refreshStorage, 'click', loadStorageStats);
   on(els.clearLibrary, 'click', clearLocalLibrary);
   on(els.resetSettings, 'click', resetExtensionSettings);
@@ -495,6 +500,11 @@ function bindEvents() {
   });
   on(els.zipLayout, 'change', () => {
     state.zipLayout = els.zipLayout.value;
+    saveRuleConfiguration();
+  });
+  on(els.conflictAction, 'change', () => {
+    state.conflictAction = ['uniquify', 'overwrite', 'prompt'].includes(els.conflictAction.value) ? els.conflictAction.value : 'uniquify';
+    els.conflictAction.value = state.conflictAction;
     saveRuleConfiguration();
   });
   on(els.filenameTemplate, 'change', () => {
@@ -778,11 +788,13 @@ async function importScanConfiguration(event) {
     state.scanLimit = [0, 200, 500, 1000].includes(Number(settings.scanLimit)) ? Number(settings.scanLimit) : 500;
     state.autoScroll = Boolean(settings.autoScroll);
     state.zipLayout = ['flat', 'domain', 'format', 'domain-format'].includes(settings.zipLayout) ? settings.zipLayout : 'flat';
+    state.conflictAction = ['uniquify', 'overwrite', 'prompt'].includes(settings.conflictAction) ? settings.conflictAction : 'uniquify';
     state.filenameTemplate = typeof settings.filenameTemplate === 'string' && settings.filenameTemplate.trim() ? settings.filenameTemplate.trim() : '{name}';
     state.dateFolder = Boolean(settings.dateFolder);
     if (els.scanLimit) els.scanLimit.value = String(state.scanLimit);
     if (els.autoScroll) els.autoScroll.checked = state.autoScroll;
     if (els.zipLayout) els.zipLayout.value = state.zipLayout;
+    if (els.conflictAction) els.conflictAction.value = state.conflictAction;
     if (els.filenameTemplate) els.filenameTemplate.value = state.filenameTemplate;
     if (els.dateFolder) els.dateFolder.checked = state.dateFolder;
     if (els.includeSelectors) els.includeSelectors.value = state.scanRules.includeSelectors;
@@ -1314,6 +1326,23 @@ function renderTasks() {
     const bar = document.createElement('span'); bar.style.width = `${Math.max(0, Math.min(100, record.percent || 0))}%`; progress.append(bar);
     const detail = document.createElement('div'); detail.className = 'task-detail'; detail.textContent = record.detail || `${record.count || 0} ${t('items')}`;
     const footer = document.createElement('div'); footer.className = 'task-item-footer';
+    const failedItems = failedItemsFor(record);
+    let failureDetails = null;
+    if (failedItems.length) {
+      failureDetails = document.createElement('details'); failureDetails.className = 'task-failure-summary';
+      const summary = document.createElement('summary'); summary.textContent = t('failureDetails', { count: failedItems.length });
+      const list = document.createElement('div'); list.className = 'task-failure-list';
+      failedItems.slice(0, 20).forEach((failure) => {
+        const row = document.createElement('span');
+        const code = document.createElement('strong'); code.textContent = String(failure.code || record.errorCode || 'unknown').toUpperCase();
+        const message = document.createElement('span'); message.textContent = ' ' + (failure.error || record.error || t('unknownFailure')); message.title = failure.url || '';
+        row.append(code, message); list.append(row);
+      });
+      if (failedItems.length > 20) {
+        const more = document.createElement('span'); more.textContent = t('moreFailures', { count: failedItems.length - 20 }); list.append(more);
+      }
+      failureDetails.append(summary, list);
+    }
     const time = document.createElement('span'); time.textContent = formatDateTime(record.updatedAt || record.createdAt);
     footer.append(time);
     if (['queued', 'running', 'paused'].includes(record.status) && record.jobId) {
@@ -1321,17 +1350,61 @@ function renderTasks() {
       const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'subtle-button danger'; cancel.textContent = t('cancel'); cancel.addEventListener('click', () => sendTaskAction(record, 'cancelDownload'));
       footer.append(pause, cancel);
     }
-    if (['failed', 'partial'].includes(record.status) && record.urls?.length) {
-      const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'subtle-button'; retry.textContent = t('retry'); retry.addEventListener('click', () => downloadImages(record.urls.map((url) => ({ url })), record.kind === 'zip'));
-      footer.append(retry);
+    if (['failed', 'partial'].includes(record.status) && failedItems.length) {
+      const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'subtle-button'; retry.textContent = t('retry'); retry.addEventListener('click', () => retryTask(record));
+      const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'subtle-button'; copy.textContent = t('copyFailureUrls'); copy.addEventListener('click', () => copyFailureUrls(record));
+      footer.append(retry, copy);
     }
-    item.append(header, progress, detail, footer); els.taskList.append(item);
+    item.append(header, progress, detail);
+    if (failureDetails) item.append(failureDetails);
+    item.append(footer); els.taskList.append(item);
   });
 }
 
 function taskStatusLabel(status) {
   const labels = { queued: t('queued'), running: t('running'), paused: t('paused'), completed: t('completed'), started: t('completed'), partial: t('partial'), failed: t('failed'), cancelled: t('cancelled') };
   return labels[status] || status;
+}
+
+function failedItemsFor(record) {
+  const stored = Array.isArray(record?.failedItems) ? record.failedItems.filter((item) => item?.url) : [];
+  return stored;
+}
+
+function failureReportItemsFor(record) {
+  const stored = failedItemsFor(record);
+  if (stored.length) return stored;
+  if (!['failed', 'partial'].includes(record?.status) || (!(Number(record?.failed) > 0) && !record?.error)) return [];
+  return [{ url: '', error: record.error || t('unknownFailure'), code: record.errorCode || 'unknown', stage: record.kind === 'zip' ? 'read' : 'download' }];
+}
+
+async function retryTask(record) {
+  const failed = failedItemsFor(record);
+  if (!failed.length) { showToast(t('noFailedTasks')); return; }
+  await downloadImages(failed.map((item) => {
+    const candidates = Array.isArray(item.candidateUrls) ? item.candidateUrls.filter(Boolean) : [];
+    return { url: item.url || candidates[0] || '', originalUrl: candidates[1] || '', displayUrl: candidates[2] || '', sourceUrl: candidates[3] || '' };
+  }), record.kind === 'zip');
+}
+
+async function copyFailureUrls(record) {
+  const urls = [...new Set(failedItemsFor(record).map((item) => item.url).filter(Boolean))];
+  if (!urls.length) { showToast(t('noFailedTasks')); return; }
+  try {
+    await navigator.clipboard.writeText(urls.join('\n'));
+    showToast(t('failureUrlsCopied', { count: urls.length }));
+  } catch { showToast(t('copyFailed')); }
+}
+
+function exportFailureReport() {
+  const failures = state.taskRecords.flatMap((record) => failureReportItemsFor(record).map((failure) => ({
+    taskId: record.jobId || record.id || '', kind: record.kind || 'images', status: record.status || '',
+    createdAt: record.createdAt || record.completedAt || 0, url: failure.url || '', stage: failure.stage || '',
+    code: failure.code || record.errorCode || 'unknown', error: failure.error || record.error || ''
+  })));
+  if (!failures.length) { showToast(t('noFailureReport')); return; }
+  downloadTextFile(JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), failures }, null, 2), 'image-collector-errors-' + dateStamp() + '.json', 'application/json');
+  showToast(t('failureReportExported', { count: failures.length }));
 }
 
 async function sendTaskAction(record, type) {
@@ -1342,9 +1415,9 @@ async function sendTaskAction(record, type) {
 }
 
 async function retryAllTasks() {
-  const failed = state.taskRecords.filter((record) => ['failed', 'partial'].includes(record.status) && record.urls?.length);
+  const failed = state.taskRecords.filter((record) => failedItemsFor(record).length);
   if (!failed.length) { showToast(t('noFailedTasks')); return; }
-  for (const record of failed) await downloadImages(record.urls.map((url) => ({ url })), record.kind === 'zip');
+  for (const record of failed) await retryTask(record);
   await loadTasks();
 }
 
@@ -1449,10 +1522,11 @@ function navigatePreview(delta) {
   updatePreviewContent(state.previewList[nextIndex]);
 }
 
-function showPreviewError() {
+function showPreviewError(detail = '') {
   els.previewImage.hidden = true;
   els.previewError.hidden = false;
   els.previewErrorText.textContent = t('previewUnavailable');
+  if (els.previewErrorDetail) els.previewErrorDetail.textContent = detail || t('previewFailureHint');
 }
 
 async function loadPreviewFromCache(image, token) {
@@ -1479,6 +1553,7 @@ async function loadPreviewWithFallback(image, options = {}) {
   let usingCachedPreview = false;
   releasePreviewObjectUrl();
   els.previewError.hidden = true;
+  if (els.previewErrorDetail) els.previewErrorDetail.textContent = '';
   els.previewImage.hidden = false;
   els.previewImage.onerror = async () => {
     if (token !== previewLoadToken) return;
@@ -1493,7 +1568,7 @@ async function loadPreviewWithFallback(image, options = {}) {
         return;
       }
     }
-    if (token === previewLoadToken) showPreviewError();
+    if (token === previewLoadToken) showPreviewError(t('previewFailureHint', { count: candidates.length }));
   };
   els.previewImage.onload = () => {
     if (token !== previewLoadToken) return;
@@ -1502,7 +1577,7 @@ async function loadPreviewWithFallback(image, options = {}) {
     if (!usingCachedPreview) void requestImageCache(image);
   };
   if (candidates.length) els.previewImage.src = candidates[candidateIndex++];
-  else if (!(await loadPreviewFromCache(image, token)) && token === previewLoadToken) showPreviewError();
+  else if (!(await loadPreviewFromCache(image, token)) && token === previewLoadToken) showPreviewError(t('previewFailureHint', { count: 0 }));
 }
 
 function openPreview(image) {
@@ -1532,6 +1607,7 @@ function closePreview() {
   els.previewImage.onerror = null;
   els.previewImage.onload = null;
   els.previewError.hidden = true;
+  if (els.previewErrorDetail) els.previewErrorDetail.textContent = '';
   state.preview = null;
   state.previewList = [];
   state.previewIndex = -1;
@@ -2622,7 +2698,7 @@ async function downloadImages(images, asZip) {
   try {
     const response = await chrome.runtime.sendMessage({
       type: asZip ? 'downloadZip' : 'downloadImages', images, saveAs: state.saveAs,
-      zipLayout: state.zipLayout, filenameTemplate: state.filenameTemplate, dateFolder: state.dateFolder, language: state.language, jobId
+      zipLayout: state.zipLayout, conflictAction: state.conflictAction, filenameTemplate: state.filenameTemplate, dateFolder: state.dateFolder, language: state.language, jobId
     });
     const failed = Array.isArray(response?.failed) ? response.failed : [];
     const byUrl = new Map(images.map((image) => [image.url, image]));
@@ -2785,6 +2861,18 @@ Object.assign(TRANSLATIONS.zh, {
 Object.assign(TRANSLATIONS.en, {
   invertLibrarySelection: 'Invert current results', clearLibrarySelection: 'Clear selection'
 });
+Object.assign(TRANSLATIONS.zh, {
+  conflictAction: '文件冲突', conflictUniquify: '自动重命名', conflictOverwrite: '覆盖已有文件', conflictPrompt: '每次询问',
+  exportFailureReport: '导出错误报告', failureDetails: '失败详情（{count} 项）', moreFailures: '还有 {count} 项未展开', unknownFailure: '未知错误',
+  copyFailureUrls: '复制失败 URL', failureUrlsCopied: '已复制 {count} 个失败地址', noFailureReport: '暂无失败记录', failureReportExported: '已导出 {count} 条失败记录',
+  previewFailureHint: '已尝试 {count} 个图片地址；可能是防盗链、登录限制、链接失效或跨域策略导致。'
+});
+Object.assign(TRANSLATIONS.en, {
+  conflictAction: 'File conflicts', conflictUniquify: 'Rename automatically', conflictOverwrite: 'Overwrite existing', conflictPrompt: 'Ask every time',
+  exportFailureReport: 'Export error report', failureDetails: 'Failure details ({count})', moreFailures: '{count} more not shown', unknownFailure: 'Unknown error',
+  copyFailureUrls: 'Copy failed URLs', failureUrlsCopied: 'Copied {count} failed URL(s)', noFailureReport: 'No failure records', failureReportExported: 'Exported {count} failure record(s)',
+  previewFailureHint: 'Tried {count} image URL(s); hotlink protection, sign-in requirements, expired links, or cross-origin policy may be blocking the preview.'
+});
 
 function t(key, values = {}) {
   const raw = TRANSLATIONS[state.language]?.[key] ?? TRANSLATIONS.zh[key] ?? key;
@@ -2824,6 +2912,7 @@ function applyLanguage() {
   els.libraryScope?.setAttribute('aria-label', t('libraryScope'));
   els.libraryCollection?.setAttribute('aria-label', t('collectionFilter'));
   els.librarySearch?.setAttribute('aria-label', t('librarySearch'));
+  els.conflictAction?.setAttribute('aria-label', t('conflictAction'));
   els.closePreview?.setAttribute('aria-label', t('closePreview'));
   if (els.previewImage) els.previewImage.alt = t('imagePreview');
   if (!state.tabId) setText(els.pageTitle, t('readingPage'));
@@ -2842,6 +2931,7 @@ function applyLanguage() {
   setText(els.newCollection, t('newCollection')); setText(els.exportLibrary, t('exportLibrary')); setText(els.exportLibraryResultsJson, t('exportFilteredJson')); setText(els.exportLibraryResultsCsv, t('exportFilteredCsv')); setText(els.importLibrary, t('importLibrary'));
   setText(els.previewTitle, state.preview ? fileName(previewCandidates(state.preview)[0]) : t('preview')); setText(els.copyImageUrl, t('copyUrl')); setText(els.openImageUrl, t('openUrl')); setText(els.zoomReset, t('reset'));
   if (els.previewErrorText) els.previewErrorText.textContent = t('previewUnavailable');
+  if (els.previewErrorDetail && !els.previewError?.hidden) els.previewErrorDetail.textContent = t('previewFailureHint', { count: state.preview ? previewCandidates(state.preview).length : 0 });
   setText(els.retryPreview, t('previewRetry')); setText(els.openPreviewPage, t('openPreviewPage'));
   if (els.previewPrevious) els.previewPrevious.setAttribute('aria-label', t('previousImage'));
   if (els.previewNext) els.previewNext.setAttribute('aria-label', t('nextImage'));
@@ -2870,9 +2960,9 @@ function applyLanguage() {
   renderSourceTabs();
   const saveText = document.querySelector('.save-option > span'); if (saveText) saveText.textContent = t('saveLocation');
   const downloadCaption = document.querySelector('.download-caption-note'); if (downloadCaption) downloadCaption.textContent = t('downloadSupport');
-  const settingLabels = [...document.querySelectorAll('.download-settings > label > span')]; if (settingLabels[0]) settingLabels[0].textContent = t('zipLayout'); if (settingLabels[1]) settingLabels[1].textContent = t('filenameTemplate');
+  const settingLabels = [...document.querySelectorAll('.download-settings > label > span')]; if (settingLabels[0]) settingLabels[0].textContent = t('zipLayout'); if (settingLabels[1]) settingLabels[1].textContent = t('conflictAction'); if (settingLabels[2]) settingLabels[2].textContent = t('filenameTemplate'); if (settingLabels[3]) settingLabels[3].textContent = t('dateFolder');
   const zipOptions = [t('noGrouping'), t('bySite'), t('byFormat'), t('bySiteFormat')]; [...(els.zipLayout?.options || [])].forEach((option, index) => { if (zipOptions[index]) option.textContent = zipOptions[index]; });
-  const dateText = document.querySelector('.date-folder-setting span'); if (dateText) dateText.textContent = t('dateFolder');
+  const conflictOptions = [t('conflictUniquify'), t('conflictOverwrite'), t('conflictPrompt')]; [...(els.conflictAction?.options || [])].forEach((option, index) => { if (conflictOptions[index]) option.textContent = conflictOptions[index]; });
   setText(els.exportJson, t('json')); setText(els.exportCsv, t('csv')); setText(els.copyFilteredUrls, t('copyFilteredUrls'));
   setText(els.pageFavoriteSelected, t('pageFavoriteSelected')); setText(els.pageTagSelected, t('pageTagSelected')); setText(els.pageArchiveSelected, t('pageArchiveSelected'));
   setText(els.batchActionTagLabel, t('batchDialogTagLabel')); setText(els.batchActionCollectionLabel, t('batchDialogCollectionLabel')); setText(els.batchActionCancel, t('batchDialogCancel')); setText(els.batchActionConfirm, t('batchDialogConfirm'));
@@ -2908,6 +2998,7 @@ function applyLanguage() {
   const taskTitle = document.querySelector('#taskView h2'); if (taskTitle) taskTitle.textContent = t('taskCenter');
   if (els.refreshTasks) els.refreshTasks.textContent = t('refresh');
   if (els.retryAllTasks) els.retryAllTasks.textContent = t('retryFailed');
+  if (els.exportFailureReport) els.exportFailureReport.textContent = t('exportFailureReport');
   const settingsTitle = document.querySelector('#settingsView h2'); if (settingsTitle) settingsTitle.textContent = t('settingsTitle');
   if (els.refreshStorage) els.refreshStorage.textContent = t('refresh');
   if (els.clearLibrary) els.clearLibrary.textContent = t('clearLibrary');
