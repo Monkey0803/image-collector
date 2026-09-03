@@ -1,6 +1,15 @@
 # Image Collector TODO
 
-本文档记录当前 `2.6.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
+本文档记录当前 `2.8.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
+
+最后更新：2026-08-31
+
+## 当前状态
+
+- [x] `2.7.0` 稳定性与任务可靠性已完成并发布。
+- [x] `2.8.0` 智能集合与可视化筛选增强已完成，待发布。
+- [ ] `2.9.0` 素材管理与去重能力待开发。
+- [ ] `3.0.0` 多页面采集工作流待开发。
 
 ## 1.0.1
 
@@ -113,7 +122,16 @@
 
 ## English
 
-This document tracks the current `2.6.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
+This document tracks the current `2.8.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
+
+Last updated: 2026-08-31
+
+## Current status
+
+- [x] `2.7.0` stability and task-reliability work is complete and released.
+- [x] `2.8.0` smart-collection and visual-filter enhancements are complete and ready for release.
+- [ ] `2.9.0` asset-management and deduplication work is planned.
+- [ ] `3.0.0` multi-page collection workflows are planned.
 
 ### 1.0.1 core experience
 
@@ -361,23 +379,25 @@ This document tracks the current `2.6.0` release and future versions. Completed 
 
 ### 中文
 
-- [ ] 支持根据尺寸、格式、域名、来源、文件大小、宽高比和日期创建智能集合。
-- [ ] 支持智能集合的 AND / OR 条件组合、启用/禁用、规则编辑和删除。
-- [ ] 提供智能集合命中预览，并支持手动重新应用规则。
-- [ ] 支持将智能集合规则保存到配置迁移文件，并在导入后校验规则版本。
-- [ ] 为文件大小和宽高比增加可视化范围滑块，同时保留精确数值输入。
-- [ ] 在范围滑块上显示图片数量分布，并提供小于 100 KB、100 KB～1 MB、横图、竖图和正方形等快捷预设。
-- [ ] 让当前页面、素材库和智能集合共用筛选组件与筛选状态，避免同一条件在不同视图中表现不一致。
+- [x] 已具备按尺寸、格式、域名和更新时间生成基础智能集合的能力（`1.9.0` 完成）。
+- [x] 当前页面和素材库已具备文件大小、宽高比范围滑块，并保留精确数值输入（`1.9.0` 完成）。
+- [x] 将来源、文件大小和宽高比条件纳入智能集合规则，并支持与现有尺寸、格式、域名和日期条件组合。
+- [x] 支持智能集合的 AND / OR 条件组合、启用/禁用、规则编辑和删除。
+- [x] 提供智能集合命中预览，并支持手动重新应用规则。
+- [x] 支持将智能集合规则保存到配置迁移文件，并在导入后校验规则版本。
+- [x] 在范围滑块上显示图片数量分布，并提供小于 100 KB、100 KB～1 MB、横图、竖图和正方形等快捷预设。
+- [x] 页面、素材库和智能集合共用尺寸、文件大小和宽高比匹配逻辑，并提供将当前页面筛选同步到素材库的入口。
 
 ### English
 
-- [ ] Create smart collections from dimensions, formats, hostnames, discovery sources, file sizes, aspect ratios, and dates.
-- [ ] Support AND / OR condition groups, enabling, disabling, editing, and deleting smart-collection rules.
-- [ ] Provide a rule-match preview and allow users to reapply smart-collection rules manually.
-- [ ] Include smart-collection rules in configuration migration and validate their rule version after import.
-- [ ] Add visual range sliders for file size and aspect ratio while keeping precise numeric inputs.
-- [ ] Show image-count distribution on range controls and provide presets such as under 100 KB, 100 KB–1 MB, landscape, portrait, and square.
-- [ ] Share filter components and filter state between the current page, Library, and smart collections so the same conditions behave consistently.
+- [x] Provide baseline smart collections by dimensions, formats, hostnames, and update dates (`1.9.0`).
+- [x] Provide file-size and aspect-ratio range sliders in the current-page and Library views while keeping precise numeric inputs (`1.9.0`).
+- [x] Extend smart-collection rules with discovery sources, file sizes, and aspect ratios, and combine them with the existing dimension, format, hostname, and date conditions.
+- [x] Support AND / OR condition groups, enabling, disabling, editing, and deleting smart-collection rules.
+- [x] Provide a rule-match preview and allow users to reapply smart-collection rules manually.
+- [x] Include smart-collection rules in configuration migration and validate their rule version after import.
+- [x] Show image-count distribution on range controls and provide presets such as under 100 KB, 100 KB–1 MB, landscape, portrait, and square.
+- [x] Share dimension, file-size, and aspect-ratio matching logic between the current page, Library, and smart collections, and provide an action to apply current-page filters to the Library.
 
 ## 2.9.0 asset management and deduplication
 

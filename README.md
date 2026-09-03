@@ -63,6 +63,9 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 设置页显示本地缓存数量和占用空间，缓存会按最近使用时间自动清理
 - 素材库提供智能集合，可按尺寸、格式、网站和日期自动归档筛选
 - 当前页面和素材库支持文件大小、宽高比的可视化范围滑块
+- 支持创建自定义智能集合，可组合尺寸、格式、网站、来源、文件大小、宽高比和日期条件
+- 支持智能集合的 AND / OR 逻辑、命中预览、启用/禁用、编辑、删除和手动重新应用
+- 范围筛选显示图片数量分布，并提供文件大小和宽高比快捷预设
 - 大页面采用分批卡片渲染，点击“加载更多”后继续显示，减少打开扩展时的卡顿
 - 支持自定义包含/排除选择器，以及 CSS 背景图、视频封面和 iframe 开关
 - 支持按域名保存站点适配规则、自定义图片属性，并自动归档到素材集合
@@ -335,6 +338,14 @@ image_2026.08.20.zip
 - 下载进度会显示已处理数量、处理速度和预计剩余时间。
 - 大页面会分批渲染，并显示发现、跳过、去重、尺寸探测和失败数量，降低界面卡顿。
 
+#### 2.8.0 智能集合与可视化筛选
+
+- 素材库支持创建自定义智能集合，可按尺寸、格式、网站域名、图片来源、文件大小、宽高比和添加日期建立规则。
+- 支持使用 AND / OR 组合多个条件，并可预览命中数量、启用/禁用、编辑、删除或手动重新应用规则。
+- 智能集合规则会随扫描配置导出和导入，并校验规则版本，避免不兼容配置静默生效。
+- 文件大小和宽高比范围控件提供图片数量分布，以及小于 100 KB、100 KB～1 MB、横图、竖图和正方形快捷预设。
+- 当前页面与素材库共用尺寸、文件大小和宽高比匹配逻辑，并可以将当前页面筛选同步到素材库。
+
 ### 权限说明
 
 扩展在 `manifest.json` 中声明了以下权限：
@@ -389,7 +400,7 @@ download_image/
 │   ├── icon-48.png     # 扩展管理页图标
 │   └── icon-128.png    # 扩展详情和安装页图标
 ├── LICENSE             # MIT 开源许可证
-├── TODO.md             # 1.6.0 已完成任务和后续路线图
+├── TODO.md             # 2.8.0 已完成任务和后续路线图
 └── README.md           # 中文和英文项目文档
 ```
 
@@ -479,6 +490,9 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Use keyboard shortcuts: `Cmd/Ctrl+A` select all, `I` invert, `/` focus search, `R` rescan
 - Download selected images or create a ZIP from the current library results
 - Filter library images by minimum/maximum dimensions and file-size range
+- Create custom smart collections with dimension, format, hostname, source, file-size, aspect-ratio, and date conditions
+- Combine smart-collection conditions with AND / OR logic, preview matches, enable/disable, edit, delete, and reapply rules
+- View image-count distributions for library ranges and use file-size or aspect-ratio presets
 - Export the current library results as JSON or CSV
 - Open the collector in Chrome's right side panel and keep it visible while browsing
 - Filter images by landscape, portrait, or square aspect ratio
@@ -680,6 +694,14 @@ The scan flow is: load saved configuration → match adapters for the current ho
 - Download progress shows processed count, processing speed, and estimated time remaining.
 - Large pages render in batches and report discovered, skipped, deduplicated, dimension-checked, and failed counts to reduce UI stalls.
 
+#### 2.8.0 smart collections and visual filters
+
+- The Library supports custom smart collections based on dimensions, format, hostname, discovery source, file size, aspect ratio, and added date.
+- Combine multiple conditions with AND / OR logic, preview the match count, enable or disable rules, edit or delete them, and reapply them manually.
+- Smart-collection rules are included in scan-configuration export/import and carry a validated rule version to prevent incompatible data from being silently applied.
+- File-size and aspect-ratio range controls show image-count distributions and provide presets for under 100 KB, 100 KB–1 MB, landscape, portrait, and square images.
+- The current-page and Library views share dimension, file-size, and aspect-ratio matching logic, with an action to apply current-page filters to the Library.
+
 ### Permissions
 
 | Permission | Purpose |
@@ -732,7 +754,7 @@ download_image/
 │   ├── icon-48.png     # Extensions management icon
 │   └── icon-128.png    # Extension detail and installation icon
 ├── LICENSE             # MIT open-source license
-├── TODO.md             # 1.6.0 checklist and future roadmap
+├── TODO.md             # 2.8.0 checklist and future roadmap
 └── README.md           # Chinese and English documentation
 ```
 

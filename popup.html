@@ -237,7 +237,7 @@
           </div>
           <button id="refreshLibrary" class="text-button" type="button">刷新</button>
         </div>
-          <div class="library-controls">
+        <div class="library-controls">
           <select id="libraryScope" aria-label="素材库筛选范围">
             <option value="favorites">我的收藏</option>
             <option value="all">全部图片</option>
@@ -249,6 +249,34 @@
             <input id="librarySearch" type="search" placeholder="搜索图片、域名或标签" autocomplete="off" />
           </label>
         </div>
+        <section class="smart-collection-card" aria-label="智能集合管理">
+          <div class="smart-collection-heading">
+            <div>
+              <strong id="smartCollectionTitle">智能集合</strong>
+              <small id="smartCollectionHint">用规则快速定位素材</small>
+            </div>
+            <div class="smart-collection-actions">
+              <button id="syncPageFilters" class="subtle-button" type="button">同步当前页</button>
+              <button id="reapplySmartCollections" class="subtle-button" type="button">重新应用</button>
+              <button id="newSmartCollection" class="primary-button" type="button">新建规则</button>
+            </div>
+          </div>
+          <div id="smartCollectionEditor" class="smart-collection-editor" hidden>
+            <div class="smart-editor-grid">
+              <label class="smart-field"><span id="smartRuleNameLabel">规则名称</span><input id="smartCollectionName" type="text" maxlength="60" placeholder="例如：大尺寸 PNG" /></label>
+              <label class="smart-field"><span id="smartRuleLogicLabel">条件关系</span><select id="smartCollectionLogic"><option value="AND">同时满足（AND）</option><option value="OR">满足任一（OR）</option></select></label>
+            </div>
+            <div class="smart-condition-heading"><strong id="smartConditionsLabel">筛选条件</strong><button id="addSmartCondition" class="subtle-button" type="button">添加条件</button></div>
+            <div id="smartConditionList" class="smart-condition-list"></div>
+            <div id="smartRulePreview" class="smart-rule-preview" aria-live="polite">命中预览：0 张图片</div>
+            <div class="smart-editor-actions">
+              <button id="cancelSmartCollection" class="subtle-button" type="button">取消</button>
+              <button id="saveSmartCollection" class="primary-button" type="button">保存规则</button>
+            </div>
+          </div>
+          <div id="smartCollectionList" class="smart-collection-list"></div>
+          <div id="smartCollectionEmpty" class="smart-collection-empty" hidden>还没有自定义智能集合</div>
+        </section>
         <div class="library-tools">
           <button id="newCollection" class="subtle-button" type="button">新建集合</button>
           <button id="exportLibrary" class="subtle-button" type="button">导出收藏数据</button>
@@ -273,7 +301,11 @@
         </div>
         <div class="library-visual-filters">
           <div class="mini-range-control"><span>文件大小</span><div class="range-slider" id="librarySizeTrack"><input id="libraryMinSizeRange" type="range" min="0" max="1024" step="1" value="0" aria-label="素材库最小文件大小 KB" /><input id="libraryMaxSizeRange" type="range" min="0" max="1024" step="1" value="1024" aria-label="素材库最大文件大小 KB" /></div><strong id="librarySizeRangeValue">不限</strong></div>
-          <div class="mini-range-control"><span>宽高比</span><div class="range-slider" id="libraryAspectTrack"><input id="libraryMinAspectRange" type="range" min="0.25" max="5" step="0.05" value="0.25" aria-label="素材库最小宽高比" /><input id="libraryMaxAspectRange" type="range" min="0.25" max="5" step="0.05" value="5" aria-label="素材库最大宽高比" /></div><strong id="libraryAspectRangeValue">不限</strong></div>
+          <div id="librarySizeDistribution" class="range-distribution" aria-label="文件大小数量分布"></div>
+          <div class="range-presets" id="librarySizePresets"><button type="button" data-library-preset="size-small">&lt; 100 KB</button><button type="button" data-library-preset="size-medium">100 KB–1 MB</button></div>
+          <div class="mini-range-control"><span>宽高比</span><div class="range-slider" id="libraryAspectTrack"><input id="libraryMinAspectRange" type="range" min="0.25" max="5" step="0.01" value="0.25" aria-label="素材库最小宽高比" /><input id="libraryMaxAspectRange" type="range" min="0.25" max="5" step="0.01" value="5" aria-label="素材库最大宽高比" /></div><strong id="libraryAspectRangeValue">不限</strong></div>
+          <div id="libraryAspectDistribution" class="range-distribution" aria-label="宽高比数量分布"></div>
+          <div class="range-presets" id="libraryAspectPresets"><button type="button" data-library-preset="aspect-landscape">横图</button><button type="button" data-library-preset="aspect-portrait">竖图</button><button type="button" data-library-preset="aspect-square">正方形</button></div>
         </div>
         <p id="librarySummary" class="library-summary">正在读取素材库…</p>
         <div id="libraryGrid" class="image-grid library-grid"></div>

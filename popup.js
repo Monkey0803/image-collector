@@ -62,10 +62,18 @@ const state = {
   libraryRenderLimit: 120,
   scanRules: { includeSelectors: '', excludeSelectors: '', scanCssBackground: true, scanVideoPosters: true, includeIframes: true },
   siteAdapters: [],
+  smartCollections: [],
+  smartCollectionEditingId: '',
+  smartCollectionConfigInvalid: false,
   syncSettings: false
 };
 
-const SYNC_SETTING_KEYS = ['scanRules', 'siteAdapters', 'scanLimit', 'autoScroll', 'zipLayout', 'conflictAction', 'filenameTemplate', 'dateFolder'];
+const SMART_COLLECTIONS_VERSION = 1;
+const SMART_RANGE_FIELDS = ['width', 'height', 'size', 'aspect'];
+const SMART_CONDITION_FIELDS = ['width', 'height', 'size', 'aspect', 'format', 'domain', 'source', 'date'];
+const SMART_FORMATS = ['jpeg', 'png', 'webp', 'avif', 'other'];
+const SMART_DATE_PRESETS = ['today', 'week', 'month', 'older'];
+const SYNC_SETTING_KEYS = ['scanRules', 'siteAdapters', 'smartCollectionsVersion', 'smartCollections', 'scanLimit', 'autoScroll', 'zipLayout', 'conflictAction', 'filenameTemplate', 'dateFolder'];
 
 function normalizeTextList(value) {
   return [...new Set(String(value || '').split(/[\n,]/).map((item) => item.trim()).filter(Boolean))].slice(0, 40);
@@ -93,6 +101,67 @@ function normalizeSiteAdapters(value) {
   })).filter((item) => item.hostPattern && item.selector).slice(0, 30);
 }
 
+function normalizeSmartNumber(value, fallback = null, min = 0, max = Number.MAX_SAFE_INTEGER) {
+  if (value === null || value === undefined || value === '') return fallback;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
+}
+
+function smartConditionDefault(field = 'width') {
+  if (SMART_RANGE_FIELDS.includes(field)) return { field, min: null, max: null };
+  if (field === 'format') return { field, value: 'jpeg' };
+  if (field === 'date') return { field, value: 'today' };
+  return { field, value: '' };
+}
+
+function normalizeSmartCondition(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const field = SMART_CONDITION_FIELDS.includes(source.field) ? source.field : 'width';
+  if (SMART_RANGE_FIELDS.includes(field)) {
+    const limits = field === 'aspect'
+      ? { min: 0.05, max: 20 }
+      : field === 'size' ? { min: 0, max: 1024 * 1024 } : { min: 0, max: 100000 };
+    let min = normalizeSmartNumber(source.min, null, limits.min, limits.max);
+    let max = normalizeSmartNumber(source.max, null, limits.min, limits.max);
+    if (min !== null && max !== null && min > max) [min, max] = [max, min];
+    return { field, min, max };
+  }
+  if (field === 'format') return { field, value: SMART_FORMATS.includes(String(source.value)) ? String(source.value) : 'other' };
+  if (field === 'date') return { field, value: SMART_DATE_PRESETS.includes(String(source.value)) ? String(source.value) : 'today' };
+  return { field, value: String(source.value || '').trim().slice(0, 160) };
+}
+
+function smartConditionHasValue(condition) {
+  const normalized = normalizeSmartCondition(condition);
+  if (SMART_RANGE_FIELDS.includes(normalized.field)) return normalized.min !== null || normalized.max !== null;
+  if (normalized.field === 'format' || normalized.field === 'date') return true;
+  return Boolean(normalized.value);
+}
+
+function smartCollectionsConfigSupported(version, rules) {
+  const versionSupported = version === undefined || Number(version) === SMART_COLLECTIONS_VERSION;
+  const rulesSupported = !Array.isArray(rules) || rules.every((rule) => !rule || rule.version === undefined || Number(rule.version) === SMART_COLLECTIONS_VERSION);
+  return versionSupported && rulesSupported;
+}
+
+function normalizeSmartCollections(value) {
+  return (Array.isArray(value) ? value : []).filter((item) => !item || item.version === undefined || Number(item.version) === SMART_COLLECTIONS_VERSION).map((item) => {
+    const conditions = (Array.isArray(item?.conditions) ? item.conditions : [])
+      .map(normalizeSmartCondition).filter(smartConditionHasValue).slice(0, 12);
+    return {
+      id: String(item?.id || ('smart-' + Date.now() + '-' + Math.random().toString(36).slice(2))).trim().slice(0, 100),
+      name: String(item?.name || '').trim().replace(/\s+/g, ' ').slice(0, 60),
+      enabled: item?.enabled !== false,
+      logic: item?.logic === 'OR' ? 'OR' : 'AND',
+      conditions,
+      version: item?.version === undefined ? SMART_COLLECTIONS_VERSION : Number(item.version),
+      createdAt: Number(item?.createdAt) || Date.now(),
+      updatedAt: Number(item?.updatedAt) || Date.now()
+    };
+  }).filter((item) => item.name && item.conditions.length).slice(0, 50);
+}
+
 function syncConfigurationPayload() {
   return {
     scanRules: state.scanRules,
@@ -102,7 +171,9 @@ function syncConfigurationPayload() {
     zipLayout: state.zipLayout,
     conflictAction: state.conflictAction,
     filenameTemplate: state.filenameTemplate,
-    dateFolder: state.dateFolder
+    dateFolder: state.dateFolder,
+    smartCollectionsVersion: SMART_COLLECTIONS_VERSION,
+    smartCollections: state.smartCollections
   };
 }
 
@@ -170,9 +241,9 @@ const els = {
   selectedSummary: $('#selectedSummary'), searchInput: $('#searchInput'), sortSelect: $('#sortSelect'),
   originalOnly: $('#originalOnly'), aspectRatio: $('#aspectRatio'), zipLayout: $('#zipLayout'), conflictAction: $('#conflictAction'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'), sourceTabs: [...document.querySelectorAll('[data-source]')],
   pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'), taskViewButton: $('#taskViewButton'), settingsViewButton: $('#settingsViewButton'),
-  libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryScope: $('#libraryScope'), librarySmartCollection: $('#librarySmartCollection'),
+  libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryScope: $('#libraryScope'), librarySmartCollection: $('#librarySmartCollection'), syncPageFilters: $('#syncPageFilters'), reapplySmartCollections: $('#reapplySmartCollections'), newSmartCollection: $('#newSmartCollection'), smartCollectionTitle: $('#smartCollectionTitle'), smartCollectionHint: $('#smartCollectionHint'), smartCollectionEditor: $('#smartCollectionEditor'), smartCollectionName: $('#smartCollectionName'), smartCollectionLogic: $('#smartCollectionLogic'), smartRuleNameLabel: $('#smartRuleNameLabel'), smartRuleLogicLabel: $('#smartRuleLogicLabel'), smartConditionsLabel: $('#smartConditionsLabel'), addSmartCondition: $('#addSmartCondition'), smartConditionList: $('#smartConditionList'), smartRulePreview: $('#smartRulePreview'), cancelSmartCollection: $('#cancelSmartCollection'), saveSmartCollection: $('#saveSmartCollection'), smartCollectionList: $('#smartCollectionList'), smartCollectionEmpty: $('#smartCollectionEmpty'),
   librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), exportLibraryResultsJson: $('#exportLibraryResultsJson'), exportLibraryResultsCsv: $('#exportLibraryResultsCsv'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'), libraryBatchToolbar: $('#libraryBatchToolbar'), selectAllLibrary: $('#selectAllLibrary'), librarySelectedSummary: $('#librarySelectedSummary'), invertLibrarySelection: $('#invertLibrarySelection'), clearLibrarySelection: $('#clearLibrarySelection'), bulkFavorite: $('#bulkFavorite'), bulkTag: $('#bulkTag'), bulkCollection: $('#bulkCollection'), bulkDelete: $('#bulkDelete'), libraryDownloadSelected: $('#libraryDownloadSelected'), libraryZipSelected: $('#libraryZipSelected'), libraryFormat: $('#libraryFormat'), libraryMinWidth: $('#libraryMinWidth'), libraryMaxWidth: $('#libraryMaxWidth'), libraryMinHeight: $('#libraryMinHeight'), libraryMaxHeight: $('#libraryMaxHeight'), libraryMinSize: $('#libraryMinSize'), libraryMaxSize: $('#libraryMaxSize'), librarySort: $('#librarySort'),
-  libraryMinSizeRange: $('#libraryMinSizeRange'), libraryMaxSizeRange: $('#libraryMaxSizeRange'), librarySizeTrack: $('#librarySizeTrack'), librarySizeRangeValue: $('#librarySizeRangeValue'), libraryMinAspectRange: $('#libraryMinAspectRange'), libraryMaxAspectRange: $('#libraryMaxAspectRange'), libraryAspectTrack: $('#libraryAspectTrack'), libraryAspectRangeValue: $('#libraryAspectRangeValue'),
+  libraryMinSizeRange: $('#libraryMinSizeRange'), libraryMaxSizeRange: $('#libraryMaxSizeRange'), librarySizeTrack: $('#librarySizeTrack'), librarySizeRangeValue: $('#librarySizeRangeValue'), librarySizeDistribution: $('#librarySizeDistribution'), librarySizePresets: $('#librarySizePresets'), libraryMinAspectRange: $('#libraryMinAspectRange'), libraryMaxAspectRange: $('#libraryMaxAspectRange'), libraryAspectTrack: $('#libraryAspectTrack'), libraryAspectRangeValue: $('#libraryAspectRangeValue'), libraryAspectDistribution: $('#libraryAspectDistribution'), libraryAspectPresets: $('#libraryAspectPresets'),
   historyView: $('#historyView'), clearHistory: $('#clearHistory'), refreshHistory: $('#refreshHistory'), scanHistory: $('#scanHistory'),
   downloadHistory: $('#downloadHistory'), historyEmpty: $('#historyEmpty'),
   taskView: $('#taskView'), refreshTasks: $('#refreshTasks'), retryAllTasks: $('#retryAllTasks'), exportFailureReport: $('#exportFailureReport'), taskSummary: $('#taskSummary'), taskList: $('#taskList'), taskEmpty: $('#taskEmpty'), settingsView: $('#settingsView'), settingsViewButton: $('#settingsViewButton'), refreshStorage: $('#refreshStorage'), storageStats: $('#storageStats'), clearLibrary: $('#clearLibrary'), resetSettings: $('#resetSettings'),
@@ -228,7 +299,7 @@ async function init() {
   bindEvents();
   applyLanguage();
 
-  const defaults = { filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, aspectRatio: 'all', zipLayout: 'flat', conflictAction: 'uniquify', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false, scanRules: normalizeScanRules(), siteAdapters: [], syncSettings: false };
+  const defaults = { filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, aspectRatio: 'all', zipLayout: 'flat', conflictAction: 'uniquify', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false, scanRules: normalizeScanRules(), siteAdapters: [], smartCollectionsVersion: SMART_COLLECTIONS_VERSION, smartCollections: [], syncSettings: false };
   let saved = defaults;
   try {
     saved = (await withTimeout(() => chrome.storage.local.get(defaults), 1500, '读取扩展设置超时')) || defaults;
@@ -262,6 +333,8 @@ async function init() {
   state.autoScroll = Boolean(configuration.autoScroll);
   state.scanRules = normalizeScanRules(configuration.scanRules);
   state.siteAdapters = normalizeSiteAdapters(configuration.siteAdapters);
+  state.smartCollectionConfigInvalid = !smartCollectionsConfigSupported(configuration.smartCollectionsVersion, configuration.smartCollections);
+  state.smartCollections = state.smartCollectionConfigInvalid ? [] : normalizeSmartCollections(configuration.smartCollections);
   state.syncSettings = Boolean(saved.syncSettings);
   state.filterValues = {
     width: { min: normalizeLimit(savedFilters.minWidth), max: normalizeLimit(savedFilters.maxWidth) },
@@ -295,9 +368,11 @@ async function init() {
   if (els.includeIframes) els.includeIframes.checked = state.scanRules.includeIframes;
   if (els.syncSettings) els.syncSettings.checked = state.syncSettings;
   renderPresets();
+  renderSmartCollectionManager();
   renderSiteAdapters();
   applyLanguage();
   interactionReady = true;
+  if (state.smartCollectionConfigInvalid) showToast(t('smartRuleVersionUnsupported'));
   void recoverTaskState();
   // Library data is secondary to the current-page scan. Do not block the
   // scan or the loading state on IndexedDB reads.
@@ -338,6 +413,35 @@ function bindEvents() {
     state.librarySmartCollection = els.librarySmartCollection.value;
     refreshLibraryData();
   });
+  on(els.newSmartCollection, 'click', () => openSmartCollectionEditor());
+  on(els.syncPageFilters, 'click', syncPageFiltersToLibrary);
+  on(els.cancelSmartCollection, 'click', closeSmartCollectionEditor);
+  on(els.saveSmartCollection, 'click', saveSmartCollection);
+  on(els.addSmartCondition, 'click', () => {
+    if (!els.smartConditionList) return;
+    addSmartConditionRow(smartConditionDefault('width'));
+    updateSmartRulePreview();
+  });
+  on(els.smartConditionList, 'input', updateSmartRulePreview);
+  on(els.smartConditionList, 'change', (event) => {
+    if (event.target.matches('[data-smart-field]')) {
+      const row = event.target.closest('.smart-condition-row');
+      if (row) renderSmartConditionRow(row, smartConditionDefault(event.target.value));
+    }
+    updateSmartRulePreview();
+  });
+  on(els.smartConditionList, 'click', (event) => {
+    const remove = event.target.closest('[data-remove-smart-condition]');
+    if (!remove) return;
+    remove.closest('.smart-condition-row')?.remove();
+    if (!els.smartConditionList.children.length) addSmartConditionRow(smartConditionDefault('width'));
+    updateSmartRulePreview();
+  });
+  on(els.smartCollectionList, 'click', handleSmartCollectionListClick);
+  on(els.reapplySmartCollections, 'click', async () => {
+    await refreshLibraryData();
+    showToast(t('smartCollectionsReapplied'));
+  });
   on(els.libraryCollection, 'change', () => {
     state.libraryCollection = els.libraryCollection.value;
     refreshLibraryData();
@@ -353,6 +457,7 @@ function bindEvents() {
   on(els.libraryMaxAspectRange, 'input', (event) => syncLibraryMetricRange('aspect', event));
   on(els.libraryMinSize, 'change', () => syncLibraryNumericSizeRange());
   on(els.libraryMaxSize, 'change', () => syncLibraryNumericSizeRange());
+  [...document.querySelectorAll('[data-library-preset]')].forEach((button) => on(button, 'click', () => applyLibraryMetricPreset(button.dataset.libraryPreset)));
   on(els.loadMoreImages, 'click', () => { state.pageRenderLimit += 120; render(); });
   on(els.loadMoreLibrary, 'click', () => { state.libraryRenderLimit += 120; renderLibrary(); });
   on(els.selectAllLibrary, 'change', () => {
@@ -618,25 +723,14 @@ async function refreshLibraryData() {
     updateLibraryMetricLimits(records);
     state.collections = collections;
     state.libraryRecords = new Map(records.map((record) => [record.url, record]));
+    const commonLibraryFilters = libraryFilterCriteria();
     state.libraryResults = records.filter((record) => {
       if (state.libraryScope === 'favorites' && !record.favorite) return false;
       if (!matchesSmartCollection(record, state.librarySmartCollection)) return false;
       if (state.libraryCollection === '__uncategorized' && record.collectionIds?.length) return false;
       if (state.libraryCollection && state.libraryCollection !== '__uncategorized' && !record.collectionIds?.includes(state.libraryCollection)) return false;
       if (state.libraryFormat !== 'all' && formatCategory(record.format) !== state.libraryFormat) return false;
-      if (state.libraryMinWidth && record.width < Number(state.libraryMinWidth)) return false;
-      if (state.libraryMaxWidth && record.width && record.width > Number(state.libraryMaxWidth)) return false;
-      if (state.libraryMinHeight && record.height < Number(state.libraryMinHeight)) return false;
-      if (state.libraryMaxHeight && record.height && record.height > Number(state.libraryMaxHeight)) return false;
-      const size = Number(record.size) || 0;
-      if (state.libraryMinSize && (!size || size < Number(state.libraryMinSize) * 1024)) return false;
-      const rangeMinSize = Number(els.libraryMinSizeRange?.value || 0) * 1024;
-      const rangeMaxSize = Number(els.libraryMaxSizeRange?.value || els.libraryMaxSizeRange?.max || 0) * 1024;
-      if ((rangeMinSize > 0 && (!size || size < rangeMinSize)) || (rangeMaxSize > 0 && rangeMaxSize < Number(els.libraryMaxSizeRange?.max || 0) * 1024 && (!size || size > rangeMaxSize))) return false;
-      const aspect = record.width && record.height ? record.width / record.height : 0;
-      const minAspect = Number(els.libraryMinAspectRange?.value || 0.25);
-      const maxAspect = Number(els.libraryMaxAspectRange?.value || 5);
-      if ((minAspect > 0.25 || maxAspect < 5) && (!aspect || aspect < minAspect || aspect > maxAspect)) return false;
+      if (!matchesSharedMetricFilters(record, commonLibraryFilters)) return false;
       if (!state.librarySearch) return true;
       const query = state.librarySearch.toLowerCase();
       return [record.url, record.domain, record.format, record.alt, ...record.tags]
@@ -658,6 +752,7 @@ async function refreshLibraryData() {
     els.libraryFormat.value = state.libraryFormat; els.libraryMinWidth.value = state.libraryMinWidth; els.libraryMaxWidth.value = state.libraryMaxWidth; els.libraryMinHeight.value = state.libraryMinHeight; els.libraryMaxHeight.value = state.libraryMaxHeight; els.libraryMinSize.value = state.libraryMinSize; els.libraryMaxSize.value = state.libraryMaxSize; els.librarySort.value = state.librarySort;
     els.librarySearch.value = state.librarySearch;
     renderLibrary();
+    if (!els.smartCollectionEditor?.hidden) updateSmartRulePreview();
     if (state.view === 'page') render();
   } catch {
     if (refreshToken !== state.libraryRefreshToken) return;
@@ -688,6 +783,7 @@ function updateLibraryMetricLimits(records) {
   if (Number(els.libraryMinSizeRange.value) > nextMax) els.libraryMinSizeRange.value = String(nextMax);
   syncLibraryMetricRange('size', null, false);
   syncLibraryMetricRange('aspect', null, false);
+  renderLibraryMetricDistribution(records);
 }
 
 function syncLibraryNumericSizeRange() {
@@ -698,6 +794,67 @@ function syncLibraryNumericSizeRange() {
   els.libraryMinSizeRange.value = String(min);
   els.libraryMaxSizeRange.value = String(upper);
   syncLibraryMetricRange('size');
+}
+
+function renderRangeDistribution(container, buckets, total) {
+  if (!container) return;
+  container.replaceChildren();
+  const peak = Math.max(1, ...buckets.map((bucket) => bucket.count));
+  buckets.forEach((bucket) => {
+    const item = document.createElement('div'); item.className = 'range-distribution-item'; item.title = bucket.label + ': ' + bucket.count;
+    const bar = document.createElement('span'); bar.className = 'range-distribution-bar'; bar.style.height = String(Math.max(8, Math.round((bucket.count / peak) * 100))) + '%';
+    const label = document.createElement('small'); label.textContent = bucket.label;
+    const count = document.createElement('em'); count.textContent = String(bucket.count);
+    item.append(bar, label, count); container.append(item);
+  });
+  container.setAttribute('aria-label', t('distributionSummary', { count: total }));
+}
+
+function renderLibraryMetricDistribution(records = [...state.libraryRecords.values()]) {
+  const sizeBuckets = [
+    { label: t('sizeUnder100'), count: 0 },
+    { label: t('size100To1M'), count: 0 },
+    { label: t('sizeOver1M'), count: 0 },
+    { label: t('sizeUnknown'), count: 0 }
+  ];
+  const aspectBuckets = [
+    { label: t('landscapeShort'), count: 0 },
+    { label: t('portraitShort'), count: 0 },
+    { label: t('squareShort'), count: 0 },
+    { label: t('aspectUnknown'), count: 0 }
+  ];
+  records.forEach((record) => {
+    const sizeKb = (Number(record.size) || 0) / 1024;
+    if (!sizeKb) sizeBuckets[3].count += 1;
+    else if (sizeKb < 100) sizeBuckets[0].count += 1;
+    else if (sizeKb <= 1024) sizeBuckets[1].count += 1;
+    else sizeBuckets[2].count += 1;
+    const ratio = record.width && record.height ? record.width / record.height : 0;
+    if (!ratio) aspectBuckets[3].count += 1;
+    else if (aspectCategory(ratio) === 'landscape') aspectBuckets[0].count += 1;
+    else if (aspectCategory(ratio) === 'portrait') aspectBuckets[1].count += 1;
+    else aspectBuckets[2].count += 1;
+  });
+  renderRangeDistribution(els.librarySizeDistribution, sizeBuckets, records.length);
+  renderRangeDistribution(els.libraryAspectDistribution, aspectBuckets, records.length);
+}
+
+function applyLibraryMetricPreset(preset) {
+  if (!preset) return;
+  if (preset === 'size-small') {
+    els.libraryMinSizeRange.value = '0'; els.libraryMaxSizeRange.value = '99';
+  } else if (preset === 'size-medium') {
+    els.libraryMinSizeRange.value = '100'; els.libraryMaxSizeRange.value = '1024';
+  } else if (preset === 'aspect-landscape') {
+    els.libraryMinAspectRange.value = '1.05'; els.libraryMaxAspectRange.value = '5';
+  } else if (preset === 'aspect-portrait') {
+    els.libraryMinAspectRange.value = '0.25'; els.libraryMaxAspectRange.value = '0.95';
+  } else if (preset === 'aspect-square') {
+    els.libraryMinAspectRange.value = '0.96'; els.libraryMaxAspectRange.value = '1.04';
+  }
+  syncLibraryMetricRange('size', null, false);
+  syncLibraryMetricRange('aspect', null, false);
+  scheduleLibraryRefresh();
 }
 
 function scheduleLibraryRefresh() {
@@ -772,7 +929,7 @@ async function saveScanRules() {
 
 function exportScanConfiguration() {
   const payload = {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     settings: syncConfigurationPayload()
   };
@@ -787,12 +944,20 @@ async function importScanConfiguration(event) {
   if (!file) return;
   try {
     const payload = JSON.parse(await file.text());
-    if (!payload || typeof payload !== 'object' || !payload.settings || typeof payload.settings !== 'object') {
+    if (!payload || typeof payload !== 'object' || ![1, 2].includes(Number(payload.version || 1)) || !payload.settings || typeof payload.settings !== 'object') {
       throw new Error('Invalid scan configuration');
     }
+    const ruleVersion = payload.settings.smartCollectionsVersion;
+    if (ruleVersion !== undefined && Number(ruleVersion) !== SMART_COLLECTIONS_VERSION) {
+      throw new Error('Unsupported smart collection rule version');
+    }
     const settings = payload.settings;
+    if (!smartCollectionsConfigSupported(settings.smartCollectionsVersion, settings.smartCollections)) {
+      throw new Error('Unsupported smart collection rule version');
+    }
     state.scanRules = normalizeScanRules(settings.scanRules);
     state.siteAdapters = normalizeSiteAdapters(settings.siteAdapters);
+    state.smartCollections = normalizeSmartCollections(settings.smartCollections);
     state.scanLimit = [0, 200, 500, 1000].includes(Number(settings.scanLimit)) ? Number(settings.scanLimit) : 500;
     state.autoScroll = Boolean(settings.autoScroll);
     state.zipLayout = ['flat', 'domain', 'format', 'domain-format'].includes(settings.zipLayout) ? settings.zipLayout : 'flat';
@@ -810,6 +975,7 @@ async function importScanConfiguration(event) {
     if (els.scanCssBackground) els.scanCssBackground.checked = state.scanRules.scanCssBackground;
     if (els.scanVideoPosters) els.scanVideoPosters.checked = state.scanRules.scanVideoPosters;
     if (els.includeIframes) els.includeIframes.checked = state.scanRules.includeIframes;
+    renderSmartCollectionManager();
     renderSiteAdapters();
     if (!await saveRuleConfiguration()) throw new Error('Could not save scan configuration');
     showToast(t('scanConfigImported'));
@@ -855,6 +1021,13 @@ function renderSmartCollectionOptions(records = [...state.libraryRecords.values(
   const domains = [...new Set(records.map((record) => record.domain).filter(Boolean))].sort().slice(0, 12);
   addGroup(t('smartSites'), domains.map((domain) => [`smart:domain:${domain}`, domain]));
   addGroup(t('smartDates'), [['smart:today', t('smartToday')], ['smart:week', t('smartWeek')], ['smart:month', t('smartMonth')], ['smart:older', t('smartOlder')]]);
+  addGroup(t('customSmartCollections'), state.smartCollections.map((rule) => [`rule:${rule.id}`, (rule.enabled ? '' : '⏸ ') + rule.name]));
+  [...els.librarySmartCollection.options].forEach((option) => {
+    if (option.value.startsWith('rule:')) {
+      const rule = state.smartCollections.find((item) => 'rule:' + item.id === option.value);
+      option.disabled = Boolean(rule && !rule.enabled);
+    }
+  });
   els.librarySmartCollection.value = [...els.librarySmartCollection.options].some((option) => option.value === current) ? current : '';
   if (!els.librarySmartCollection.value && current) state.librarySmartCollection = '';
 }
@@ -862,9 +1035,9 @@ function renderSmartCollectionOptions(records = [...state.libraryRecords.values(
 function matchesSmartCollection(record, value) {
   if (!value) return true;
   const ratio = record.width && record.height ? record.width / record.height : 0;
-  if (value === 'smart:landscape') return ratio > 1.05;
-  if (value === 'smart:portrait') return ratio > 0 && ratio < 0.95;
-  if (value === 'smart:square') return ratio > 0 && Math.abs(ratio - 1) <= 0.05;
+  if (value === 'smart:landscape') return aspectCategory(ratio) === 'landscape';
+  if (value === 'smart:portrait') return aspectCategory(ratio) === 'portrait';
+  if (value === 'smart:square') return aspectCategory(ratio) === 'square';
   if (value === 'smart:large') return (record.width >= 1920 && record.height >= 1080) || (record.width * record.height >= 2073600);
   if (value.startsWith('smart:format:')) return formatCategory(record.format) === value.slice(13);
   if (value.startsWith('smart:domain:')) return record.domain === value.slice(13);
@@ -873,7 +1046,232 @@ function matchesSmartCollection(record, value) {
   if (value === 'smart:week') return age < 7 * 86400000;
   if (value === 'smart:month') return age < 31 * 86400000;
   if (value === 'smart:older') return age >= 31 * 86400000;
+  if (value.startsWith('rule:')) {
+    const rule = state.smartCollections.find((item) => 'rule:' + item.id === value);
+    return !rule || !rule.enabled || matchesSmartRule(record, rule);
+  }
   return true;
+}
+
+function smartRangeMatches(value, min, max) {
+  if (min === null && max === null) return true;
+  if (!Number.isFinite(value) || value <= 0) return false;
+  return (min === null || value >= min) && (max === null || value <= max);
+}
+
+function smartConditionMatches(record, condition) {
+  const normalized = normalizeSmartCondition(condition);
+  if (!smartConditionHasValue(normalized)) return false;
+  if (SMART_RANGE_FIELDS.includes(normalized.field)) {
+    let value = 0;
+    if (normalized.field === 'width') value = Number(record.width) || 0;
+    if (normalized.field === 'height') value = Number(record.height) || 0;
+    if (normalized.field === 'size') value = (Number(record.size) || 0) / 1024;
+    if (normalized.field === 'aspect') value = record.width && record.height ? record.width / record.height : 0;
+    return smartRangeMatches(value, normalized.min, normalized.max);
+  }
+  if (normalized.field === 'format') return formatCategory(record.format) === normalized.value;
+  if (normalized.field === 'domain') return String(record.domain || '').toLowerCase().includes(normalized.value.toLowerCase());
+  if (normalized.field === 'source') return sourceCategory(record.source) === sourceCategory(normalized.value);
+  if (normalized.field === 'date') {
+    const age = Date.now() - (Number(record.updatedAt) || 0);
+    if (normalized.value === 'today') return age < 86400000;
+    if (normalized.value === 'week') return age < 7 * 86400000;
+    if (normalized.value === 'month') return age < 31 * 86400000;
+    return age >= 31 * 86400000;
+  }
+  return true;
+}
+
+function matchesSmartRule(record, rule) {
+  const conditions = (rule?.conditions || []).map(normalizeSmartCondition);
+  if (!conditions.length) return true;
+  return rule.logic === 'OR'
+    ? conditions.some((condition) => smartConditionMatches(record, condition))
+    : conditions.every((condition) => smartConditionMatches(record, condition));
+}
+
+function smartFieldLabel(field) {
+  return {
+    width: t('width'), height: t('height'), size: t('fileSize'), aspect: t('aspectRatio'),
+    format: t('format'), domain: t('domain'), source: t('sourceFilter'), date: t('dateAdded')
+  }[field] || field;
+}
+
+function smartConditionUnit(field) {
+  if (field === 'width' || field === 'height') return 'px';
+  if (field === 'size') return 'KB';
+  if (field === 'aspect') return ': 1';
+  return '';
+}
+
+function renderSmartConditionRow(row, condition) {
+  if (!row) return;
+  const fieldSelect = row.querySelector('[data-smart-field]');
+  if (fieldSelect) fieldSelect.value = condition.field;
+  row.querySelector('.smart-condition-editor')?.remove();
+  const editor = document.createElement('div');
+  editor.className = 'smart-condition-editor';
+  if (SMART_RANGE_FIELDS.includes(condition.field)) {
+    const min = document.createElement('input');
+    min.type = 'number'; min.min = condition.field === 'aspect' ? '0.05' : '0'; min.step = condition.field === 'aspect' ? '0.05' : '1';
+    min.placeholder = t('smartMin'); min.value = condition.min === null ? '' : String(condition.min); min.dataset.smartMin = 'true';
+    const max = document.createElement('input');
+    max.type = 'number'; max.min = condition.field === 'aspect' ? '0.05' : '0'; max.step = condition.field === 'aspect' ? '0.05' : '1';
+    max.placeholder = t('smartMax'); max.value = condition.max === null ? '' : String(condition.max); max.dataset.smartMax = 'true';
+    editor.append(min, document.createTextNode('–'), max);
+    const unit = smartConditionUnit(condition.field);
+    if (unit) editor.append(Object.assign(document.createElement('span'), { className: 'smart-unit', textContent: unit }));
+  } else if (condition.field === 'format') {
+    const select = document.createElement('select'); select.dataset.smartValue = 'true';
+    SMART_FORMATS.forEach((format) => select.append(new Option(format.toUpperCase(), format)));
+    select.value = condition.value; editor.append(select);
+  } else if (condition.field === 'date') {
+    const select = document.createElement('select'); select.dataset.smartValue = 'true';
+    [['today', t('smartToday')], ['week', t('smartWeek')], ['month', t('smartMonth')], ['older', t('smartOlder')]].forEach(([value, label]) => select.append(new Option(label, value)));
+    select.value = condition.value; editor.append(select);
+  } else if (condition.field === 'source') {
+    const select = document.createElement('select'); select.dataset.smartValue = 'true';
+    [['IMG', 'IMG'], ['CSS', 'CSS'], ['VIDEO', 'VIDEO'], ['RULE', t('sourceRule')], ['other', t('other')]].forEach(([value, label]) => select.append(new Option(label, value)));
+    select.value = condition.value || 'IMG'; editor.append(select);
+  } else {
+    const input = document.createElement('input'); input.type = 'text'; input.dataset.smartValue = 'true'; input.value = condition.value || '';
+    input.placeholder = condition.field === 'domain' ? t('smartDomainPlaceholder') : t('smartSourcePlaceholder'); editor.append(input);
+  }
+  const remove = row.querySelector('[data-remove-smart-condition]');
+  if (remove) row.insertBefore(editor, remove);
+  else row.append(editor);
+}
+
+function addSmartConditionRow(condition = smartConditionDefault('width')) {
+  if (!els.smartConditionList) return;
+  const row = document.createElement('div'); row.className = 'smart-condition-row';
+  const select = document.createElement('select'); select.dataset.smartField = 'true'; select.setAttribute('aria-label', t('smartConditionField'));
+  SMART_CONDITION_FIELDS.forEach((field) => select.append(new Option(smartFieldLabel(field), field)));
+  row.append(select);
+  const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'smart-condition-remove'; remove.dataset.removeSmartCondition = 'true'; remove.textContent = '×'; remove.title = t('removeCondition'); remove.setAttribute('aria-label', t('removeCondition'));
+  row.append(remove);
+  els.smartConditionList.append(row);
+  renderSmartConditionRow(row, normalizeSmartCondition(condition));
+}
+
+function readSmartConditionRows() {
+  return [...(els.smartConditionList?.querySelectorAll('.smart-condition-row') || [])].map((row) => {
+    const field = row.querySelector('[data-smart-field]')?.value || 'width';
+    if (SMART_RANGE_FIELDS.includes(field)) {
+      return normalizeSmartCondition({ field, min: row.querySelector('[data-smart-min]')?.value, max: row.querySelector('[data-smart-max]')?.value });
+    }
+    return normalizeSmartCondition({ field, value: row.querySelector('[data-smart-value]')?.value || '' });
+  }).filter(smartConditionHasValue);
+}
+
+function smartRuleFromEditor() {
+  return {
+    name: String(els.smartCollectionName?.value || '').trim().replace(/\s+/g, ' ').slice(0, 60),
+    logic: els.smartCollectionLogic?.value === 'OR' ? 'OR' : 'AND',
+    conditions: readSmartConditionRows()
+  };
+}
+
+function smartConditionSummary(condition) {
+  const normalized = normalizeSmartCondition(condition);
+  if (SMART_RANGE_FIELDS.includes(normalized.field)) {
+    const min = normalized.min === null ? t('unlimited') : String(normalized.min);
+    const max = normalized.max === null ? t('unlimited') : String(normalized.max);
+    return smartFieldLabel(normalized.field) + ': ' + min + ' – ' + max + ' ' + smartConditionUnit(normalized.field);
+  }
+  if (normalized.field === 'format') return smartFieldLabel(normalized.field) + ': ' + normalized.value.toUpperCase();
+  if (normalized.field === 'date') return smartFieldLabel(normalized.field) + ': ' + ({ today: t('smartToday'), week: t('smartWeek'), month: t('smartMonth'), older: t('smartOlder') }[normalized.value] || normalized.value);
+  return smartFieldLabel(normalized.field) + ': ' + (normalized.value || t('smartAnyValue'));
+}
+
+function updateSmartRulePreview() {
+  if (!els.smartRulePreview || els.smartCollectionEditor?.hidden) return;
+  const draft = smartRuleFromEditor();
+  const records = [...state.libraryRecords.values()];
+  const count = draft.conditions.length ? records.filter((record) => matchesSmartRule(record, draft)).length : 0;
+  const sample = records.filter((record) => draft.conditions.length && matchesSmartRule(record, draft)).slice(0, 3).map((record) => fileName(record.url));
+  els.smartRulePreview.textContent = t('smartRulePreview', { count }) + (sample.length ? ' · ' + sample.join(', ') : '');
+}
+
+function openSmartCollectionEditor(rule = null) {
+  if (!els.smartCollectionEditor) return;
+  state.smartCollectionEditingId = rule?.id || '';
+  els.smartCollectionEditor.hidden = false;
+  els.smartCollectionName.value = rule?.name || '';
+  els.smartCollectionLogic.value = rule?.logic === 'OR' ? 'OR' : 'AND';
+  els.smartConditionList.replaceChildren();
+  (rule?.conditions?.length ? rule.conditions : [smartConditionDefault('width')]).forEach(addSmartConditionRow);
+  updateSmartRulePreview();
+  els.smartCollectionName.focus();
+}
+
+function closeSmartCollectionEditor() {
+  if (!els.smartCollectionEditor) return;
+  els.smartCollectionEditor.hidden = true;
+  state.smartCollectionEditingId = '';
+  els.smartConditionList?.replaceChildren();
+}
+
+async function saveSmartCollection() {
+  const draft = smartRuleFromEditor();
+  if (!draft.name) { showToast(t('smartRuleNameRequired')); return; }
+  if (!draft.conditions.length) { showToast(t('smartConditionRequired')); return; }
+  const now = Date.now();
+  const existing = state.smartCollections.find((rule) => rule.id === state.smartCollectionEditingId);
+  const rule = normalizeSmartCollections([{
+    ...(existing || {}), ...draft, id: existing?.id || ('smart-' + now + '-' + Math.random().toString(36).slice(2)),
+    enabled: existing?.enabled !== false, version: SMART_COLLECTIONS_VERSION,
+    createdAt: existing?.createdAt || now, updatedAt: now
+  }])[0];
+  if (!rule) { showToast(t('smartRuleSaveFailed')); return; }
+  if (existing) state.smartCollections = state.smartCollections.map((item) => item.id === existing.id ? rule : item);
+  else state.smartCollections = [...state.smartCollections, rule];
+  if (!await saveRuleConfiguration()) return;
+  closeSmartCollectionEditor();
+  renderSmartCollectionManager();
+  await refreshLibraryData();
+  showToast(t('smartRuleSaved'));
+}
+
+function renderSmartCollectionManager() {
+  if (!els.smartCollectionList) return;
+  els.smartCollectionList.replaceChildren();
+  els.smartCollectionEmpty.hidden = state.smartCollections.length > 0;
+  state.smartCollections.forEach((rule) => {
+    const item = document.createElement('div'); item.className = 'smart-collection-item' + (rule.enabled ? '' : ' disabled'); item.dataset.smartId = rule.id;
+    const copy = document.createElement('div'); copy.className = 'smart-collection-copy';
+    const title = document.createElement('strong'); title.textContent = rule.name;
+    const detail = document.createElement('span'); detail.textContent = (rule.logic === 'OR' ? t('smartOr') : t('smartAnd')) + ' · ' + rule.conditions.map(smartConditionSummary).join(' · ');
+    copy.append(title, detail);
+    const actions = document.createElement('div'); actions.className = 'smart-collection-item-actions';
+    const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'smart-rule-action'; toggle.dataset.smartAction = 'toggle'; toggle.textContent = rule.enabled ? '●' : '○'; toggle.title = rule.enabled ? t('disableSmartCollection') : t('enableSmartCollection'); toggle.setAttribute('aria-label', toggle.title); toggle.setAttribute('aria-pressed', rule.enabled ? 'true' : 'false');
+    const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'smart-rule-action'; edit.dataset.smartAction = 'edit'; edit.textContent = '✎'; edit.title = t('editSmartCollection'); edit.setAttribute('aria-label', edit.title);
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'smart-rule-action danger'; remove.dataset.smartAction = 'delete'; remove.textContent = '×'; remove.title = t('deleteSmartCollection'); remove.setAttribute('aria-label', remove.title);
+    actions.append(toggle, edit, remove); item.append(copy, actions); els.smartCollectionList.append(item);
+  });
+}
+
+async function handleSmartCollectionListClick(event) {
+  const actionButton = event.target.closest('[data-smart-action]');
+  const item = event.target.closest('[data-smart-id]');
+  if (!actionButton || !item) return;
+  const rule = state.smartCollections.find((entry) => entry.id === item.dataset.smartId);
+  if (!rule) return;
+  const action = actionButton.dataset.smartAction;
+  if (action === 'edit') { openSmartCollectionEditor(rule); return; }
+  if (action === 'delete') {
+    if (!window.confirm(t('deleteSmartCollectionConfirm'))) return;
+    state.smartCollections = state.smartCollections.filter((entry) => entry.id !== rule.id);
+    if (state.librarySmartCollection === 'rule:' + rule.id) state.librarySmartCollection = '';
+  } else if (action === 'toggle') {
+    rule.enabled = !rule.enabled; rule.updatedAt = Date.now();
+  }
+  if (await saveRuleConfiguration()) {
+    renderSmartCollectionManager();
+    await refreshLibraryData();
+    showToast(action === 'delete' ? t('smartRuleDeleted') : t('smartRuleUpdated'));
+  }
 }
 
 function switchView(view) {
@@ -2285,16 +2683,70 @@ async function collectPageImages(options = {}) {
   return { images: options.limit ? images.slice(0, Number(options.limit)) : images, duplicateCount, skipped: skippedCount, partial: expired() };
 }
 
+function matchesSharedMetricFilters(image, criteria = {}) {
+  const rangeMatches = (value, range, unlimited = false) => {
+    const min = range?.min ?? null;
+    const max = range?.max ?? null;
+    if (unlimited) return true;
+    if (min === null && max === null) return true;
+    if (!Number.isFinite(value) || value <= 0) return min === null;
+    return (min === null || value >= min) && (max === null || value <= max);
+  };
+  const sizeKb = Number(image.size) > 0 ? Number(image.size) / 1024 : 0;
+  const aspect = image.width && image.height ? Number(image.width) / Number(image.height) : 0;
+  const aspectRange = criteria.aspectRange || {};
+  const aspectUnlimited = (aspectRange.min ?? 0.25) <= 0.25 && (aspectRange.max ?? 5) >= 5;
+  return rangeMatches(Number(image.width) || 0, criteria.width)
+    && rangeMatches(Number(image.height) || 0, criteria.height)
+    && rangeMatches(sizeKb, criteria.size)
+    && rangeMatches(aspect, aspectRange, aspectUnlimited);
+}
+
+function libraryFilterCriteria() {
+  return {
+    width: { min: normalizeLimit(els.libraryMinWidth?.value), max: normalizeLimit(els.libraryMaxWidth?.value) },
+    height: { min: normalizeLimit(els.libraryMinHeight?.value), max: normalizeLimit(els.libraryMaxHeight?.value) },
+    size: { min: normalizeLimit(els.libraryMinSize?.value), max: normalizeLimit(els.libraryMaxSize?.value) },
+    aspectRange: { min: Number(els.libraryMinAspectRange?.value || 0.25), max: Number(els.libraryMaxAspectRange?.value || 5) }
+  };
+}
+
+function syncPageFiltersToLibrary() {
+  state.libraryFormat = state.format;
+  state.librarySearch = state.searchQuery;
+  state.libraryMinWidth = state.filterValues.width.min === null ? '' : String(state.filterValues.width.min);
+  state.libraryMaxWidth = state.filterValues.width.max === null ? '' : String(state.filterValues.width.max);
+  state.libraryMinHeight = state.filterValues.height.min === null ? '' : String(state.filterValues.height.min);
+  state.libraryMaxHeight = state.filterValues.height.max === null ? '' : String(state.filterValues.height.max);
+  state.libraryMinSize = state.filterValues.size.min === null ? '' : String(state.filterValues.size.min);
+  state.libraryMaxSize = state.filterValues.size.max === null ? '' : String(state.filterValues.size.max);
+  state.librarySmartCollection = '';
+  if (els.libraryMinWidth) els.libraryMinWidth.value = state.libraryMinWidth;
+  if (els.libraryMaxWidth) els.libraryMaxWidth.value = state.libraryMaxWidth;
+  if (els.libraryMinHeight) els.libraryMinHeight.value = state.libraryMinHeight;
+  if (els.libraryMaxHeight) els.libraryMaxHeight.value = state.libraryMaxHeight;
+  if (els.libraryFormat) els.libraryFormat.value = state.libraryFormat;
+  if (els.librarySearch) els.librarySearch.value = state.librarySearch;
+  if (els.libraryMinSize) els.libraryMinSize.value = state.libraryMinSize;
+  if (els.libraryMaxSize) els.libraryMaxSize.value = state.libraryMaxSize;
+  const sizeMax = Number(els.libraryMaxSizeRange?.max) || 1024;
+  if (els.libraryMinSizeRange) els.libraryMinSizeRange.value = String(Math.min(Number(state.filterValues.size.min) || 0, sizeMax));
+  if (els.libraryMaxSizeRange) els.libraryMaxSizeRange.value = String(state.filterValues.size.max === null ? sizeMax : Math.min(Number(state.filterValues.size.max), sizeMax));
+  if (els.libraryMinAspectRange) els.libraryMinAspectRange.value = String(Math.max(0.25, Math.min(5, state.aspectRange.min)));
+  if (els.libraryMaxAspectRange) els.libraryMaxAspectRange.value = String(Math.max(0.25, Math.min(5, state.aspectRange.max)));
+  if (state.aspectRatio === 'landscape') { els.libraryMinAspectRange.value = '1.05'; els.libraryMaxAspectRange.value = '5'; }
+  if (state.aspectRatio === 'portrait') { els.libraryMinAspectRange.value = '0.25'; els.libraryMaxAspectRange.value = '0.95'; }
+  if (state.aspectRatio === 'square') { els.libraryMinAspectRange.value = '0.96'; els.libraryMaxAspectRange.value = '1.04'; }
+  syncLibraryMetricRange('size', null, false);
+  syncLibraryMetricRange('aspect', null, false);
+  scheduleLibraryRefresh();
+  showToast(t('pageFiltersSynced'));
+}
+
 function applyFilters() {
-  const minWidth = state.filterValues.width.min, maxWidth = state.filterValues.width.max;
-  const minHeight = state.filterValues.height.min, maxHeight = state.filterValues.height.max;
-  const minSize = state.filterValues.size.min, maxSize = state.filterValues.size.max;
   const dimensionMatched = state.images.filter((image) =>
-    (minWidth === null || image.width >= minWidth) && (maxWidth === null || image.width <= maxWidth) &&
-    (minHeight === null || image.height >= minHeight) && (maxHeight === null || image.height <= maxHeight) &&
-    (minSize === null || (image.size > 0 && image.size >= minSize * 1024)) &&
-    (maxSize === null || (image.size > 0 && image.size <= maxSize * 1024)) &&
-    matchesAspectRatio(image, state.aspectRatio) && matchesAspectRange(image)
+    matchesSharedMetricFilters(image, { width: state.filterValues.width, height: state.filterValues.height, size: state.filterValues.size, aspectRange: state.aspectRange })
+    && matchesAspectRatio(image, state.aspectRatio)
   );
   state.dimensionFiltered = dimensionMatched.filter((image) => !state.originalOnly || image.original);
   const sourceFiltered = state.source === 'all'
@@ -2443,10 +2895,14 @@ function matchesAspectRatio(image, ratio) {
   if (ratio === 'all') return true;
   if (!image.width || !image.height) return false;
   const value = image.width / image.height;
-  if (ratio === 'landscape') return value > 1.05;
-  if (ratio === 'portrait') return value < 0.95;
-  if (ratio === 'square') return Math.abs(value - 1) <= 0.05;
-  return true;
+  return aspectCategory(value) === ratio;
+}
+
+function aspectCategory(value) {
+  if (!Number.isFinite(value) || value <= 0) return 'unknown';
+  if (value >= 1.05) return 'landscape';
+  if (value <= 0.95) return 'portrait';
+  return 'square';
 }
 
 function matchesAspectRange(image) {
@@ -2657,6 +3113,8 @@ function syncLibraryMetricRange(axis, sourceEvent, shouldRefresh = true) {
   if (isSize) {
     els.libraryMinSize.value = min ? String(min) : '';
     els.libraryMaxSize.value = max < Number(maxInput.max) ? String(max) : '';
+    state.libraryMinSize = els.libraryMinSize.value;
+    state.libraryMaxSize = els.libraryMaxSize.value;
   }
   state.libraryRenderLimit = 120;
   if (shouldRefresh) scheduleLibraryRefresh();
@@ -2945,10 +3403,10 @@ Object.assign(TRANSLATIONS.en, {
   noAutoArchive: 'No auto archive', noSiteAdapters: 'No site rules yet', autoArchive: 'Auto archive', removeSiteAdapter: 'Remove site rule', siteAdapterRemoved: 'Site rule removed', siteAdapterSaved: 'Site rule saved', siteAdapterRequired: 'Enter a host pattern and image selector', siteAdapterLimit: 'Up to 30 site rules can be saved', scanRulesSaved: 'Scan rules saved', syncEnabled: 'Settings sync enabled', syncDisabled: 'Settings sync disabled', syncSaved: 'Sync settings saved', syncSaveFailed: 'Could not save sync settings', customScanRules: 'Custom scan rules', appliesToSite: 'Applied to the current site', includeSelectors: 'Include selectors', excludeSelectors: 'Exclude selectors', includeSelectorsHint: 'One CSS selector per line; leave empty to use the default scanner.', excludeSelectorsHint: 'Matching elements and their descendants are excluded.', scanCssBackground: 'Scan CSS backgrounds', scanVideoPosters: 'Scan video posters', includeIframes: 'Scan iframes', saveScanRules: 'Save scan rules', siteAdapters: 'Site adapters & auto archive', matchesByHost: 'Matched by host', hostPattern: 'Host pattern', imageSelector: 'Image selector', extraAttributes: 'Extra image attributes', archiveCollection: 'Auto archive to collection', saveSiteAdapter: 'Save site rule', clearForm: 'Clear form', syncTitle: 'Optional settings sync', noImageSync: 'No images uploaded', useChromeSync: 'Use Chrome sync', syncDescription: 'Only scan rules, site adapters, and preferences are synced. Images, cache, and history stay local.', saveSyncSettings: 'Save sync settings'
 });
 Object.assign(TRANSLATIONS.zh, {
-  sourceFilter: '来源', sourceFilterHint: '按图片发现方式查看', sourceRule: '规则', configMigration: '扫描配置迁移', configMigrationNote: '导出或导入扫描规则、站点适配器和下载偏好，不包含图片、缓存、集合或历史记录。', exportScanConfig: '导出扫描配置', importScanConfig: '导入扫描配置', scanConfigExported: '扫描配置已导出', scanConfigImported: '扫描配置已导入', scanConfigImportFailed: '导入失败，请选择有效的扫描配置 JSON 文件'
+  sourceFilter: '来源', sourceFilterHint: '按图片发现方式查看', sourceRule: '规则', configMigration: '扫描配置迁移', configMigrationNote: '导出或导入扫描规则、站点适配器、智能集合和下载偏好，不包含图片、缓存、素材集合或历史记录。', exportScanConfig: '导出扫描配置', importScanConfig: '导入扫描配置', scanConfigExported: '扫描配置已导出', scanConfigImported: '扫描配置已导入', scanConfigImportFailed: '导入失败，请选择有效的扫描配置 JSON 文件'
 });
 Object.assign(TRANSLATIONS.en, {
-  sourceFilter: 'Source', sourceFilterHint: 'Filter by how each image was discovered', sourceRule: 'Rule', configMigration: 'Scan configuration portability', configMigrationNote: 'Export or import scan rules, site adapters, and download preferences. Images, cache, collections, and history are not included.', exportScanConfig: 'Export scan config', importScanConfig: 'Import scan config', scanConfigExported: 'Scan configuration exported', scanConfigImported: 'Scan configuration imported', scanConfigImportFailed: 'Import failed. Choose a valid scan configuration JSON file.'
+  sourceFilter: 'Source', sourceFilterHint: 'Filter by how each image was discovered', sourceRule: 'Rule', configMigration: 'Scan configuration portability', configMigrationNote: 'Export or import scan rules, site adapters, smart collections, and download preferences. Images, cache, local asset collections, and history are not included.', exportScanConfig: 'Export scan config', importScanConfig: 'Import scan config', scanConfigExported: 'Scan configuration exported', scanConfigImported: 'Scan configuration imported', scanConfigImportFailed: 'Import failed. Choose a valid scan configuration JSON file.'
 });
 Object.assign(TRANSLATIONS.zh, {
   previousImage: '上一张', nextImage: '下一张', previewPosition: '{current} / {total}', copyFilteredUrls: '复制当前结果 URL', noUrlsToCopy: '没有可复制的图片地址', urlsCopied: '已复制 {count} 个图片地址'
@@ -3004,6 +3462,12 @@ Object.assign(TRANSLATIONS.en, {
   progressMetrics: '{completed}/{total} · {speed} items/s · {eta} remaining',
   prepareWithEstimate: '{action} · {count} image(s) · known size {size} · unknown {unknown}',
   largeDownloadWarning: 'This is a large task; download pacing is limited. Please wait for it to finish.'
+});
+Object.assign(TRANSLATIONS.zh, {
+  smartCollectionHint: '用规则快速定位素材', syncPageFilters: '应用当前页筛选', newSmartCollection: '新建规则', reapplySmartCollections: '重新应用', smartRuleName: '规则名称', smartRuleLogic: '条件关系', smartAnd: '同时满足（AND）', smartOr: '满足任一（OR）', smartConditions: '筛选条件', addCondition: '添加条件', saveSmartCollection: '保存规则', cancelSmartCollection: '取消', smartRulePreview: '命中预览：{count} 张图片', smartRulesEmpty: '还没有自定义智能集合', smartRuleNameRequired: '请输入规则名称', smartConditionRequired: '至少添加一个有效条件', smartRuleSaved: '智能集合已保存', smartRuleSaveFailed: '智能集合保存失败', smartRuleDeleted: '智能集合已删除', smartRuleUpdated: '智能集合状态已更新', smartCollectionsReapplied: '智能集合规则已重新应用', pageFiltersSynced: '当前页筛选已应用到素材库', deleteSmartCollectionConfirm: '确定删除这个智能集合吗？', editSmartCollection: '编辑智能集合', enableSmartCollection: '启用智能集合', disableSmartCollection: '禁用智能集合', deleteSmartCollection: '删除智能集合', customSmartCollections: '自定义规则', smartConditionField: '条件字段', removeCondition: '移除条件', smartMin: '最小值', smartMax: '最大值', smartAnyValue: '任意值', smartDomainPlaceholder: '例如：example.com', smartSourcePlaceholder: '例如：IMG', dateAdded: '添加日期', domain: '网站域名', distributionSummary: '共 {count} 张图片的分布', sizeUnder100: '<100K', size100To1M: '100K–1M', sizeOver1M: '>1M', sizeUnknown: '未知', sizePresetSmall: '小于 100 KB', sizePresetMedium: '100 KB～1 MB', landscapeShort: '横', portraitShort: '竖', squareShort: '方', aspectUnknown: '未知'
+});
+Object.assign(TRANSLATIONS.en, {
+  smartCollectionHint: 'Find assets quickly with rules', syncPageFilters: 'Use current-page filters', newSmartCollection: 'New rule', reapplySmartCollections: 'Reapply', smartRuleName: 'Rule name', smartRuleLogic: 'Condition logic', smartAnd: 'Match all (AND)', smartOr: 'Match any (OR)', smartConditions: 'Conditions', addCondition: 'Add condition', saveSmartCollection: 'Save rule', cancelSmartCollection: 'Cancel', smartRulePreview: 'Rule preview: {count} image(s)', smartRulesEmpty: 'No custom smart collections yet', smartRuleNameRequired: 'Enter a rule name', smartConditionRequired: 'Add at least one valid condition', smartRuleSaved: 'Smart collection saved', smartRuleSaveFailed: 'Could not save smart collection', smartRuleDeleted: 'Smart collection deleted', smartRuleUpdated: 'Smart collection updated', smartCollectionsReapplied: 'Smart-collection rules reapplied', pageFiltersSynced: 'Current-page filters applied to Library', deleteSmartCollectionConfirm: 'Delete this smart collection?', editSmartCollection: 'Edit smart collection', enableSmartCollection: 'Enable smart collection', disableSmartCollection: 'Disable smart collection', deleteSmartCollection: 'Delete smart collection', customSmartCollections: 'Custom rules', smartConditionField: 'Condition field', removeCondition: 'Remove condition', smartMin: 'Minimum', smartMax: 'Maximum', smartAnyValue: 'Any value', smartDomainPlaceholder: 'For example: example.com', smartSourcePlaceholder: 'For example: IMG', dateAdded: 'Added date', domain: 'Hostname', distributionSummary: 'Distribution of {count} image(s)', sizeUnder100: '<100K', size100To1M: '100K–1M', sizeOver1M: '>1M', sizeUnknown: 'Unknown', sizePresetSmall: 'Under 100 KB', sizePresetMedium: '100 KB–1 MB', landscapeShort: 'Land', portraitShort: 'Port', squareShort: 'Square', aspectUnknown: 'Unknown'
 });
 
 function t(key, values = {}) {
@@ -3109,6 +3573,11 @@ function applyLanguage() {
   if (els.downloadProgress && !els.downloadProgress.hidden && els.progressDetail && !els.progressDetail.textContent) els.progressDetail.textContent = t('waitingTask');
   const libraryTitle = document.querySelector('#libraryView h2'); if (libraryTitle) libraryTitle.textContent = t('libraryTitle');
   if (els.refreshLibrary) els.refreshLibrary.textContent = t('refresh');
+  document.querySelector('.smart-collection-card')?.setAttribute('aria-label', t('smartCollections'));
+  setText(els.smartCollectionTitle, t('smartCollections')); setText(els.smartCollectionHint, t('smartCollectionHint')); setText(els.syncPageFilters, t('syncPageFilters')); setText(els.reapplySmartCollections, t('reapplySmartCollections')); setText(els.newSmartCollection, t('newSmartCollection'));
+  setText(els.smartRuleNameLabel, t('smartRuleName')); setText(els.smartRuleLogicLabel, t('smartRuleLogic')); setText(els.smartConditionsLabel, t('smartConditions')); setText(els.addSmartCondition, t('addCondition')); setText(els.cancelSmartCollection, t('cancelSmartCollection')); setText(els.saveSmartCollection, t('saveSmartCollection'));
+  if (els.smartCollectionName) els.smartCollectionName.placeholder = state.language === 'en' ? 'For example: Large PNG' : '例如：大尺寸 PNG';
+  if (els.smartCollectionLogic) { const logicOptions = [t('smartAnd'), t('smartOr')]; [...els.smartCollectionLogic.options].forEach((option, index) => { option.textContent = logicOptions[index]; }); }
   if (els.librarySearch) els.librarySearch.placeholder = t('librarySearch');
   if (els.libraryMinWidth) els.libraryMinWidth.placeholder = t('libraryMinWidth');
   if (els.libraryMaxWidth) els.libraryMaxWidth.placeholder = t('libraryMaxWidth');
@@ -3120,6 +3589,17 @@ function applyLanguage() {
   const libraryEmptyHint = document.querySelector('#libraryEmpty span'); if (libraryEmptyHint) libraryEmptyHint.textContent = t('libraryEmptyHint');
   const emptyTitle = document.querySelector('#emptyState strong'); if (emptyTitle) emptyTitle.textContent = t('noResults');
   const emptyHint = document.querySelector('#emptyState span'); if (emptyHint) emptyHint.textContent = t('noResultsHint');
+  const presetLabels = { 'size-small': t('sizePresetSmall'), 'size-medium': t('sizePresetMedium'), 'aspect-landscape': t('landscape'), 'aspect-portrait': t('portrait'), 'aspect-square': t('square') };
+  document.querySelectorAll('[data-library-preset]').forEach((button) => { if (presetLabels[button.dataset.libraryPreset]) button.textContent = presetLabels[button.dataset.libraryPreset]; });
+  setText(els.smartCollectionEmpty, t('smartRulesEmpty'));
+  if (!els.smartCollectionEditor?.hidden) {
+    const draft = smartRuleFromEditor();
+    els.smartConditionList?.replaceChildren();
+    draft.conditions.forEach(addSmartConditionRow);
+    updateSmartRulePreview();
+  }
+  renderSmartCollectionManager();
+  renderLibraryMetricDistribution();
   const allImagesOption = [...(els.libraryScope?.options || [])].find((option) => option.value === 'all'); if (allImagesOption) allImagesOption.textContent = t('allImages');
   const favoritesOption = [...(els.libraryScope?.options || [])].find((option) => option.value === 'favorites'); if (favoritesOption) favoritesOption.textContent = t('myFavorites');
   const historyTitle = document.querySelector('#historyView h2'); if (historyTitle) historyTitle.textContent = t('historyTitle');
