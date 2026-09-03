@@ -17,11 +17,11 @@
         <div class="topbar-actions">
           <span id="scanStatus" class="scan-status">扫描中</span>
           <button id="languageButton" class="language-button" type="button" title="切换语言">EN</button>
-          <button id="refreshButton" class="icon-button" type="button" title="重新扫描" aria-label="重新扫描">↻</button>
+          <button id="refreshButton" class="icon-button scan-action" type="button" title="重新扫描" aria-label="重新扫描"><span aria-hidden="true">↻</span><span class="scan-action-label">重新扫描</span></button>
         </div>
       </header>
 
-      <section class="page-summary">
+      <section class="page-summary" aria-label="当前页面">
         <div class="page-icon" id="pageIcon">◎</div>
         <div class="page-copy">
           <strong id="pageTitle">正在读取当前页面</strong>
@@ -38,16 +38,15 @@
         <button id="settingsViewButton" class="view-tab" type="button" aria-selected="false">设置</button>
       </nav>
 
-      <div id="pageView">
+      <div id="pageView" class="page-workspace">
 
-      <section class="filter-panel" aria-label="图片筛选">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">FILTER</p>
-            <h2>按尺寸筛选</h2>
-          </div>
-          <button id="clearFilters" class="text-button" type="button">清除</button>
-        </div>
+      <details id="filterPanel" class="filter-panel" aria-label="图片筛选">
+        <summary class="filter-summary">
+          <span class="filter-summary-copy"><span id="filterEyebrow" class="eyebrow">FILTER</span><span id="filterTitle" class="filter-title">按尺寸筛选</span></span>
+          <span class="filter-summary-meta"><span id="filterActiveCount" class="filter-active-count">全部图片</span><span class="details-chevron" aria-hidden="true">⌄</span></span>
+        </summary>
+        <div class="filter-content">
+        <div class="filter-content-heading"><p>筛选条件会即时应用到图片结果</p><button id="clearFilters" class="text-button" type="button">清除</button></div>
         <div class="preset-row">
           <select id="filterPreset" aria-label="筛选预设"><option value="">筛选预设</option></select>
           <button id="saveFilterPreset" class="subtle-button" type="button">保存筛选</button>
@@ -130,13 +129,14 @@
           <label><span>扫描上限</span><select id="scanLimit" aria-label="最大扫描图片数量"><option value="200">200 张</option><option value="500" selected>500 张</option><option value="1000">1000 张</option><option value="0">不限</option></select></label>
           <label><input id="autoScroll" type="checkbox" /><span>自动滚动加载懒加载图片</span></label>
         </div>
-      </section>
+        </div>
+      </details>
 
       <section class="results-section">
         <div class="results-heading">
-          <div class="results-title">
-            <label class="select-all"><input id="selectAll" type="checkbox" /><span>全选当前结果</span></label>
-            <span id="selectedSummary" class="selection-summary">已选 0</span>
+          <div class="results-identity">
+            <p id="resultsEyebrow" class="eyebrow">COLLECTED IMAGES</p>
+            <div class="results-title"><h2 id="resultsTitle">图片结果</h2><label class="select-all"><input id="selectAll" type="checkbox" /><span>全选当前结果</span></label><span id="selectedSummary" class="selection-summary">已选 0</span></div>
           </div>
           <span id="resultCount" class="result-count">0 张图片</span>
         </div>
@@ -156,11 +156,14 @@
             </select>
           </label>
         </div>
-        <div class="selection-tools">
+        <details class="selection-tools">
+          <summary><span id="selectionToolsLabel">选择工具</span><span class="details-chevron" aria-hidden="true">⌄</span></summary>
+          <div class="selection-tools-content">
           <select id="selectionPreset" aria-label="选择预设"><option value="">选择预设</option></select>
           <button id="saveSelectionPreset" class="subtle-button" type="button">保存选择</button>
           <button id="invertSelection" class="subtle-button" type="button">反选</button>
-        </div>
+          </div>
+        </details>
         <div id="imageGrid" class="image-grid"></div>
         <button id="loadMoreImages" class="load-more-button" type="button" hidden>加载更多</button>
         <div id="emptyState" class="empty-state" hidden>
@@ -176,7 +179,7 @@
 
       <section class="download-panel">
         <div class="download-caption">
-          <label class="save-option"><input id="saveAs" type="checkbox" checked /><span>下载时选择保存位置</span><span class="help" title="ZIP 下载或单张下载时会打开 Chrome 的保存对话框">?</span></label>
+          <div class="download-context"><p id="downloadEyebrow" class="eyebrow">EXPORT SELECTION</p><label class="save-option"><input id="saveAs" type="checkbox" checked /><span>下载时选择保存位置</span><span class="help" title="ZIP 下载或单张下载时会打开 Chrome 的保存对话框">?</span></label></div>
           <span class="download-caption-note">支持普通文件与 ZIP</span>
         </div>
         <div id="downloadProgress" class="download-progress" hidden>
@@ -194,6 +197,13 @@
           </div>
           <div id="progressMetrics" class="progress-metrics" aria-live="polite"></div>
         </div>
+        <div class="download-actions">
+          <button id="downloadButton" class="secondary-button" type="button" disabled>下载选中 <span id="selectedCount">0</span></button>
+          <button id="zipButton" class="primary-button" type="button" disabled><span class="zip-icon">▣</span> 下载 ZIP</button>
+        </div>
+        <details class="download-options">
+          <summary><span id="downloadOptionsLabel">下载设置与批量管理</span><span class="details-chevron" aria-hidden="true">⌄</span></summary>
+          <div class="download-options-content">
         <div class="zip-options">
           <div class="download-settings">
             <label><span>ZIP 分组</span><select id="zipLayout" aria-label="ZIP 文件夹分组方式">
@@ -215,10 +225,6 @@
             <button id="exportCsv" type="button">导出 CSV</button>
           </div>
         </div>
-        <div class="download-actions">
-          <button id="downloadButton" class="secondary-button" type="button" disabled>下载选中 <span id="selectedCount">0</span></button>
-          <button id="zipButton" class="primary-button" type="button" disabled><span class="zip-icon">▣</span> 下载 ZIP</button>
-        </div>
         <div class="page-batch-actions">
           <button id="pageFavoriteSelected" class="subtle-button" type="button" disabled>收藏选中</button>
           <button id="pageTagSelected" class="subtle-button" type="button" disabled>给选中加标签</button>
@@ -226,6 +232,8 @@
         </div>
         <div class="download-utility-actions"><button id="copyFilteredUrls" class="subtle-button" type="button" disabled>复制当前结果 URL</button></div>
         <p class="download-note">ZIP 会将当前选中的图片合并为一个文件，适合批量保存。</p>
+          </div>
+        </details>
       </section>
       </div>
 

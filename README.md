@@ -70,6 +70,9 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 支持自定义包含/排除选择器，以及 CSS 背景图、视频封面和 iframe 开关
 - 支持按域名保存站点适配规则、自定义图片属性，并自动归档到素材集合
 - 支持可选的 Chrome 设置同步，不同步图片、缓存和历史记录
+- 主界面优先呈现当前页面、扫描状态、图片结果和下载 ZIP，减少首屏操作干扰
+- 尺寸、格式和来源筛选可收纳展开，并持续显示已启用筛选数量
+- 选择预设、批量操作和下载设置采用渐进式展开，保留完整能力但不遮挡主流程
 
 ### 安装方式
 
@@ -346,6 +349,14 @@ image_2026.08.20.zip
 - 文件大小和宽高比范围控件提供图片数量分布，以及小于 100 KB、100 KB～1 MB、横图、竖图和正方形快捷预设。
 - 当前页面与素材库共用尺寸、文件大小和宽高比匹配逻辑，并可以将当前页面筛选同步到素材库。
 
+#### 2.9.0 主视图聚焦与操作界面
+
+- 侧边栏首屏聚焦当前页面、扫描状态、图片结果和下载操作，让“扫描、选择、下载”成为清晰的主路径。
+- 尺寸、格式、来源等详细筛选收纳到可展开区域；收起后会显示当前筛选数量。
+- 选择预设、ZIP 分组、文件名模板、批量操作和导出功能采用渐进式展开，降低主界面噪音。
+- 使用三级 CSS 令牌统一颜色、间距、圆角、阴影、焦点与主按钮状态，并优化窄侧栏排版。
+- 侧边栏文字会跟随当前标签页的浏览器缩放比例和浏览器默认字号变化，不缩放整个侧边栏布局。
+
 ### 权限说明
 
 扩展在 `manifest.json` 中声明了以下权限：
@@ -400,7 +411,7 @@ download_image/
 │   ├── icon-48.png     # 扩展管理页图标
 │   └── icon-128.png    # 扩展详情和安装页图标
 ├── LICENSE             # MIT 开源许可证
-├── TODO.md             # 2.8.0 已完成任务和后续路线图
+├── TODO.md             # 2.9.0 已完成任务和后续路线图
 └── README.md           # 中文和英文项目文档
 ```
 
@@ -655,6 +666,9 @@ On a webpage, right-click to open the Image Collector menu. It provides **Scan c
 - Add custom include/exclude selectors and independent switches for CSS backgrounds, video posters, and iframes.
 - Save host-based site adapters with custom image attributes and automatically archive matching results into local collections.
 - Optionally sync scan rules and preferences with Chrome without syncing images, cache, or history.
+- Prioritize the current page, scan state, image results, and Download ZIP in the main workspace.
+- Keep detailed size, format, and source filtering collapsible while showing the active-filter count.
+- Use progressive disclosure for selection presets, batch actions, and download settings.
 
 The default ZIP filename is generated in this format:
 
@@ -701,6 +715,14 @@ The scan flow is: load saved configuration → match adapters for the current ho
 - Smart-collection rules are included in scan-configuration export/import and carry a validated rule version to prevent incompatible data from being silently applied.
 - File-size and aspect-ratio range controls show image-count distributions and provide presets for under 100 KB, 100 KB–1 MB, landscape, portrait, and square images.
 - The current-page and Library views share dimension, file-size, and aspect-ratio matching logic, with an action to apply current-page filters to the Library.
+
+#### 2.9.0 focused primary workspace
+
+- The side-panel landing view prioritizes the current page, scan state, image results, and download actions so scanning, selecting, and downloading form a clear path.
+- Detailed size, format, and source filters live in an expandable area that retains a visible active-filter count when collapsed.
+- Selection presets, ZIP layout, filename templates, batch actions, and export are progressively disclosed to keep the primary workspace focused.
+- Three-layer CSS tokens unify color, spacing, radius, shadows, focus, and primary-button states while improving narrow side-panel layout.
+- Side-panel text follows the active tab's browser zoom and the browser's default font size without scaling the entire panel layout.
 
 ### Permissions
 
@@ -754,7 +776,7 @@ download_image/
 │   ├── icon-48.png     # Extensions management icon
 │   └── icon-128.png    # Extension detail and installation icon
 ├── LICENSE             # MIT open-source license
-├── TODO.md             # 2.8.0 checklist and future roadmap
+├── TODO.md             # 2.9.0 checklist and future roadmap
 └── README.md           # Chinese and English documentation
 ```
 

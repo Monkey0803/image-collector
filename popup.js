@@ -207,6 +207,36 @@ document.addEventListener('change', blockInteractionDuringInit, true);
 document.addEventListener('input', blockInteractionDuringInit, true);
 document.addEventListener('keydown', blockInteractionDuringInit, true);
 
+function applyBrowserTextScale(zoomFactor = 1) {
+  const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const browserDefaultScale = Number.isFinite(rootFontSize) && rootFontSize > 0 ? rootFontSize / 16 : 1;
+  const tabZoom = Number(zoomFactor);
+  const zoomScale = Number.isFinite(tabZoom) && tabZoom > 0 ? tabZoom : 1;
+  const scale = Math.max(0.5, Math.min(3, browserDefaultScale * zoomScale));
+  document.documentElement.style.setProperty('--browser-text-scale', scale.toFixed(3));
+}
+
+async function syncBrowserTextScale(tabId = null) {
+  applyBrowserTextScale(1);
+  if (!chrome.tabs?.getZoom) return;
+  let targetTabId = tabId;
+  if (!targetTabId) {
+    const tabs = await withTimeout(
+      () => chrome.tabs.query({ active: true, currentWindow: true }),
+      1500,
+      '读取当前网页缩放比例超时'
+    );
+    targetTabId = tabs[0]?.id;
+  }
+  if (!targetTabId) return;
+  const zoomFactor = await withTimeout(
+    () => chrome.tabs.getZoom(targetTabId),
+    1500,
+    '读取当前网页缩放比例超时'
+  );
+  applyBrowserTextScale(zoomFactor);
+}
+
 function withTimeout(task, timeoutMs, timeoutMessage) {
   let timer;
   const operation = Promise.resolve().then(() => (typeof task === 'function' ? task() : task));
@@ -237,7 +267,7 @@ const els = {
   widthMinValue: $('#widthMinValue'), widthMaxValue: $('#widthMaxValue'), heightMinValue: $('#heightMinValue'), heightMaxValue: $('#heightMaxValue'),
   sizeValue: $('#sizeValue'), sizeTrack: $('#sizeTrack'), minSize: $('#minSize'), maxSize: $('#maxSize'), sizeEditor: $('#sizeEditor'), sizeMinValue: $('#sizeMinValue'), sizeMaxValue: $('#sizeMaxValue'),
   aspectVisualTabs: [...document.querySelectorAll('.aspect-visual-tab')], minAspect: $('#minAspect'), maxAspect: $('#maxAspect'), aspectTrack: $('#aspectTrack'), aspectRangeValue: $('#aspectRangeValue'),
-  clearFilters: $('#clearFilters'), selectAll: $('#selectAll'), resultCount: $('#resultCount'),
+  filterPanel: $('#filterPanel'), filterActiveCount: $('#filterActiveCount'), filterEyebrow: $('#filterEyebrow'), filterTitle: $('#filterTitle'), clearFilters: $('#clearFilters'), selectAll: $('#selectAll'), resultCount: $('#resultCount'), resultsTitle: $('#resultsTitle'), resultsEyebrow: $('#resultsEyebrow'), selectionToolsLabel: $('#selectionToolsLabel'), downloadOptionsLabel: $('#downloadOptionsLabel'), downloadEyebrow: $('#downloadEyebrow'), scanActionLabel: document.querySelector('.scan-action-label'),
   selectedSummary: $('#selectedSummary'), searchInput: $('#searchInput'), sortSelect: $('#sortSelect'),
   originalOnly: $('#originalOnly'), aspectRatio: $('#aspectRatio'), zipLayout: $('#zipLayout'), conflictAction: $('#conflictAction'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'), sourceTabs: [...document.querySelectorAll('[data-source]')],
   pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'), taskViewButton: $('#taskViewButton'), settingsViewButton: $('#settingsViewButton'),
@@ -270,10 +300,15 @@ chrome.runtime.onMessage.addListener((message) => {
 // A side panel stays open while the user changes tabs. Keep the current-page
 // view in sync with the active tab instead of requiring a manual refresh.
 chrome.tabs?.onActivated?.addListener(() => {
+  syncBrowserTextScale().catch(() => {});
   if (interactionReady && state.view === 'page') scanPage();
 });
 chrome.tabs?.onUpdated?.addListener((tabId, changeInfo) => {
+  if (tabId === state.tabId && changeInfo.status === 'complete') syncBrowserTextScale(tabId).catch(() => {});
   if (interactionReady && tabId === state.tabId && changeInfo.status === 'complete' && state.view === 'page') scanPage();
+});
+chrome.tabs?.onZoomChange?.addListener((changeInfo) => {
+  if (changeInfo?.tabId === state.tabId) applyBrowserTextScale(changeInfo.newZoomFactor);
 });
 
 function handleInitError(error) {
@@ -298,6 +333,7 @@ async function init() {
   // controls are bound immediately so the popup never presents dead controls.
   bindEvents();
   applyLanguage();
+  syncBrowserTextScale().catch(() => {});
 
   const defaults = { filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, aspectRatio: 'all', zipLayout: 'flat', conflictAction: 'uniquify', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false, scanRules: normalizeScanRules(), siteAdapters: [], smartCollectionsVersion: SMART_COLLECTIONS_VERSION, smartCollections: [], syncSettings: false };
   let saved = defaults;
@@ -1870,7 +1906,7 @@ function showPreviewUnavailable(container) {
   if (!container) return;
   container.textContent = t('previewUnavailable');
   container.style.color = '#9ba4ac';
-  container.style.fontSize = '10px';
+  container.style.fontSize = 'calc(10px * var(--browser-text-scale, 1))';
 }
 
 function loadThumbnailWithFallback(image, thumbnail, wrap) {
@@ -2773,10 +2809,30 @@ function applyFilters() {
   updateSliderUI('height');
   updateSliderUI('size');
   updateAspectUI();
+  updateFilterSummary();
   state.pageRenderLimit = 120;
   renderFormatTabs();
   renderSourceTabs();
   render();
+}
+
+function updateFilterSummary() {
+  const activeCount = [
+    state.filterValues.width.min !== null,
+    state.filterValues.width.max !== null,
+    state.filterValues.height.min !== null,
+    state.filterValues.height.max !== null,
+    state.filterValues.size.min !== null,
+    state.filterValues.size.max !== null,
+    state.aspectRange.min > 0.25 || state.aspectRange.max < 5,
+    state.aspectRatio !== 'all',
+    state.format !== 'all',
+    state.source !== 'all',
+    state.originalOnly,
+    Boolean(state.searchQuery)
+  ].filter(Boolean).length;
+  els.filterPanel?.classList.toggle('has-active-filters', activeCount > 0);
+  setText(els.filterActiveCount, activeCount ? t('activeFilters', { count: activeCount }) : t('allImagesFilter'));
 }
 
 function renderPresets() {
@@ -3470,6 +3526,13 @@ Object.assign(TRANSLATIONS.en, {
   smartCollectionHint: 'Find assets quickly with rules', syncPageFilters: 'Use current-page filters', newSmartCollection: 'New rule', reapplySmartCollections: 'Reapply', smartRuleName: 'Rule name', smartRuleLogic: 'Condition logic', smartAnd: 'Match all (AND)', smartOr: 'Match any (OR)', smartConditions: 'Conditions', addCondition: 'Add condition', saveSmartCollection: 'Save rule', cancelSmartCollection: 'Cancel', smartRulePreview: 'Rule preview: {count} image(s)', smartRulesEmpty: 'No custom smart collections yet', smartRuleNameRequired: 'Enter a rule name', smartConditionRequired: 'Add at least one valid condition', smartRuleSaved: 'Smart collection saved', smartRuleSaveFailed: 'Could not save smart collection', smartRuleDeleted: 'Smart collection deleted', smartRuleUpdated: 'Smart collection updated', smartCollectionsReapplied: 'Smart-collection rules reapplied', pageFiltersSynced: 'Current-page filters applied to Library', deleteSmartCollectionConfirm: 'Delete this smart collection?', editSmartCollection: 'Edit smart collection', enableSmartCollection: 'Enable smart collection', disableSmartCollection: 'Disable smart collection', deleteSmartCollection: 'Delete smart collection', customSmartCollections: 'Custom rules', smartConditionField: 'Condition field', removeCondition: 'Remove condition', smartMin: 'Minimum', smartMax: 'Maximum', smartAnyValue: 'Any value', smartDomainPlaceholder: 'For example: example.com', smartSourcePlaceholder: 'For example: IMG', dateAdded: 'Added date', domain: 'Hostname', distributionSummary: 'Distribution of {count} image(s)', sizeUnder100: '<100K', size100To1M: '100K–1M', sizeOver1M: '>1M', sizeUnknown: 'Unknown', sizePresetSmall: 'Under 100 KB', sizePresetMedium: '100 KB–1 MB', landscapeShort: 'Land', portraitShort: 'Port', squareShort: 'Square', aspectUnknown: 'Unknown'
 });
 
+Object.assign(TRANSLATIONS.zh, {
+  filterEyebrow: '筛选条件', resultsTitle: '图片结果', resultsEyebrow: '当前页面图片', selectionTools: '选择工具', downloadEyebrow: '导出已选图片', downloadOptions: '下载设置与批量管理', filterLiveHint: '筛选条件会即时应用到图片结果', allImagesFilter: '全部图片', activeFilters: '已筛选 {count} 项'
+});
+Object.assign(TRANSLATIONS.en, {
+  filterEyebrow: 'FILTERS', resultsTitle: 'Image results', resultsEyebrow: 'CURRENT PAGE IMAGES', selectionTools: 'Selection tools', downloadEyebrow: 'EXPORT SELECTION', downloadOptions: 'Download settings & batch actions', filterLiveHint: 'Filters apply to image results immediately', allImagesFilter: 'All images', activeFilters: '{count} active filters'
+});
+
 function t(key, values = {}) {
   const raw = TRANSLATIONS[state.language]?.[key] ?? TRANSLATIONS.zh[key] ?? key;
   const text = Array.isArray(raw) ? raw : String(raw);
@@ -3521,6 +3584,14 @@ function applyLanguage() {
     els.favoriteCount = $('#favoriteCount');
   }
   setText(els.historyViewButton, t('history')); setText(els.taskViewButton, t('tasks')); setText(els.settingsViewButton, t('settings'));
+  setText(els.scanActionLabel, t('rescan'));
+  setText(els.filterEyebrow, t('filterEyebrow'));
+  setText(els.filterTitle, t('sizeFilterTitle'));
+  setText(els.resultsTitle, t('resultsTitle'));
+  setText(els.resultsEyebrow, t('resultsEyebrow'));
+  setText(els.selectionToolsLabel, t('selectionTools'));
+  setText(els.downloadOptionsLabel, t('downloadOptions'));
+  setText(els.downloadEyebrow, t('downloadEyebrow'));
   if (els.filterPreset?.options[0]) els.filterPreset.options[0].textContent = t('filterPreset');
   if (els.selectionPreset?.options[0]) els.selectionPreset.options[0].textContent = t('selectionPreset');
   setText(els.saveFilterPreset, t('saveFilter')); setText(els.deleteFilterPreset, t('deletePreset')); setText(els.saveSelectionPreset, t('saveSelection')); setText(els.invertSelection, t('invert'));
@@ -3532,7 +3603,8 @@ function applyLanguage() {
   if (els.previewPrevious) els.previewPrevious.setAttribute('aria-label', t('previousImage'));
   if (els.previewNext) els.previewNext.setAttribute('aria-label', t('nextImage'));
   renderPreviewNavigation();
-  setText(document.querySelector('.filter-panel h2'), t('sizeFilterTitle'));
+  setText(document.querySelector('.filter-content-heading p'), t('filterLiveHint'));
+  updateFilterSummary();
   setText(els.clearFilters, t('clear'));
   const dimensionLabels = [...document.querySelectorAll('.dimension-slider .slider-label > span')];
   if (dimensionLabels[0]) dimensionLabels[0].textContent = t('width');

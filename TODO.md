@@ -1,14 +1,14 @@
 # Image Collector TODO
 
-本文档记录当前 `2.8.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
+本文档记录当前 `2.9.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
 
-最后更新：2026-08-31
+最后更新：2026-09-03
 
 ## 当前状态
 
 - [x] `2.7.0` 稳定性与任务可靠性已完成并发布。
-- [x] `2.8.0` 智能集合与可视化筛选增强已完成，待发布。
-- [ ] `2.9.0` 素材管理与去重能力待开发。
+- [x] `2.8.0` 智能集合与可视化筛选增强已完成并发布。
+- [x] `2.9.0` 主视图聚焦与操作界面优化已完成，待发布。
 - [ ] `3.0.0` 多页面采集工作流待开发。
 
 ## 1.0.1
@@ -122,15 +122,15 @@
 
 ## English
 
-This document tracks the current `2.8.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
+This document tracks the current `2.9.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
 
-Last updated: 2026-08-31
+Last updated: 2026-09-03
 
 ## Current status
 
 - [x] `2.7.0` stability and task-reliability work is complete and released.
-- [x] `2.8.0` smart-collection and visual-filter enhancements are complete and ready for release.
-- [ ] `2.9.0` asset-management and deduplication work is planned.
+- [x] `2.8.0` smart-collection and visual-filter enhancements are complete and released.
+- [x] `2.9.0` primary-workspace focus and UI refinement are complete and ready for release.
 - [ ] `3.0.0` multi-page collection workflows are planned.
 
 ### 1.0.1 core experience
@@ -399,27 +399,27 @@ Last updated: 2026-08-31
 - [x] Show image-count distribution on range controls and provide presets such as under 100 KB, 100 KB–1 MB, landscape, portrait, and square.
 - [x] Share dimension, file-size, and aspect-ratio matching logic between the current page, Library, and smart collections, and provide an action to apply current-page filters to the Library.
 
-## 2.9.0 asset management and deduplication
+## 2.9.0 focused primary workspace
 
 ### 中文
 
-- [ ] 增加基于文件内容哈希的精确去重，并在无法读取文件内容时回退到 URL 去重。
-- [ ] 增加基于感知哈希的相似图片分组，支持调整相似度阈值。
-- [ ] 显示重复图片组，并支持自动保留尺寸最大、文件最大或原图候选优先的版本。
-- [ ] 增加图片详情面板，展示完整 URL、候选地址、来源元素、iframe、MIME、文件大小、缓存状态和所属集合。
-- [ ] 支持从详情面板复制地址、打开来源页面、下载图片、编辑标签和调整集合关系。
-- [ ] 增加“仅清理失效图片”“仅清理未收藏图片”和“仅清理重复图片”等安全清理策略。
-- [ ] 明确区分“全选当前筛选结果”和“仅选择当前已加载结果”，并支持批量移动、移除标签和导出。
+- [x] 重构侧边栏首屏层级：优先展示当前页面、扫描状态、图片结果和下载操作。
+- [x] 将尺寸、格式、来源等精细筛选收纳为可展开面板，并在收起时显示当前筛选状态。
+- [x] 将选择预设、ZIP 分组、文件命名、批量归档和导出等次级操作收纳到渐进式展开区域。
+- [x] 强化图片网格、卡片选中状态、结果统计和下载按钮的对比度与可点击性。
+- [x] 建立原始值、语义值和组件值三级 CSS 令牌，统一颜色、间距、圆角、阴影和焦点颜色。
+- [x] 补齐中英文文案并检查 480 px 与窄侧栏的布局，保留键盘与无障碍语义。
+- [x] 侧边栏文字跟随当前标签页的浏览器缩放比例和浏览器默认字号，不缩放整个侧边栏布局。
 
 ### English
 
-- [ ] Add exact deduplication based on file-content hashes, falling back to URL deduplication when file content cannot be read.
-- [ ] Group visually similar images with perceptual hashes and allow users to adjust the similarity threshold.
-- [ ] Show duplicate groups and allow automatic retention of the largest-dimension, largest-file, or original-candidate version.
-- [ ] Add an image details panel with full URLs, candidate URLs, source element, iframe, MIME type, file size, cache state, and collections.
-- [ ] Allow copying addresses, opening the source page, downloading, editing tags, and changing collection memberships from the details panel.
-- [ ] Add safe cleanup modes for invalid images, non-favorited images, and duplicate images.
-- [ ] Clearly distinguish “select all filtered results” from “select currently loaded results” and support bulk moving, tag removal, and export.
+- [x] Rework the side-panel hierarchy to prioritize the current page, scan state, image results, and download actions.
+- [x] Place detailed size, format, and source filtering inside an expandable panel that preserves visible filter status when collapsed.
+- [x] Place selection presets, ZIP layout, filename settings, batch actions, and export under progressive disclosure.
+- [x] Improve contrast and hit areas for the image grid, selected cards, result statistics, and download actions.
+- [x] Establish primitive, semantic, and component CSS tokens for color, spacing, radius, shadows, and focus treatment.
+- [x] Complete Chinese and English labels, check 480 px and narrow side-panel layouts, and retain keyboard and accessible semantics.
+- [x] Make side-panel text follow the active tab's browser zoom and default font size without scaling the whole panel layout.
 
 ## 3.0.0 multi-page collection workflows
 
@@ -442,3 +442,25 @@ Last updated: 2026-08-31
 - [ ] Export image galleries as Markdown, HTML, or contact sheets.
 - [ ] Add configurable keyboard shortcuts and a context-menu action to save an image to a selected collection.
 - [ ] Improve dark mode, compact mode, focus states, and keyboard interaction for accessibility.
+
+## 3.1.0 asset management and deduplication
+
+### 中文
+
+- [ ] 增加基于文件内容哈希的精确去重，并在无法读取文件内容时回退到 URL 去重。
+- [ ] 增加基于感知哈希的相似图片分组，支持调整相似度阈值。
+- [ ] 显示重复图片组，并支持自动保留尺寸最大、文件最大或原图候选优先的版本。
+- [ ] 增加图片详情面板，展示完整 URL、候选地址、来源元素、iframe、MIME、文件大小、缓存状态和所属集合。
+- [ ] 支持从详情面板复制地址、打开来源页面、下载图片、编辑标签和调整集合关系。
+- [ ] 增加“仅清理失效图片”“仅清理未收藏图片”和“仅清理重复图片”等安全清理策略。
+- [ ] 明确区分“全选当前筛选结果”和“仅选择当前已加载结果”，并支持批量移动、移除标签和导出。
+
+### English
+
+- [ ] Add exact deduplication based on file-content hashes, falling back to URL deduplication when file content cannot be read.
+- [ ] Group visually similar images with perceptual hashes and allow users to adjust the similarity threshold.
+- [ ] Show duplicate groups and allow automatic retention of the largest-dimension, largest-file, or original-candidate version.
+- [ ] Add an image details panel with full URLs, candidate URLs, source element, iframe, MIME type, file size, cache state, and collections.
+- [ ] Allow copying addresses, opening the source page, downloading, editing tags, and changing collection memberships from the details panel.
+- [ ] Add safe cleanup modes for invalid images, non-favorited images, and duplicate images.
+- [ ] Clearly distinguish “select all filtered results” from “select currently loaded results” and support bulk moving, tag removal, and export.
