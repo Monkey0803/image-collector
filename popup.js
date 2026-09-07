@@ -6,6 +6,12 @@ const state = {
   source: 'all',
   selected: new Set(),
   tabId: null,
+  tabScope: 'current',
+  availableTabs: [],
+  selectedTabIds: new Set(),
+  pageRecords: [],
+  lastScan: null,
+  historyScans: new Map(),
   saveAs: true,
   scanId: 0,
   scanPhase: 'idle',
@@ -54,7 +60,7 @@ const state = {
   taskRecords: [],
   taskRecoveryPromise: null,
   taskRefreshTimer: null,
-  scanStats: { discovered: 0, duplicates: 0, skipped: 0, dimensionsChecked: 0, dimensionsFailed: 0, partial: false },
+  scanStats: { discovered: 0, duplicates: 0, skipped: 0, dimensionsChecked: 0, dimensionsFailed: 0, metadataReused: 0, partial: false },
   downloadMetrics: { startedAt: 0, total: 0 },
   librarySelected: new Set(), libraryFormat: 'all', libraryMinWidth: '', libraryMaxWidth: '', libraryMinHeight: '', libraryMaxHeight: '', libraryMinSize: '', libraryMaxSize: '', librarySort: 'updated', storageStats: null,
   libraryRefreshToken: 0,
@@ -65,7 +71,9 @@ const state = {
   smartCollections: [],
   smartCollectionEditingId: '',
   smartCollectionConfigInvalid: false,
-  syncSettings: false
+  syncSettings: false,
+  themeMode: 'auto',
+  compactMode: false
 };
 
 const SMART_COLLECTIONS_VERSION = 1;
@@ -73,7 +81,7 @@ const SMART_RANGE_FIELDS = ['width', 'height', 'size', 'aspect'];
 const SMART_CONDITION_FIELDS = ['width', 'height', 'size', 'aspect', 'format', 'domain', 'source', 'date'];
 const SMART_FORMATS = ['jpeg', 'png', 'webp', 'avif', 'other'];
 const SMART_DATE_PRESETS = ['today', 'week', 'month', 'older'];
-const SYNC_SETTING_KEYS = ['scanRules', 'siteAdapters', 'smartCollectionsVersion', 'smartCollections', 'scanLimit', 'autoScroll', 'zipLayout', 'conflictAction', 'filenameTemplate', 'dateFolder'];
+const SYNC_SETTING_KEYS = ['scanRules', 'siteAdapters', 'smartCollectionsVersion', 'smartCollections', 'scanLimit', 'autoScroll', 'zipLayout', 'conflictAction', 'filenameTemplate', 'dateFolder', 'tabScope', 'themeMode', 'compactMode'];
 
 function normalizeTextList(value) {
   return [...new Set(String(value || '').split(/[\n,]/).map((item) => item.trim()).filter(Boolean))].slice(0, 40);
@@ -172,6 +180,9 @@ function syncConfigurationPayload() {
     conflictAction: state.conflictAction,
     filenameTemplate: state.filenameTemplate,
     dateFolder: state.dateFolder,
+    tabScope: state.tabScope,
+    themeMode: state.themeMode,
+    compactMode: state.compactMode,
     smartCollectionsVersion: SMART_COLLECTIONS_VERSION,
     smartCollections: state.smartCollections
   };
@@ -195,6 +206,45 @@ let interactionReady = false;
 let batchDialogResolver = null;
 let batchDialogAction = '';
 let batchDialogReturnFocus = null;
+let browserTextScaleTabId = null;
+let browserTextZoomFactor = 1;
+let browserDefaultTextScale = 1;
+let browserTextScaleRequestId = 0;
+
+function measureDefaultWebFontSize() {
+  // `medium` is resolved by Chrome using the browser's standard web-font
+  // preference. The probe is removed immediately and does not read page data.
+  const probe = document.createElement('span');
+  probe.textContent = 'M';
+  probe.style.cssText = 'position:fixed !important;left:-9999px !important;top:-9999px !important;visibility:hidden !important;pointer-events:none !important;font-family:sans-serif !important;font-size:medium !important;line-height:normal !important;';
+  document.documentElement.append(probe);
+  const fontSize = Number.parseFloat(getComputedStyle(probe).fontSize);
+  probe.remove();
+  return Number.isFinite(fontSize) && fontSize > 0 ? fontSize : null;
+}
+
+function readExtensionDefaultTextScale() {
+  const fontSize = measureDefaultWebFontSize();
+  return Number.isFinite(fontSize) && fontSize > 0 ? fontSize / 16 : 1;
+}
+
+async function readBrowserDefaultTextScale(tabId = null) {
+  if (tabId && chrome.scripting?.executeScript) {
+    try {
+      const results = await withTimeout(
+        () => chrome.scripting.executeScript({ target: { tabId }, func: measureDefaultWebFontSize }),
+        1200,
+        '读取网页默认字号超时'
+      );
+      const pageFontSize = Number(results?.[0]?.result);
+      if (Number.isFinite(pageFontSize) && pageFontSize > 0) return pageFontSize / 16;
+    } catch {
+      // chrome:// pages and restricted frames cannot be scripted; use the
+      // extension page's browser default as a safe fallback.
+    }
+  }
+  return readExtensionDefaultTextScale();
+}
 
 function blockInteractionDuringInit(event) {
   if (interactionReady || !event.target.closest?.('button, input, select, textarea')) return;
@@ -208,16 +258,16 @@ document.addEventListener('input', blockInteractionDuringInit, true);
 document.addEventListener('keydown', blockInteractionDuringInit, true);
 
 function applyBrowserTextScale(zoomFactor = 1) {
-  const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
-  const browserDefaultScale = Number.isFinite(rootFontSize) && rootFontSize > 0 ? rootFontSize / 16 : 1;
   const tabZoom = Number(zoomFactor);
   const zoomScale = Number.isFinite(tabZoom) && tabZoom > 0 ? tabZoom : 1;
-  const scale = Math.max(0.5, Math.min(3, browserDefaultScale * zoomScale));
+  browserTextZoomFactor = zoomScale;
+  const defaultScale = Number.isFinite(browserDefaultTextScale) && browserDefaultTextScale > 0 ? browserDefaultTextScale : 1;
+  const scale = Math.max(0.5, Math.min(3, defaultScale * zoomScale));
   document.documentElement.style.setProperty('--browser-text-scale', scale.toFixed(3));
 }
 
 async function syncBrowserTextScale(tabId = null) {
-  applyBrowserTextScale(1);
+  applyBrowserTextScale(browserTextZoomFactor);
   if (!chrome.tabs?.getZoom) return;
   let targetTabId = tabId;
   if (!targetTabId) {
@@ -229,11 +279,22 @@ async function syncBrowserTextScale(tabId = null) {
     targetTabId = tabs[0]?.id;
   }
   if (!targetTabId) return;
-  const zoomFactor = await withTimeout(
-    () => chrome.tabs.getZoom(targetTabId),
-    1500,
-    '读取当前网页缩放比例超时'
-  );
+  browserTextScaleTabId = targetTabId;
+  const requestId = ++browserTextScaleRequestId;
+  const defaultScalePromise = readBrowserDefaultTextScale(targetTabId);
+  let zoomFactor = browserTextZoomFactor;
+  try {
+    zoomFactor = await withTimeout(
+      () => chrome.tabs.getZoom(targetTabId),
+      1500,
+      '读取当前网页缩放比例超时'
+    );
+  } catch {
+    // Keep the last known zoom when the active page is protected or closing.
+  }
+  const defaultScale = await defaultScalePromise.catch(() => 1);
+  if (requestId !== browserTextScaleRequestId) return;
+  browserDefaultTextScale = defaultScale;
   applyBrowserTextScale(zoomFactor);
 }
 
@@ -246,6 +307,104 @@ function withTimeout(task, timeoutMs, timeoutMessage) {
   return Promise.race([operation, timeout]).finally(() => clearTimeout(timer));
 }
 
+function tabCanBeScanned(tab) {
+  return Boolean(tab?.id && /^(https?:|file:)/i.test(String(tab.url || '')));
+}
+
+function tabLabel(tab) {
+  return String(tab?.title || tab?.url || t('unnamedPage')).trim() || t('unnamedPage');
+}
+
+function targetTabsForScope(tabs = state.availableTabs, scope = state.tabScope) {
+  const available = (Array.isArray(tabs) ? tabs : []).filter((tab) => tab?.id);
+  const active = available.find((tab) => tab.active) || available[0];
+  if (scope === 'window') return available;
+  if (scope === 'selected') return available.filter((tab) => state.selectedTabIds.has(tab.id));
+  return active ? [active] : [];
+}
+
+function updateMultiPageSummary() {
+  if (!els.multiPageStatus) return;
+  const targets = targetTabsForScope();
+  const labels = {
+    current: t('currentTabScope'),
+    selected: t('selectedTabsScope', { count: targets.length }),
+    window: t('windowTabsScope', { count: targets.length })
+  };
+  els.multiPageStatus.textContent = labels[state.tabScope] || labels.current;
+  if (els.multiPageHint) els.multiPageHint.textContent = state.tabScope === 'current' ? t('multiPageCurrentHint') : t('multiPageSelectHint', { count: targets.length });
+  // Protected tabs are reported as skipped by scanPage; one such tab should
+  // not prevent the other usable tabs in a window from being collected.
+  if (els.scanMultiPage) els.scanMultiPage.disabled = !targets.length;
+}
+
+function renderTabList() {
+  if (!els.tabSelectionList) return;
+  els.tabSelectionList.replaceChildren();
+  const tabs = [...state.availableTabs].sort((left, right) => Number(right.active) - Number(left.active) || left.index - right.index);
+  if (!tabs.length) {
+    const empty = document.createElement('p');
+    empty.className = 'tab-selection-empty';
+    empty.textContent = t('noTabs');
+    els.tabSelectionList.append(empty);
+    updateMultiPageSummary();
+    return;
+  }
+  tabs.forEach((tab) => {
+    const label = document.createElement('label');
+    label.className = `tab-selection-item${tab.active ? ' active' : ''}`;
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = state.selectedTabIds.has(tab.id);
+    checkbox.disabled = !tabCanBeScanned(tab);
+    checkbox.setAttribute('aria-label', tabLabel(tab));
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) state.selectedTabIds.add(tab.id);
+      else state.selectedTabIds.delete(tab.id);
+      void safeStorageSet({ selectedTabIds: [...state.selectedTabIds] });
+      updateMultiPageSummary();
+    });
+    const copy = document.createElement('span');
+    copy.className = 'tab-selection-copy';
+    const title = document.createElement('strong');
+    title.textContent = tabLabel(tab);
+    const url = document.createElement('small');
+    url.textContent = tab.url || t('protectedPage');
+    copy.append(title, url);
+    if (tab.active) {
+      const badge = document.createElement('em');
+      badge.textContent = t('activeTab');
+      copy.append(badge);
+    }
+    label.append(checkbox, copy);
+    els.tabSelectionList.append(label);
+  });
+  updateMultiPageSummary();
+}
+
+async function refreshTabList() {
+  if (!chrome.tabs?.query) return;
+  try {
+    const tabs = await withTimeout(() => chrome.tabs.query({ currentWindow: true }), 2000, '读取标签页列表超时');
+    state.availableTabs = (Array.isArray(tabs) ? tabs : []).filter((tab) => tab?.id);
+    const availableIds = new Set(state.availableTabs.map((tab) => tab.id));
+    state.selectedTabIds = new Set([...state.selectedTabIds].filter((id) => availableIds.has(id)));
+    const active = state.availableTabs.find((tab) => tab.active);
+    if (!state.selectedTabIds.size && active?.id) state.selectedTabIds.add(active.id);
+    renderTabList();
+  } catch {
+    state.availableTabs = [];
+    renderTabList();
+  }
+}
+
+async function getTabsForScan(scope = state.tabScope) {
+  await refreshTabList();
+  const targets = targetTabsForScope(state.availableTabs, scope);
+  if (!targets.length) throw new Error(t(scope === 'selected' ? 'selectTabsFirst' : 'noActiveTab'));
+  return targets;
+}
+
 function safeStorageSet(values) {
   try {
     return Promise.resolve(chrome.storage.local.set(values)).catch(() => {});
@@ -254,13 +413,23 @@ function safeStorageSet(values) {
   }
 }
 
+function notifyCollectionsChanged() {
+  try { Promise.resolve(chrome.runtime.sendMessage({ type: 'collectionsChanged' })).catch(() => {}); } catch { /* Best effort only. */ }
+}
+
+function applyAppearance() {
+  const theme = ['auto', 'light', 'dark'].includes(state.themeMode) ? state.themeMode : 'auto';
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.compact = state.compactMode ? 'true' : 'false';
+}
+
 const $ = (selector) => document.querySelector(selector);
 const on = (element, eventName, handler, options) => element?.addEventListener(eventName, handler, options);
 const setText = (element, value) => { if (element) element.textContent = value; };
 const els = {
   refresh: $('#refreshButton'),
   scanStatus: $('#scanStatus'),
-  pageTitle: $('#pageTitle'), pageUrl: $('#pageUrl'), pageIcon: $('#pageIcon'), scanStats: $('#scanStats'),
+  pageTitle: $('#pageTitle'), pageUrl: $('#pageUrl'), pageIcon: $('#pageIcon'), scanStats: $('#scanStats'), multiPagePanel: $('#multiPagePanel'), multiPageEyebrow: $('#multiPageEyebrow'), multiPageTitle: $('#multiPageTitle'), multiPageScopeLabel: $('#multiPageScopeLabel'), multiPageScope: $('#multiPageScope'), multiPageStatus: $('#multiPageStatus'), multiPageHint: $('#multiPageHint'), tabSelectionList: $('#tabSelectionList'), selectAllTabs: $('#selectAllTabs'), clearSelectedTabs: $('#clearSelectedTabs'), scanMultiPage: $('#scanMultiPage'),
   minWidth: $('#minWidth'), maxWidth: $('#maxWidth'), minHeight: $('#minHeight'), maxHeight: $('#maxHeight'),
   widthValue: $('#widthValue'), heightValue: $('#heightValue'), widthTrack: $('#widthTrack'), heightTrack: $('#heightTrack'),
   widthEditor: $('#widthEditor'), heightEditor: $('#heightEditor'),
@@ -269,14 +438,14 @@ const els = {
   aspectVisualTabs: [...document.querySelectorAll('.aspect-visual-tab')], minAspect: $('#minAspect'), maxAspect: $('#maxAspect'), aspectTrack: $('#aspectTrack'), aspectRangeValue: $('#aspectRangeValue'),
   filterPanel: $('#filterPanel'), filterActiveCount: $('#filterActiveCount'), filterEyebrow: $('#filterEyebrow'), filterTitle: $('#filterTitle'), clearFilters: $('#clearFilters'), selectAll: $('#selectAll'), resultCount: $('#resultCount'), resultsTitle: $('#resultsTitle'), resultsEyebrow: $('#resultsEyebrow'), selectionToolsLabel: $('#selectionToolsLabel'), downloadOptionsLabel: $('#downloadOptionsLabel'), downloadEyebrow: $('#downloadEyebrow'), scanActionLabel: document.querySelector('.scan-action-label'),
   selectedSummary: $('#selectedSummary'), searchInput: $('#searchInput'), sortSelect: $('#sortSelect'),
-  originalOnly: $('#originalOnly'), aspectRatio: $('#aspectRatio'), zipLayout: $('#zipLayout'), conflictAction: $('#conflictAction'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'), sourceTabs: [...document.querySelectorAll('[data-source]')],
+  originalOnly: $('#originalOnly'), aspectRatio: $('#aspectRatio'), zipLayout: $('#zipLayout'), conflictAction: $('#conflictAction'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'), sourceTabs: [...document.querySelectorAll('[data-source]')], exportMarkdown: $('#exportMarkdown'), exportHtml: $('#exportHtml'), exportContactSheet: $('#exportContactSheet'),
   pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'), taskViewButton: $('#taskViewButton'), settingsViewButton: $('#settingsViewButton'),
   libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryScope: $('#libraryScope'), librarySmartCollection: $('#librarySmartCollection'), syncPageFilters: $('#syncPageFilters'), reapplySmartCollections: $('#reapplySmartCollections'), newSmartCollection: $('#newSmartCollection'), smartCollectionTitle: $('#smartCollectionTitle'), smartCollectionHint: $('#smartCollectionHint'), smartCollectionEditor: $('#smartCollectionEditor'), smartCollectionName: $('#smartCollectionName'), smartCollectionLogic: $('#smartCollectionLogic'), smartRuleNameLabel: $('#smartRuleNameLabel'), smartRuleLogicLabel: $('#smartRuleLogicLabel'), smartConditionsLabel: $('#smartConditionsLabel'), addSmartCondition: $('#addSmartCondition'), smartConditionList: $('#smartConditionList'), smartRulePreview: $('#smartRulePreview'), cancelSmartCollection: $('#cancelSmartCollection'), saveSmartCollection: $('#saveSmartCollection'), smartCollectionList: $('#smartCollectionList'), smartCollectionEmpty: $('#smartCollectionEmpty'),
-  librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), exportLibraryResultsJson: $('#exportLibraryResultsJson'), exportLibraryResultsCsv: $('#exportLibraryResultsCsv'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'), libraryBatchToolbar: $('#libraryBatchToolbar'), selectAllLibrary: $('#selectAllLibrary'), librarySelectedSummary: $('#librarySelectedSummary'), invertLibrarySelection: $('#invertLibrarySelection'), clearLibrarySelection: $('#clearLibrarySelection'), bulkFavorite: $('#bulkFavorite'), bulkTag: $('#bulkTag'), bulkCollection: $('#bulkCollection'), bulkDelete: $('#bulkDelete'), libraryDownloadSelected: $('#libraryDownloadSelected'), libraryZipSelected: $('#libraryZipSelected'), libraryFormat: $('#libraryFormat'), libraryMinWidth: $('#libraryMinWidth'), libraryMaxWidth: $('#libraryMaxWidth'), libraryMinHeight: $('#libraryMinHeight'), libraryMaxHeight: $('#libraryMaxHeight'), libraryMinSize: $('#libraryMinSize'), libraryMaxSize: $('#libraryMaxSize'), librarySort: $('#librarySort'),
+  librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), exportLibraryResultsJson: $('#exportLibraryResultsJson'), exportLibraryResultsCsv: $('#exportLibraryResultsCsv'), exportLibraryMarkdown: $('#exportLibraryMarkdown'), exportLibraryHtml: $('#exportLibraryHtml'), exportLibraryContactSheet: $('#exportLibraryContactSheet'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'), libraryBatchToolbar: $('#libraryBatchToolbar'), selectAllLibrary: $('#selectAllLibrary'), librarySelectedSummary: $('#librarySelectedSummary'), invertLibrarySelection: $('#invertLibrarySelection'), clearLibrarySelection: $('#clearLibrarySelection'), bulkFavorite: $('#bulkFavorite'), bulkTag: $('#bulkTag'), bulkCollection: $('#bulkCollection'), bulkDelete: $('#bulkDelete'), libraryDownloadSelected: $('#libraryDownloadSelected'), libraryZipSelected: $('#libraryZipSelected'), libraryFormat: $('#libraryFormat'), libraryMinWidth: $('#libraryMinWidth'), libraryMaxWidth: $('#libraryMaxWidth'), libraryMinHeight: $('#libraryMinHeight'), libraryMaxHeight: $('#libraryMaxHeight'), libraryMinSize: $('#libraryMinSize'), libraryMaxSize: $('#libraryMaxSize'), librarySort: $('#librarySort'),
   libraryMinSizeRange: $('#libraryMinSizeRange'), libraryMaxSizeRange: $('#libraryMaxSizeRange'), librarySizeTrack: $('#librarySizeTrack'), librarySizeRangeValue: $('#librarySizeRangeValue'), librarySizeDistribution: $('#librarySizeDistribution'), librarySizePresets: $('#librarySizePresets'), libraryMinAspectRange: $('#libraryMinAspectRange'), libraryMaxAspectRange: $('#libraryMaxAspectRange'), libraryAspectTrack: $('#libraryAspectTrack'), libraryAspectRangeValue: $('#libraryAspectRangeValue'), libraryAspectDistribution: $('#libraryAspectDistribution'), libraryAspectPresets: $('#libraryAspectPresets'),
   historyView: $('#historyView'), clearHistory: $('#clearHistory'), refreshHistory: $('#refreshHistory'), scanHistory: $('#scanHistory'),
   downloadHistory: $('#downloadHistory'), historyEmpty: $('#historyEmpty'),
-  taskView: $('#taskView'), refreshTasks: $('#refreshTasks'), retryAllTasks: $('#retryAllTasks'), exportFailureReport: $('#exportFailureReport'), taskSummary: $('#taskSummary'), taskList: $('#taskList'), taskEmpty: $('#taskEmpty'), settingsView: $('#settingsView'), settingsViewButton: $('#settingsViewButton'), refreshStorage: $('#refreshStorage'), storageStats: $('#storageStats'), clearLibrary: $('#clearLibrary'), resetSettings: $('#resetSettings'),
+  taskView: $('#taskView'), refreshTasks: $('#refreshTasks'), retryAllTasks: $('#retryAllTasks'), exportFailureReport: $('#exportFailureReport'), taskSummary: $('#taskSummary'), taskList: $('#taskList'), taskEmpty: $('#taskEmpty'), settingsView: $('#settingsView'), settingsViewButton: $('#settingsViewButton'), refreshStorage: $('#refreshStorage'), storageStats: $('#storageStats'), clearLibrary: $('#clearLibrary'), resetSettings: $('#resetSettings'), themeMode: $('#themeMode'), compactMode: $('#compactMode'), openShortcuts: $('#openShortcuts'), shortcutStatus: $('#shortcutStatus'), appearanceTitle: $('#appearanceTitle'), themeModeLabel: $('#themeModeLabel'), compactModeLabel: $('#compactModeLabel'), compactModeHint: $('#compactModeHint'),
   exportJson: $('#exportJson'), exportCsv: $('#exportCsv'),
   includeSelectors: $('#includeSelectors'), excludeSelectors: $('#excludeSelectors'), scanCssBackground: $('#scanCssBackground'), scanVideoPosters: $('#scanVideoPosters'), includeIframes: $('#includeIframes'), saveScanRules: $('#saveScanRules'), adapterHost: $('#adapterHost'), adapterSelector: $('#adapterSelector'), adapterAttributes: $('#adapterAttributes'), adapterCollection: $('#adapterCollection'), saveSiteAdapter: $('#saveSiteAdapter'), clearSiteAdapter: $('#clearSiteAdapter'), siteAdapterList: $('#siteAdapterList'), syncSettings: $('#syncSettings'), saveSyncSettings: $('#saveSyncSettings'), exportScanConfig: $('#exportScanConfig'), importScanConfig: $('#importScanConfig'), importScanConfigFile: $('#importScanConfigFile'),
   formatTabs: [...document.querySelectorAll('[data-format]')],
@@ -292,23 +461,67 @@ document.addEventListener('DOMContentLoaded', () => {
   init().catch(handleInitError);
 });
 
-chrome.runtime.onMessage.addListener((message) => {
+function handleShortcutCommand(command) {
+  if (!interactionReady) return false;
+  if (command === 'open-collector') {
+    switchView('page');
+    return true;
+  }
+  if (command === 'scan-current-page') {
+    state.tabScope = 'current';
+    if (els.multiPageScope) els.multiPageScope.value = 'current';
+    void scanPage();
+    return true;
+  }
+  if (command === 'scan-selected-tabs') {
+    state.tabScope = 'selected';
+    if (els.multiPageScope) els.multiPageScope.value = 'selected';
+    void scanPage();
+    return true;
+  }
+  return false;
+}
+
+async function consumePendingShortcut() {
+  try {
+    const stored = await chrome.storage.local.get({ pendingShortcut: null });
+    const pending = stored?.pendingShortcut;
+    if (!pending || !['open-collector', 'scan-current-page', 'scan-selected-tabs'].includes(pending.command)) return null;
+    if (Date.now() - Number(pending.createdAt || 0) > 15000) {
+      await chrome.storage.local.remove('pendingShortcut');
+      return null;
+    }
+    await chrome.storage.local.remove('pendingShortcut');
+    return pending.command;
+  } catch {
+    return null;
+  }
+}
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'downloadProgress' && message.jobId === state.downloadJobId) updateDownloadProgress(message);
   if (message?.type === 'downloadProgress' && state.view === 'tasks') scheduleTaskRefresh();
+  if (message?.type === 'shortcut') {
+    sendResponse({ handled: handleShortcutCommand(message.command) });
+  }
 });
 
 // A side panel stays open while the user changes tabs. Keep the current-page
 // view in sync with the active tab instead of requiring a manual refresh.
-chrome.tabs?.onActivated?.addListener(() => {
-  syncBrowserTextScale().catch(() => {});
-  if (interactionReady && state.view === 'page') scanPage();
+chrome.tabs?.onActivated?.addListener((activeInfo) => {
+  if (activeInfo?.tabId) browserTextScaleTabId = activeInfo.tabId;
+  refreshTabList().catch(() => {});
+  syncBrowserTextScale(activeInfo?.tabId).catch(() => {});
+  if (interactionReady && state.view === 'page' && state.tabScope === 'current') scanPage();
 });
 chrome.tabs?.onUpdated?.addListener((tabId, changeInfo) => {
-  if (tabId === state.tabId && changeInfo.status === 'complete') syncBrowserTextScale(tabId).catch(() => {});
-  if (interactionReady && tabId === state.tabId && changeInfo.status === 'complete' && state.view === 'page') scanPage();
+  if (changeInfo.status === 'complete' || changeInfo.status === 'loading') refreshTabList().catch(() => {});
+  if (tabId === browserTextScaleTabId && changeInfo.status === 'complete') syncBrowserTextScale(tabId).catch(() => {});
+  if (interactionReady && tabId === state.tabId && changeInfo.status === 'complete' && state.view === 'page' && state.tabScope === 'current') scanPage();
 });
+chrome.tabs?.onRemoved?.addListener(() => refreshTabList().catch(() => {}));
 chrome.tabs?.onZoomChange?.addListener((changeInfo) => {
-  if (changeInfo?.tabId === state.tabId) applyBrowserTextScale(changeInfo.newZoomFactor);
+  if (changeInfo?.tabId === browserTextScaleTabId) applyBrowserTextScale(changeInfo.newZoomFactor);
 });
 
 function handleInitError(error) {
@@ -335,7 +548,7 @@ async function init() {
   applyLanguage();
   syncBrowserTextScale().catch(() => {});
 
-  const defaults = { filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, aspectRatio: 'all', zipLayout: 'flat', conflictAction: 'uniquify', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false, scanRules: normalizeScanRules(), siteAdapters: [], smartCollectionsVersion: SMART_COLLECTIONS_VERSION, smartCollections: [], syncSettings: false };
+  const defaults = { filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, aspectRatio: 'all', zipLayout: 'flat', conflictAction: 'uniquify', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false, tabScope: 'current', selectedTabIds: [], themeMode: 'auto', compactMode: false, scanRules: normalizeScanRules(), siteAdapters: [], smartCollectionsVersion: SMART_COLLECTIONS_VERSION, smartCollections: [], syncSettings: false };
   let saved = defaults;
   try {
     saved = (await withTimeout(() => chrome.storage.local.get(defaults), 1500, '读取扩展设置超时')) || defaults;
@@ -358,10 +571,14 @@ async function init() {
   state.sort = ['page', 'width-desc', 'height-desc', 'area-desc', 'name-asc'].includes(saved.sort) ? saved.sort : 'page';
   state.originalOnly = Boolean(saved.originalOnly);
   state.aspectRatio = ['all', 'landscape', 'portrait', 'square'].includes(saved.aspectRatio) ? saved.aspectRatio : 'all';
-  state.zipLayout = ['flat', 'domain', 'format', 'domain-format'].includes(configuration.zipLayout) ? configuration.zipLayout : 'flat';
+  state.zipLayout = ['flat', 'domain', 'format', 'domain-format', 'page', 'date', 'domain-page', 'domain-date'].includes(configuration.zipLayout) ? configuration.zipLayout : 'flat';
   state.conflictAction = ['uniquify', 'overwrite', 'prompt'].includes(configuration.conflictAction) ? configuration.conflictAction : 'uniquify';
   state.filenameTemplate = typeof configuration.filenameTemplate === 'string' && configuration.filenameTemplate.trim() ? configuration.filenameTemplate : '{name}';
   state.dateFolder = Boolean(configuration.dateFolder);
+  state.tabScope = ['current', 'selected', 'window'].includes(configuration.tabScope) ? configuration.tabScope : 'current';
+  state.selectedTabIds = new Set((Array.isArray(saved.selectedTabIds) ? saved.selectedTabIds : []).map(Number).filter((id) => Number.isInteger(id) && id > 0));
+  state.themeMode = ['auto', 'light', 'dark'].includes(configuration.themeMode) ? configuration.themeMode : 'auto';
+  state.compactMode = Boolean(configuration.compactMode);
   if (!userChangedLanguage) state.language = saved.language === 'en' || saved.language === 'zh' ? saved.language : detectLanguage();
   state.filterPresets = Array.isArray(saved.filterPresets) ? saved.filterPresets : [];
   state.selectionPresets = Array.isArray(saved.selectionPresets) ? saved.selectionPresets : [];
@@ -395,6 +612,9 @@ async function init() {
   if (els.conflictAction) els.conflictAction.value = state.conflictAction;
   if (els.filenameTemplate) els.filenameTemplate.value = state.filenameTemplate;
   if (els.dateFolder) els.dateFolder.checked = state.dateFolder;
+  if (els.multiPageScope) els.multiPageScope.value = state.tabScope;
+  if (els.themeMode) els.themeMode.value = state.themeMode;
+  if (els.compactMode) els.compactMode.checked = state.compactMode;
   if (els.scanLimit) els.scanLimit.value = String(state.scanLimit);
   if (els.autoScroll) els.autoScroll.checked = state.autoScroll;
   if (els.includeSelectors) els.includeSelectors.value = state.scanRules.includeSelectors;
@@ -403,12 +623,24 @@ async function init() {
   if (els.scanVideoPosters) els.scanVideoPosters.checked = state.scanRules.scanVideoPosters;
   if (els.includeIframes) els.includeIframes.checked = state.scanRules.includeIframes;
   if (els.syncSettings) els.syncSettings.checked = state.syncSettings;
+  applyAppearance();
+  await refreshTabList();
   renderPresets();
   renderSmartCollectionManager();
   renderSiteAdapters();
   applyLanguage();
   interactionReady = true;
   if (state.smartCollectionConfigInvalid) showToast(t('smartRuleVersionUnsupported'));
+  const pendingShortcut = await consumePendingShortcut();
+  if (pendingShortcut === 'scan-current-page') {
+    state.tabScope = 'current';
+    if (els.multiPageScope) els.multiPageScope.value = 'current';
+  } else if (pendingShortcut === 'scan-selected-tabs') {
+    state.tabScope = 'selected';
+    if (els.multiPageScope) els.multiPageScope.value = 'selected';
+  } else if (pendingShortcut === 'open-collector') {
+    switchView('page');
+  }
   void recoverTaskState();
   // Library data is secondary to the current-page scan. Do not block the
   // scan or the loading state on IndexedDB reads.
@@ -424,6 +656,23 @@ function bindEvents() {
   on(els.historyViewButton, 'click', () => switchView('history'));
   on(els.taskViewButton, 'click', () => switchView('tasks'));
   on(els.settingsViewButton, 'click', () => switchView('settings'));
+  on(els.multiPageScope, 'change', async () => {
+    state.tabScope = ['current', 'selected', 'window'].includes(els.multiPageScope.value) ? els.multiPageScope.value : 'current';
+    await safeStorageSet({ tabScope: state.tabScope });
+    renderTabList();
+    updateMultiPageSummary();
+  });
+  on(els.selectAllTabs, 'click', () => {
+    state.selectedTabIds = new Set(state.availableTabs.map((tab) => tab.id).filter(Boolean));
+    void safeStorageSet({ selectedTabIds: [...state.selectedTabIds] });
+    renderTabList();
+  });
+  on(els.clearSelectedTabs, 'click', () => {
+    state.selectedTabIds.clear();
+    void safeStorageSet({ selectedTabIds: [] });
+    renderTabList();
+  });
+  on(els.scanMultiPage, 'click', () => scanPage());
   on(els.language, 'click', async () => {
     languageTouched = true;
     state.language = state.language === 'zh' ? 'en' : 'zh';
@@ -511,11 +760,15 @@ function bindEvents() {
   on(els.libraryZipSelected, 'click', () => downloadImages(selectedLibraryImages(), true));
   on(els.exportLibraryResultsJson, 'click', () => exportLibraryResults('json'));
   on(els.exportLibraryResultsCsv, 'click', () => exportLibraryResults('csv'));
+  on(els.exportLibraryMarkdown, 'click', () => exportLibraryResults('markdown'));
+  on(els.exportLibraryHtml, 'click', () => exportLibraryResults('html'));
+  on(els.exportLibraryContactSheet, 'click', () => exportLibraryResults('contact-sheet'));
   on(els.librarySearch, 'input', () => {
     state.librarySearch = els.librarySearch.value.trim();
     scheduleLibraryRefresh();
   });
   on(els.refreshHistory, 'click', loadHistory);
+  on(els.scanHistory, 'click', handleScanHistoryAction);
   on(els.refreshTasks, 'click', loadTasks);
   on(els.retryAllTasks, 'click', retryAllTasks);
   on(els.exportFailureReport, 'click', exportFailureReport);
@@ -665,6 +918,17 @@ function bindEvents() {
     state.dateFolder = els.dateFolder.checked;
     saveRuleConfiguration();
   });
+  on(els.themeMode, 'change', async () => {
+    state.themeMode = ['auto', 'light', 'dark'].includes(els.themeMode.value) ? els.themeMode.value : 'auto';
+    applyAppearance();
+    await saveRuleConfiguration();
+  });
+  on(els.compactMode, 'change', async () => {
+    state.compactMode = Boolean(els.compactMode.checked);
+    applyAppearance();
+    await saveRuleConfiguration();
+  });
+  on(els.openShortcuts, 'click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
   on(els.exportScanConfig, 'click', exportScanConfiguration);
   on(els.importScanConfig, 'click', () => els.importScanConfigFile?.click());
   on(els.importScanConfigFile, 'change', importScanConfiguration);
@@ -704,6 +968,9 @@ function bindEvents() {
   });
   on(els.exportJson, 'click', () => exportImages('json'));
   on(els.exportCsv, 'click', () => exportImages('csv'));
+  on(els.exportMarkdown, 'click', () => exportImages('markdown'));
+  on(els.exportHtml, 'click', () => exportImages('html'));
+  on(els.exportContactSheet, 'click', () => exportImages('contact-sheet'));
   on(els.download, 'click', () => downloadSelected(false));
   on(els.zip, 'click', () => downloadSelected(true));
   on(els.copyFilteredUrls, 'click', copyFilteredImageUrls);
@@ -996,16 +1263,23 @@ async function importScanConfiguration(event) {
     state.smartCollections = normalizeSmartCollections(settings.smartCollections);
     state.scanLimit = [0, 200, 500, 1000].includes(Number(settings.scanLimit)) ? Number(settings.scanLimit) : 500;
     state.autoScroll = Boolean(settings.autoScroll);
-    state.zipLayout = ['flat', 'domain', 'format', 'domain-format'].includes(settings.zipLayout) ? settings.zipLayout : 'flat';
+    state.zipLayout = ['flat', 'domain', 'format', 'domain-format', 'page', 'date', 'domain-page', 'domain-date'].includes(settings.zipLayout) ? settings.zipLayout : 'flat';
     state.conflictAction = ['uniquify', 'overwrite', 'prompt'].includes(settings.conflictAction) ? settings.conflictAction : 'uniquify';
     state.filenameTemplate = typeof settings.filenameTemplate === 'string' && settings.filenameTemplate.trim() ? settings.filenameTemplate.trim() : '{name}';
     state.dateFolder = Boolean(settings.dateFolder);
+    state.tabScope = ['current', 'selected', 'window'].includes(settings.tabScope) ? settings.tabScope : 'current';
+    state.themeMode = ['auto', 'light', 'dark'].includes(settings.themeMode) ? settings.themeMode : 'auto';
+    state.compactMode = Boolean(settings.compactMode);
     if (els.scanLimit) els.scanLimit.value = String(state.scanLimit);
     if (els.autoScroll) els.autoScroll.checked = state.autoScroll;
     if (els.zipLayout) els.zipLayout.value = state.zipLayout;
     if (els.conflictAction) els.conflictAction.value = state.conflictAction;
     if (els.filenameTemplate) els.filenameTemplate.value = state.filenameTemplate;
     if (els.dateFolder) els.dateFolder.checked = state.dateFolder;
+    if (els.multiPageScope) els.multiPageScope.value = state.tabScope;
+    if (els.themeMode) els.themeMode.value = state.themeMode;
+    if (els.compactMode) els.compactMode.checked = state.compactMode;
+    applyAppearance();
     if (els.includeSelectors) els.includeSelectors.value = state.scanRules.includeSelectors;
     if (els.excludeSelectors) els.excludeSelectors.value = state.scanRules.excludeSelectors;
     if (els.scanCssBackground) els.scanCssBackground.checked = state.scanRules.scanCssBackground;
@@ -1479,14 +1753,27 @@ async function bulkUpdateCurrentPage(action) {
   }
 }
 
-async function persistScanRecord(scanId) {
+async function persistScanRecord(scanId, metadata = {}) {
   try {
+    const tabs = Array.isArray(metadata.tabs) ? metadata.tabs : [];
+    const siteHosts = [...new Set(tabs.map((tab) => {
+      try { return new URL(tab.url || '').hostname.replace(/^www\./, ''); } catch { return ''; }
+    }).filter(Boolean))];
     await ImageCollectorDB.saveScan(state.images, {
-      pageUrl: els.pageUrl.textContent,
-      pageTitle: els.pageTitle.textContent,
-      duplicateCount: state.duplicateCount
+      pageUrl: tabs.length === 1 ? (tabs[0].url || '') : '',
+      pageTitle: tabs.length === 1 ? (tabs[0].title || '') : t('multiPageResultTitle', { count: tabs.length }),
+      duplicateCount: state.duplicateCount,
+      scope: state.tabScope,
+      siteHost: siteHosts.join(', '),
+      pages: state.pageRecords,
+      filters: currentFilterPreset(),
+      newCount: metadata.delta?.newCount || 0,
+      changedCount: metadata.delta?.changedCount || 0,
+      removedCount: metadata.delta?.removedCount || 0,
+      incremental: Boolean(metadata.previousScan),
+      reuseUrls: [...(metadata.reusableUrls || [])]
     });
-    await archiveImagesBySiteAdapters(state.images, els.pageUrl.textContent);
+    for (const page of tabs) await archiveImagesBySiteAdapters(state.images, page.url || '');
     if (scanId === state.scanId) await refreshLibraryData();
   } catch {
     // Scanning remains available when IndexedDB is blocked or unavailable.
@@ -1681,6 +1968,7 @@ async function createNewCollection() {
     const collection = await ImageCollectorDB.createCollection(name);
     state.libraryCollection = collection.id;
     await refreshLibraryData();
+    notifyCollectionsChanged();
     showToast(t('collectionCreated'));
   } catch { showToast(t('collectionCreateFailed')); }
 }
@@ -1695,16 +1983,8 @@ async function exportLibraryData() {
 
 function exportLibraryResults(type) {
   if (!state.libraryResults.length) { showToast(t('libraryResultsEmpty')); return; }
-  const records = state.libraryResults.map((record) => ({
-    name: fileName(record.url), url: record.url, width: record.width || 0, height: record.height || 0,
-    format: record.format || 'other', mime: record.mime || '', size: record.size || 0,
-    source: record.source || '', frameUrl: record.frameUrl || '', favorite: Boolean(record.favorite),
-    tags: record.tags || [], collectionIds: record.collectionIds || [], updatedAt: record.updatedAt || 0
-  }));
-  const isJson = type === 'json';
-  const content = isJson ? JSON.stringify(records, null, 2) : toCsv(records);
-  downloadTextFile(content, `image-collector-filtered-${dateStamp()}.${isJson ? 'json' : 'csv'}`, isJson ? 'application/json' : 'text/csv');
-  showToast(t('libraryResultsExported'));
+  const records = state.libraryResults.map((record) => exportRecord(record, true));
+  void exportGalleryRecords(records, type, 'image-collector-filtered', t('libraryResultsExported'));
 }
 
 function importLibraryData(event) {
@@ -1717,6 +1997,7 @@ function importLibraryData(event) {
       const data = JSON.parse(String(reader.result || '{}'));
       const result = await ImageCollectorDB.importLibrary(data);
       await refreshLibraryData();
+      notifyCollectionsChanged();
       showToast(`${t('libraryImported')} ${result.images || 0}`);
     } catch { showToast(t('libraryImportFailed')); }
   };
@@ -1724,9 +2005,200 @@ function importLibraryData(event) {
   reader.readAsText(file);
 }
 
+function exportRecord(image, includeLibraryFields = false) {
+  const record = {
+    name: fileName(image?.url),
+    url: image?.url || '',
+    displayUrl: image?.displayUrl || '',
+    originalUrl: image?.originalUrl || '',
+    width: image?.width || 0,
+    height: image?.height || 0,
+    format: image?.format || 'other',
+    mime: image?.mime || '',
+    size: image?.size || 0,
+    source: image?.source || '',
+    frameUrl: image?.frameUrl || '',
+    pageUrl: image?.pageUrl || image?.frameUrl || '',
+    pageTitle: image?.pageTitle || '',
+    favorite: Boolean(image?.favorite),
+    tags: Array.isArray(image?.tags) ? image.tags : [],
+    collectionIds: Array.isArray(image?.collectionIds) ? image.collectionIds : [],
+    updatedAt: image?.updatedAt || 0
+  };
+  if (!includeLibraryFields) {
+    delete record.favorite;
+    delete record.tags;
+    delete record.collectionIds;
+    delete record.updatedAt;
+  }
+  return record;
+}
+
+function exportGalleryTitle(records, fallback = 'Image Collector') {
+  const pages = [...new Set(records.map((record) => record.pageTitle).filter(Boolean))];
+  return pages.length === 1 ? pages[0] : fallback;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+}
+
+function exportUrl(value) {
+  const url = String(value || '').trim();
+  return /^(?:https?:|data:image\/|blob:)/i.test(url) ? url : '';
+}
+
+function markdownLabel(record) {
+  const dimensions = record.width && record.height ? ` — ${record.width} × ${record.height}px` : '';
+  return `${String(record.name || 'image').replace(/[\\[\]]/g, '\\$&')}${dimensions}`;
+}
+
+function toMarkdownGallery(records, title) {
+  const countLabel = state.language === 'en' ? `${records.length} image(s)` : `共 ${records.length} 张图片`;
+  const lines = [`# ${title}`, '', countLabel, ''];
+  records.forEach((record) => {
+    const url = exportUrl(record.originalUrl) || exportUrl(record.displayUrl) || exportUrl(record.url);
+    if (!url) return;
+    lines.push(`![${markdownLabel(record)}](<${url}>)`, '');
+  });
+  return lines.join('\n');
+}
+
+function toHtmlGallery(records, title) {
+  const cards = records.map((record) => {
+    const url = exportUrl(record.originalUrl) || exportUrl(record.displayUrl) || exportUrl(record.url);
+    if (!url) return '';
+    const dimensions = record.width && record.height ? `${record.width} × ${record.height}px` : '尺寸未知';
+    return `<article class="card"><a href="${escapeHtml(url)}" target="_blank" rel="noreferrer"><img src="${escapeHtml(url)}" alt="${escapeHtml(record.name)}" loading="lazy"></a><strong>${escapeHtml(record.name)}</strong><span>${escapeHtml(dimensions)} · ${escapeHtml(record.format || 'other')}</span></article>`;
+  }).filter(Boolean).join('\n');
+  const language = state.language === 'en' ? 'en' : 'zh-CN';
+  const exportedLabel = state.language === 'en' ? `${records.length} image(s) · exported by Image Collector` : `${records.length} 张图片 · 由 Image Collector 导出`;
+  return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style> :root{color-scheme:light}*{box-sizing:border-box}body{margin:0;padding:32px;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#26333d;background:#f4f6f8}main{max-width:1440px;margin:auto}h1{margin:0 0 6px;font-size:28px}p{margin:0 0 24px;color:#6f7c85}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px}.card{min-width:0;padding:10px;border:1px solid #dfe7eb;border-radius:14px;background:#fff;box-shadow:0 5px 16px #17212b12}.card a{display:block;height:170px;border-radius:9px;background:#eef3f5;overflow:hidden}.card img{width:100%;height:100%;object-fit:contain}.card strong,.card span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.card strong{margin-top:9px}.card span{margin-top:2px;color:#82909a;font-size:12px}</style></head><body><main><h1>${escapeHtml(title)}</h1><p>${escapeHtml(exportedLabel)}</p><section class="grid">${cards}</section></main></body></html>`;
+}
+
+function loadImageFromBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(blob);
+    const image = new Image();
+    const timer = setTimeout(() => { image.onload = null; image.onerror = null; URL.revokeObjectURL(objectUrl); reject(new Error('Image load timed out')); }, 8000);
+    image.onload = () => { clearTimeout(timer); resolve({ image, objectUrl }); };
+    image.onerror = () => { clearTimeout(timer); URL.revokeObjectURL(objectUrl); reject(new Error('Image load failed')); };
+    image.src = objectUrl;
+  });
+}
+
+async function loadGalleryImage(record) {
+  const candidates = [...new Set([record.originalUrl, record.displayUrl, record.url].map(exportUrl).filter(Boolean))];
+  for (const url of candidates) {
+    try {
+      const cached = ImageCollectorDB.getCachedImage ? await ImageCollectorDB.getCachedImage(url) : null;
+      if (cached?.blob) return await loadImageFromBlob(cached.blob);
+    } catch { /* Try the network candidate next. */ }
+    try {
+      const response = await withTimeout(() => fetch(url, { credentials: 'omit', redirect: 'follow' }), 8000, 'Image request timed out');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await loadImageFromBlob(await response.blob());
+    } catch { /* Try the next candidate. */ }
+  }
+  return null;
+}
+
+function drawContactSheetLabel(context, text, x, y, maxWidth) {
+  let label = String(text || 'image');
+  while (label.length > 1 && context.measureText(label).width > maxWidth) label = label.slice(0, -2) + '…';
+  context.fillText(label, x, y);
+}
+
+async function createContactSheet(records) {
+  const maxRecords = 120;
+  const items = records.slice(0, maxRecords);
+  const cellWidth = 220;
+  const cellHeight = 196;
+  const columns = Math.min(5, Math.max(2, Math.ceil(Math.sqrt(items.length))));
+  const rows = Math.ceil(items.length / columns);
+  const canvas = document.createElement('canvas');
+  canvas.width = columns * cellWidth;
+  canvas.height = Math.max(1, rows * cellHeight);
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Canvas is unavailable');
+  context.fillStyle = '#f4f6f8';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.font = '600 13px -apple-system, BlinkMacSystemFont, sans-serif';
+  context.textBaseline = 'alphabetic';
+  const loaded = new Array(items.length).fill(null);
+  let nextIndex = 0;
+  async function loadWorker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      loaded[index] = await loadGalleryImage(items[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(6, items.length) }, loadWorker));
+  let loadedCount = 0;
+  items.forEach((record, index) => {
+    const x = (index % columns) * cellWidth;
+    const y = Math.floor(index / columns) * cellHeight;
+    context.fillStyle = '#ffffff'; context.fillRect(x + 8, y + 8, cellWidth - 16, cellHeight - 16);
+    context.strokeStyle = '#dfe7eb'; context.strokeRect(x + 8.5, y + 8.5, cellWidth - 17, cellHeight - 17);
+    const result = loaded[index];
+    if (result?.image) {
+      loadedCount += 1;
+      const maxWidth = cellWidth - 32;
+      const maxHeight = cellHeight - 70;
+      const ratio = Math.min(maxWidth / Math.max(1, result.image.naturalWidth), maxHeight / Math.max(1, result.image.naturalHeight));
+      const width = Math.max(1, result.image.naturalWidth * ratio);
+      const height = Math.max(1, result.image.naturalHeight * ratio);
+      context.drawImage(result.image, x + (cellWidth - width) / 2, y + 14 + (maxHeight - height) / 2, width, height);
+      URL.revokeObjectURL(result.objectUrl);
+    } else {
+      context.fillStyle = '#82909a'; context.font = '13px sans-serif';
+      context.fillText(t('previewUnavailable'), x + 50, y + 86);
+      context.font = '600 13px sans-serif';
+    }
+    context.fillStyle = '#26333d';
+    drawContactSheetLabel(context, record.name, x + 16, y + cellHeight - 34, cellWidth - 32);
+    context.fillStyle = '#82909a'; context.font = '12px sans-serif';
+    drawContactSheetLabel(context, record.width && record.height ? `${record.width} × ${record.height}px` : t('unknownSize'), x + 16, y + cellHeight - 17, cellWidth - 32);
+    context.font = '600 13px sans-serif';
+  });
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) throw new Error('Could not create contact sheet');
+  return { blob, loaded: loadedCount, total: items.length, truncated: records.length > maxRecords };
+}
+
+async function exportGalleryRecords(images, type, filenamePrefix, emptyMessage = t('galleryEmpty')) {
+  const records = (Array.isArray(images) ? images : []).map((image) => exportRecord(image, true));
+  if (!records.length) { showToast(emptyMessage); return; }
+  const title = exportGalleryTitle(records);
+  if (type === 'contact-sheet') {
+    try {
+      const result = await createContactSheet(records);
+      downloadBlobFile(result.blob, `${filenamePrefix}-${dateStamp()}.png`, 'image/png');
+      showToast(t('galleryPartial', { loaded: result.loaded, total: result.total }) + (result.truncated ? ` · ${t('itemCount', { count: records.length - result.total })}` : ''));
+    } catch { showToast(t('galleryFailed')); }
+    return;
+  }
+  const isJson = type === 'json';
+  const isMarkdown = type === 'markdown';
+  const isHtml = type === 'html';
+  const content = isJson ? JSON.stringify(records, null, 2) : isMarkdown ? toMarkdownGallery(records, title) : isHtml ? toHtmlGallery(records, title) : toCsv(records);
+  const extension = isJson ? 'json' : isMarkdown ? 'md' : isHtml ? 'html' : 'csv';
+  const mime = isJson ? 'application/json' : isMarkdown ? 'text/markdown' : isHtml ? 'text/html' : 'text/csv';
+  downloadTextFile(content, `${filenamePrefix}-${dateStamp()}.${extension}`, `${mime};charset=utf-8`);
+  const typeLabel = isMarkdown ? t('markdownExport') : isHtml ? t('htmlExport') : type.toUpperCase();
+  showToast(t('galleryExported', { type: typeLabel }));
+}
+
+function downloadBlobFile(blob, filename, type = 'application/octet-stream') {
+  const url = URL.createObjectURL(blob);
+  chrome.downloads.download({ url, filename, saveAs: state.saveAs, conflictAction: 'uniquify' }).catch(() => {});
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
 function downloadTextFile(content, filename, type) {
   const url = URL.createObjectURL(new Blob([content], { type }));
-  chrome.downloads.download({ url, filename, saveAs: true, conflictAction: 'uniquify' }).catch(() => {});
+  chrome.downloads.download({ url, filename, saveAs: state.saveAs, conflictAction: 'uniquify' }).catch(() => {});
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
@@ -1738,6 +2210,138 @@ async function loadHistory() {
     els.scanHistory.replaceChildren();
     els.downloadHistory.replaceChildren();
     els.historyEmpty.hidden = false;
+  }
+}
+
+function historyPages(scan) {
+  if (Array.isArray(scan?.pages) && scan.pages.length) return scan.pages;
+  return scan ? [{ tabId: scan.tabId || 0, pageUrl: scan.pageUrl || '', pageTitle: scan.pageTitle || '', imageIds: scan.imageIds || [], signatures: {} }] : [];
+}
+
+function historyPageUrls(scan) {
+  return [...new Set(historyPages(scan).map((page) => String(page?.pageUrl || '').trim()).filter((url) => /^(?:https?:|file:)/i.test(url)))];
+}
+
+function restoreScanFilters(filters = {}) {
+  const source = filters && typeof filters === 'object' ? filters : {};
+  const range = (value) => {
+    const item = value && typeof value === 'object' ? value : {};
+    return { min: normalizeLimit(item.min), max: normalizeLimit(item.max) };
+  };
+  state.filterValues = { width: range(source.width), height: range(source.height), size: range(source.size) };
+  state.aspectRange = {
+    min: Math.max(.25, Math.min(5, Number(source.aspectRange?.min) || .25)),
+    max: Math.max(.25, Math.min(5, Number(source.aspectRange?.max) || 5))
+  };
+  if (state.aspectRange.min > state.aspectRange.max) state.aspectRange.max = state.aspectRange.min;
+  state.format = ['all', 'jpeg', 'png', 'webp', 'avif', 'other'].includes(source.format) ? source.format : 'all';
+  state.source = ['all', 'IMG', 'CSS', 'VIDEO', 'RULE', 'other'].includes(source.source) ? source.source : 'all';
+  state.searchQuery = String(source.searchQuery || '');
+  state.sort = ['page', 'width-desc', 'height-desc', 'area-desc', 'name-asc'].includes(source.sort) ? source.sort : 'page';
+  state.originalOnly = Boolean(source.originalOnly);
+  state.aspectRatio = ['all', 'landscape', 'portrait', 'square'].includes(source.aspectRatio) ? source.aspectRatio : 'all';
+  if (els.searchInput) els.searchInput.value = state.searchQuery;
+  if (els.sortSelect) els.sortSelect.value = state.sort;
+  if (els.originalOnly) els.originalOnly.checked = state.originalOnly;
+  if (els.aspectRatio) els.aspectRatio.value = state.aspectRatio;
+  updateRangeLimits();
+  renderFormatTabs();
+  renderSourceTabs();
+}
+
+async function loadScanResult(scan, restoreFilters = true) {
+  if (!scan?.id || !ImageCollectorDB.getScanImages) throw new Error(t('historyUnavailable'));
+  const records = await ImageCollectorDB.getScanImages(scan.id);
+  state.images = records.map((image, index) => ({ ...image, id: `${index}-${image.url}`, index }));
+  state.pageRecords = historyPages(scan);
+  state.tabScope = ['current', 'selected', 'window'].includes(scan.scope) ? scan.scope : (state.pageRecords.length > 1 ? 'selected' : 'current');
+  state.lastScan = { newCount: scan.newCount || 0, changedCount: scan.changedCount || 0, removedCount: scan.removedCount || 0, previousId: scan.id, scope: state.tabScope };
+  state.duplicateCount = Number(scan.duplicateCount) || 0;
+  state.tabId = state.pageRecords[0]?.tabId || null;
+  state.selected.clear();
+  state.retryImages = [];
+  state.scanStats = { discovered: state.images.length, duplicates: state.duplicateCount, skipped: 0, dimensionsChecked: state.images.filter((image) => image.width || image.height).length, dimensionsFailed: state.images.filter((image) => !image.width && !image.height).length, metadataReused: 0, partial: false };
+  if (restoreFilters) restoreScanFilters(scan.filters);
+  const summary = pageSummaryForTabs(historyPages(scan).map((page) => ({ title: page.pageTitle, url: page.pageUrl, id: page.tabId })));
+  setText(els.pageTitle, summary.title);
+  setText(els.pageUrl, summary.url);
+  setText(els.pageIcon, summary.icon);
+  switchView('page');
+  applyFilters();
+  updateScanStatus();
+  updateScanStats();
+  updateRetryUI();
+  render();
+  return state.images;
+}
+
+async function openScanSources(scan) {
+  const urls = historyPageUrls(scan);
+  if (!urls.length) throw new Error(t('historyNoSources'));
+  for (const url of urls) await chrome.tabs.create({ url, active: urls.length === 1 });
+  showToast(t('historySourcesOpened', { count: urls.length }));
+}
+
+async function waitForTabComplete(tabId, timeoutMs = 15000) {
+  if (!tabId || !chrome.tabs?.get) return null;
+  try {
+    const current = await chrome.tabs.get(tabId);
+    if (current?.status === 'complete') return current;
+  } catch { return null; }
+  return new Promise((resolve) => {
+    let finished = false;
+    const finish = (tab) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      chrome.tabs.onUpdated?.removeListener(listener);
+      resolve(tab || null);
+    };
+    const listener = (updatedTabId, changeInfo, tab) => {
+      if (updatedTabId === tabId && changeInfo.status === 'complete') finish(tab);
+    };
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    chrome.tabs.onUpdated?.addListener(listener);
+  });
+}
+
+async function rescanHistory(scan) {
+  const pages = historyPages(scan).filter((page) => /^(?:https?:|file:)/i.test(String(page.pageUrl || '')));
+  if (!pages.length) throw new Error(t('historyNoSources'));
+  const openTabs = await chrome.tabs.query({ currentWindow: true });
+  const targets = [];
+  for (const page of pages) {
+    const url = String(page.pageUrl || '').trim();
+    let tab = openTabs.find((candidate) => candidate.url === url);
+    if (!tab) tab = await chrome.tabs.create({ url, active: false });
+    const ready = await waitForTabComplete(tab?.id);
+    if (ready) targets.push(ready);
+  }
+  if (!targets.length) throw new Error(t('historyNoReadyTabs'));
+  state.tabScope = pages.length > 1 ? 'selected' : 'current';
+  if (els.multiPageScope) els.multiPageScope.value = state.tabScope;
+  await scanPage({ tabs: targets, scope: state.tabScope });
+}
+
+async function handleScanHistoryAction(event) {
+  const button = event.target.closest?.('[data-history-action]');
+  if (!button) return;
+  const scan = state.historyScans.get(button.dataset.scanId);
+  if (!scan) return;
+  const action = button.dataset.historyAction;
+  button.disabled = true;
+  try {
+    if (action === 'restore') await loadScanResult(scan, true);
+    else if (action === 'open') await openScanSources(scan);
+    else if (action === 'rescan') await rescanHistory(scan);
+    else if (action === 'download' || action === 'zip') {
+      const images = await loadScanResult(scan, false);
+      await downloadImages(images, action === 'zip');
+    }
+  } catch (error) {
+    showToast(error?.message || t('historyActionFailed'));
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -2136,13 +2740,26 @@ async function copyPreviewUrl() {
 function renderHistory(scans, downloads) {
   els.scanHistory.replaceChildren();
   els.downloadHistory.replaceChildren();
+  state.historyScans = new Map(scans.map((scan) => [scan.id, scan]));
   scans.forEach((scan) => {
-    const item = document.createElement('div'); item.className = 'history-item';
+    const pages = historyPages(scan);
+    const item = document.createElement('article'); item.className = 'history-item';
     const icon = document.createElement('span'); icon.className = 'history-item-icon'; icon.textContent = '⌕';
     const copy = document.createElement('div'); copy.className = 'history-item-copy';
-    const title = document.createElement('strong'); title.textContent = scan.pageTitle || t('unnamedPage'); title.title = scan.pageUrl || '';
-    const detail = document.createElement('span'); detail.textContent = `${formatDateTime(scan.createdAt)} · ${t('imageCount', { count: scan.count })}${scan.duplicateCount ? ` · ${t('duplicates', { count: scan.duplicateCount })}` : ''}`;
-    copy.append(title, detail); item.append(icon, copy); els.scanHistory.append(item);
+    const title = document.createElement('strong'); title.textContent = scan.pageTitle || scan.siteHost || t('unnamedPage'); title.title = scan.pageUrl || pages.map((page) => page.pageUrl).filter(Boolean).join('\n');
+    const delta = [
+      t('historyNew', { count: scan.newCount || 0 }),
+      t('historyChanged', { count: scan.changedCount || 0 }),
+      t('historyRemoved', { count: scan.removedCount || 0 })
+    ].join(' · ');
+    const detail = document.createElement('span'); detail.textContent = `${formatDateTime(scan.createdAt)} · ${t('historyPages', { count: pages.length })} · ${t('imageCount', { count: scan.count || 0 })} · ${delta}`;
+    copy.append(title, detail);
+    const actions = document.createElement('div'); actions.className = 'history-item-actions';
+    [['restore', t('historyRestore')], ['open', t('historyOpen')], ['rescan', t('historyRescan')], ['download', t('historyDownload')], ['zip', t('historyZip')]].forEach(([action, label]) => {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'subtle-button'; button.dataset.historyAction = action; button.dataset.scanId = scan.id; button.textContent = label; button.title = label;
+      actions.append(button);
+    });
+    item.append(icon, copy, actions); els.scanHistory.append(item);
   });
   downloads.forEach((download) => {
     const item = document.createElement('div'); item.className = 'history-item';
@@ -2159,6 +2776,86 @@ function renderHistory(scans, downloads) {
 function formatDateTime(timestamp) {
   if (!timestamp) return t('unknownTime');
   return new Date(timestamp).toLocaleString(state.language === 'en' ? 'en-US' : 'zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function scanImageSignature(image) {
+  // File size and MIME are fetched after discovery and are not part of the
+  // page's visual identity. Keeping them out of the signature lets a later
+  // scan reuse metadata instead of issuing the same HEAD requests again.
+  return [image?.url || '', image?.displayUrl || '', image?.width || 0, image?.height || 0, image?.format || '', image?.source || '', image?.original ? 1 : 0].join('|');
+}
+
+function scanSignatureMap(pages) {
+  const signatures = new Map();
+  (Array.isArray(pages) ? pages : []).forEach((page) => {
+    Object.entries(page?.signatures || {}).forEach(([url, signature]) => signatures.set(url, signature));
+  });
+  return signatures;
+}
+
+function scanReusableUrls(currentPages, previousScan) {
+  const current = scanSignatureMap(currentPages);
+  const previousPages = Array.isArray(previousScan?.pages) && previousScan.pages.length
+    ? previousScan.pages
+    : (previousScan ? [{ signatures: {}, imageIds: previousScan.imageIds || [] }] : []);
+  const previous = scanSignatureMap(previousPages);
+  return new Set([...current.entries()]
+    .filter(([url, signature]) => previous.has(url) && previous.get(url) !== null && previous.get(url) === signature)
+    .map(([url]) => url));
+}
+
+function scanPageDelta(currentPages, previousScan) {
+  const current = scanSignatureMap(currentPages);
+  const previous = new Map();
+  const pages = Array.isArray(previousScan?.pages) && previousScan.pages.length ? previousScan.pages : (previousScan ? [{ imageIds: previousScan.imageIds || [], signatures: {} }] : []);
+  pages.forEach((page) => {
+    Object.entries(page.signatures || {}).forEach(([url, signature]) => previous.set(url, signature));
+    // Scans saved before page signatures were introduced still have imageIds.
+    // Treat those URLs as known, but do not report them as changed because
+    // there is no historical signature to compare with.
+    (Array.isArray(page.imageIds) ? page.imageIds : []).forEach((url) => {
+      if (url && !previous.has(url)) previous.set(url, null);
+    });
+  });
+  const previousIds = [...previous.keys()];
+  const newCount = [...current.keys()].filter((url) => !previous.has(url)).length;
+  const changedCount = [...current.keys()].filter((url) => previous.has(url) && previous.get(url) !== null && current.get(url) !== previous.get(url)).length;
+  const removedCount = previousIds.filter((url) => !current.has(url)).length;
+  return { newCount, changedCount, removedCount };
+}
+
+function pageSummaryForTabs(tabs) {
+  const list = Array.isArray(tabs) ? tabs : [];
+  if (list.length <= 1) {
+    const tab = list[0];
+    return { title: tab?.title || t('currentPage'), url: tab?.url || '', icon: getDomainLetter(tab?.url) };
+  }
+  return {
+    title: t('multiPageResultTitle', { count: list.length }),
+    url: list.map((tab) => tab.title || tab.url || t('unnamedPage')).join(' · '),
+    icon: String(list.length)
+  };
+}
+
+async function scanOneTab(tab, scanId, quiet, pageIndex) {
+  const results = await withTimeout(
+    () => chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: collectPageImages, args: [{ limit: state.scanLimit, autoScroll: state.autoScroll, language: state.language, fast: !quiet, timeLimitMs: quiet ? 15000 : 5000, scanRules: state.scanRules, siteAdapters: state.siteAdapters, pageUrl: tab.url || '' }] }),
+    quiet ? 30000 : 15000,
+    t('scanTimeout')
+  );
+  const images = [];
+  let duplicateCount = 0;
+  let skipped = 0;
+  let partial = false;
+  for (const result of results || []) {
+    const payload = result?.result || {};
+    const rawImages = Array.isArray(payload) ? payload : payload.images || [];
+    duplicateCount += Array.isArray(payload) ? 0 : Number(payload.duplicateCount || 0);
+    skipped += Array.isArray(payload) ? 0 : Number(payload.skipped || 0);
+    partial = partial || Boolean(!Array.isArray(payload) && payload.partial);
+    rawImages.forEach((image) => images.push({ ...image, pageUrl: tab.url || '', pageTitle: tab.title || '', tabId: tab.id, pageIndex }));
+  }
+  return { tabId: tab.id, pageUrl: tab.url || '', pageTitle: tab.title || '', images, duplicateCount, skipped, partial };
 }
 
 async function scanPage(options = {}) {
@@ -2183,7 +2880,8 @@ async function scanPage(options = {}) {
     state.source = 'all';
     state.selected.clear();
     state.duplicateCount = 0;
-    state.scanStats = { discovered: 0, duplicates: 0, skipped: 0, dimensionsChecked: 0, dimensionsFailed: 0, partial: false };
+    state.pageRecords = [];
+    state.scanStats = { discovered: 0, duplicates: 0, skipped: 0, dimensionsChecked: 0, dimensionsFailed: 0, metadataReused: 0, partial: false };
     state.retryImages = [];
     updateRetryUI();
     renderFormatTabs();
@@ -2191,60 +2889,61 @@ async function scanPage(options = {}) {
     render();
   }
   try {
-    const tabs = await withTimeout(
-      () => chrome.tabs.query({ active: true, currentWindow: true }),
-      5000,
-      t('scanTimeout')
-    );
-    const tab = tabs[0];
-    if (!tab?.id) throw new Error(t('noActiveTab'));
+    const tabs = Array.isArray(options?.tabs) && options.tabs.length ? options.tabs : await getTabsForScan(options?.scope || state.tabScope);
     if (scanId !== state.scanId) return;
-    state.tabId = tab.id;
-    els.pageTitle.textContent = tab.title || t('currentPage');
-    els.pageUrl.textContent = tab.url || '';
-    els.pageIcon.textContent = getDomainLetter(tab.url);
-    if (!quiet) setScanPhase('discoveringImages');
-    const results = await withTimeout(
-      () => chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: collectPageImages, args: [{ limit: state.scanLimit, autoScroll: state.autoScroll, language: state.language, fast: !quiet, timeLimitMs: quiet ? 15000 : 5000, scanRules: state.scanRules, siteAdapters: state.siteAdapters, pageUrl: tab.url || '' }] }),
-      quiet ? 30000 : 15000,
-      t('scanTimeout')
-    );
+    state.tabId = tabs.find((tab) => tab.active)?.id || tabs[0]?.id || null;
+    const summary = pageSummaryForTabs(tabs);
+    els.pageTitle.textContent = summary.title;
+    els.pageUrl.textContent = summary.url;
+    els.pageIcon.textContent = summary.icon;
+    const previousScan = !quiet && ImageCollectorDB.findLatestScanForPages
+      ? await ImageCollectorDB.findLatestScanForPages(tabs.map((tab) => tab.url))
+      : null;
+    const pageResults = [];
+    let duplicateCount = 0;
+    let skippedCount = 0;
+    let partialScan = false;
+    for (const [index, tab] of tabs.entries()) {
+      if (scanId !== state.scanId) return;
+      if (!tabCanBeScanned(tab)) {
+        skippedCount += 1;
+        partialScan = true;
+        pageResults.push({ tabId: tab.id, pageUrl: tab.url || '', pageTitle: tab.title || '', images: [], error: t('protectedPage') });
+        continue;
+      }
+      els.scanStatus.textContent = tabs.length > 1 ? t('scanningTab', { current: index + 1, total: tabs.length }) : (quiet ? t('updating') : t('scanningStatus'));
+      if (!quiet) setScanPhase('discoveringImages');
+      try {
+        const result = await scanOneTab(tab, scanId, quiet, index);
+        pageResults.push(result);
+        duplicateCount += result.duplicateCount;
+        skippedCount += result.skipped;
+        partialScan = partialScan || result.partial;
+      } catch (error) {
+        partialScan = true;
+        skippedCount += 1;
+        pageResults.push({ tabId: tab.id, pageUrl: tab.url || '', pageTitle: tab.title || '', images: [], error: error.message || t('scanFailed') });
+      }
+    }
     if (scanId !== state.scanId) return;
     const merged = new Map();
-    let duplicateCount = 0;
-    let partialScan = false;
-    let skippedCount = 0;
-    for (const result of results || []) {
-      const payload = result?.result || {};
-      const rawImages = Array.isArray(payload) ? payload : payload.images || [];
-      duplicateCount += Array.isArray(payload) ? 0 : Number(payload.duplicateCount || 0);
-      skippedCount += Array.isArray(payload) ? 0 : Number(payload.skipped || 0);
-      partialScan = partialScan || Boolean(!Array.isArray(payload) && payload.partial);
-      for (const image of rawImages) {
+    for (const page of pageResults) {
+      for (const image of page.images || []) {
         const existing = merged.get(image.url);
         if (existing) {
           duplicateCount += 1;
-          if (Boolean(image.original) && !Boolean(existing.original)) merged.set(image.url, image);
+          existing.pageUrls = [...new Set([...(existing.pageUrls || []), image.pageUrl].filter(Boolean))];
+          existing.pageTitles = [...new Set([...(existing.pageTitles || []), image.pageTitle].filter(Boolean))];
+          existing.tabIds = [...new Set([...(existing.tabIds || []), image.tabId].filter(Boolean))];
+          if (Boolean(image.original) && !Boolean(existing.original)) merged.set(image.url, { ...existing, ...image, pageUrls: existing.pageUrls, pageTitles: existing.pageTitles, tabIds: existing.tabIds });
         } else {
-          merged.set(image.url, image);
+          merged.set(image.url, { ...image, pageUrls: image.pageUrl ? [image.pageUrl] : [], pageTitles: image.pageTitle ? [image.pageTitle] : [], tabIds: image.tabId ? [image.tabId] : [] });
         }
       }
     }
     state.duplicateCount = partialScan ? Math.max(state.duplicateCount, duplicateCount) : duplicateCount;
-    state.scanStats = {
-      ...state.scanStats,
-      discovered: merged.size,
-      duplicates: state.duplicateCount,
-      skipped: skippedCount,
-      partial: partialScan
-    };
-    updateScanStats();
-    const discovered = [...merged.values()].map((image, index) => ({
-      ...image,
-      format: image.format || 'other',
-      id: `${index}-${image.url}`,
-      index
-    }));
+    state.scanStats = { ...state.scanStats, discovered: merged.size, duplicates: state.duplicateCount, skipped: skippedCount, partial: partialScan };
+    const discovered = [...merged.values()].map((image, index) => ({ ...image, format: image.format || 'other', id: `${index}-${image.url}`, index }));
     if (quiet && partialScan) {
       const combined = new Map(state.images.map((image) => [image.url, image]));
       discovered.forEach((image) => {
@@ -2256,15 +2955,24 @@ async function scanPage(options = {}) {
     } else {
       state.images = discovered;
     }
-    const newImageCount = quiet ? discovered.filter((image) => !previousImageUrls.has(image.url)).length : 0;
+    state.pageRecords = pageResults.map((page) => ({
+      tabId: page.tabId, pageUrl: page.pageUrl, pageTitle: page.pageTitle,
+      imageIds: (page.images || []).map((image) => image.url).filter(Boolean),
+      signatures: Object.fromEntries((page.images || []).filter((image) => image.url).map((image) => [image.url, scanImageSignature(image)])),
+      count: (page.images || []).length, error: page.error || ''
+    }));
+    const delta = scanPageDelta(state.pageRecords, previousScan);
+    const reusableUrls = scanReusableUrls(state.pageRecords, previousScan);
+    state.lastScan = { ...delta, previousId: previousScan?.id || '', scope: state.tabScope };
+    const newImageCount = quiet ? discovered.filter((image) => !previousImageUrls.has(image.url)).length : delta.newCount;
     state.selected.clear();
     state.images.forEach((image) => { if (previousSelectedUrls.has(image.url)) state.selected.add(image.id); });
     updateScanStatus();
     updateRangeLimits();
     applyFilters();
-    if (!quiet) await persistScanRecord(scanId);
     if (!quiet) setScanPhase('readingDimensions');
-    await loadImageMetadata(scanId);
+    await loadImageMetadata(scanId, { previousScan, reusableUrls });
+    if (!quiet) await persistScanRecord(scanId, { tabs, delta, previousScan, reusableUrls });
     if (newImageCount > 0) showToast(t('newImagesFound', { count: newImageCount }));
   } catch (error) {
     if (scanId !== state.scanId) return;
@@ -2350,39 +3058,63 @@ async function archiveImagesBySiteAdapters(images, pageUrl) {
   }
 }
 
-async function loadImageMetadata(scanId) {
+async function loadImageMetadata(scanId, options = {}) {
   const images = state.images.slice(0, 300);
   if (!images.length) {
     updateScanStats();
     return;
   }
+  const reusableUrls = options.reusableUrls instanceof Set ? options.reusableUrls : new Set();
+  const reusableMetadata = new Map();
+  if (reusableUrls.size && options.previousScan?.id && ImageCollectorDB.getScanImages) {
+    try {
+      const previousImages = await ImageCollectorDB.getScanImages(options.previousScan.id);
+      previousImages.forEach((image) => {
+        if (reusableUrls.has(image.url)) reusableMetadata.set(image.url, image);
+      });
+    } catch {
+      // A missing history record only means those URLs need fresh inspection.
+    }
+  }
+  const imagesToInspect = images.filter((image) => !reusableMetadata.has(image.url));
+  reusableMetadata.forEach((previous, url) => {
+    const image = images.find((item) => item.url === url);
+    if (!image) return;
+    image.size = Number(previous.size) || 0;
+    image.mime = previous.mime || '';
+  });
+  state.scanStats.metadataReused = reusableMetadata.size;
   try {
-    const response = await withTimeout(
-      () => chrome.runtime.sendMessage({ type: 'inspectImages', images }),
-      12000,
-      t('metadataTimeout')
-    );
-    if (scanId !== state.scanId || !Array.isArray(response?.items)) return;
-    const metadata = new Map(response.items.map((item) => [item.url, item]));
-    state.scanStats.dimensionsChecked = response.items.length;
-    state.scanStats.dimensionsFailed = response.items.filter((item) => !item.size && !item.mime).length;
+    let items = [];
+    if (imagesToInspect.length) {
+      const response = await withTimeout(
+        () => chrome.runtime.sendMessage({ type: 'inspectImages', images: imagesToInspect }),
+        12000,
+        t('metadataTimeout')
+      );
+      if (scanId !== state.scanId || !Array.isArray(response?.items)) return;
+      items = response.items;
+    }
+    const metadata = new Map(items.map((item) => [item.url, item]));
+    state.scanStats.dimensionsChecked = reusableMetadata.size + items.length;
     state.images.forEach((image) => {
       const item = metadata.get(image.url);
       if (!item) return;
       image.size = Number(item.size) || 0;
       image.mime = item.mime || '';
     });
+    state.scanStats.dimensionsFailed = images.filter((image) => !image.size && !image.mime).length;
     updateRangeLimits();
     applyFilters();
     try {
-      await ImageCollectorDB.upsertImages(state.images);
+      await ImageCollectorDB.upsertImages(imagesToInspect);
       await refreshLibraryData();
     } catch {
       // Metadata persistence is optional and must not affect the image grid.
     }
   } catch {
-    state.scanStats.dimensionsChecked = 0;
-    state.scanStats.dimensionsFailed = images.length;
+    state.scanStats.dimensionsChecked = reusableMetadata.size;
+    state.scanStats.dimensionsFailed = imagesToInspect.length;
     state.scanStats.partial = true;
     // Metadata is optional; image discovery should remain usable when HEAD is blocked.
   }
@@ -2558,7 +3290,9 @@ async function collectPageImages(options = {}) {
     });
     push(image.currentSrc, 6000, false);
     push(image.getAttribute('src'), 5000, false);
-    ['data-lazy-src', 'data-src', 'data-fallback-src'].forEach((attribute) => push(image.getAttribute(attribute), 4500, false));
+    const currentUrl = normalizeUrl(image.currentSrc || image.getAttribute('src'));
+    const currentIsPlaceholder = !currentUrl || currentUrl.startsWith('data:') || image.naturalWidth <= 1 || image.naturalHeight <= 1;
+    ['data-lazy-src', 'data-src', 'data-fallback-src'].forEach((attribute, index) => push(image.getAttribute(attribute), (currentIsPlaceholder ? 5600 : 4500) - index, currentIsPlaceholder));
     candidates.sort((left, right) => right.quality - left.quality || right.widthHint - left.widthHint);
     return candidates[0] || null;
   };
@@ -3375,26 +4109,11 @@ function exportImages(type) {
     showToast(t('noImagesToExport'));
     return;
   }
-  const records = state.filtered.map((image) => ({
-    name: fileName(image.url), url: image.url, width: image.width || 0, height: image.height || 0,
-    format: image.format || 'other', mime: image.mime || '', size: image.size || 0,
-    source: image.source || '', frameUrl: image.frameUrl || ''
-  }));
-  const isJson = type === 'json';
-  const content = isJson ? JSON.stringify(records, null, 2) : toCsv(records);
-  const blob = new Blob([content], { type: isJson ? 'application/json;charset=utf-8' : 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  chrome.downloads.download({
-    url,
-    filename: `image-list-${dateStamp()}.${isJson ? 'json' : 'csv'}`,
-    saveAs: state.saveAs,
-    conflictAction: 'uniquify'
-  }).then(() => showToast(t('exportStarted', { type: isJson ? 'JSON' : 'CSV' }))).catch((error) => showToast(error.message || t('exportFailed')));
-  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  void exportGalleryRecords(state.filtered, type, 'image-list', t('noImagesToExport'));
 }
 
 function toCsv(records) {
-  const headers = ['name', 'url', 'width', 'height', 'format', 'mime', 'size', 'source', 'frameUrl'];
+  const headers = ['name', 'url', 'width', 'height', 'format', 'mime', 'size', 'source', 'frameUrl', 'pageUrl', 'pageTitle'];
   return [headers, ...records.map((record) => headers.map((header) => record[header] ?? ''))]
     .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))
     .join('\n');
@@ -3483,6 +4202,12 @@ Object.assign(TRANSLATIONS.en, {
   pageTagDialogTitle: 'Tag selected images', pageArchiveDialogTitle: 'Archive to a local collection', batchDialogSelected: '{count} image(s) selected', batchDialogTagLabel: 'Tag name', batchDialogTagPlaceholder: 'For example: product, inspiration, review', batchDialogCollectionLabel: 'Target collection', batchDialogChooseCollection: 'Choose a collection', batchDialogTagRequired: 'Enter a tag', batchDialogCollectionRequired: 'Choose a collection', batchDialogCancel: 'Cancel', batchDialogConfirm: 'Confirm', batchDialogClose: 'Close'
 });
 Object.assign(TRANSLATIONS.zh, {
+  historyNew: '新增 {count}', historyChanged: '变化 {count}', historyRemoved: '移除 {count}', historyPages: '{count} 个页面', historyRestore: '恢复筛选', historyOpen: '打开来源', historyRescan: '重新扫描', historyDownload: '下载', historyZip: '下载 ZIP', historyUnavailable: '扫描结果不可用', historyNoSources: '历史记录中没有可打开的来源页', historySourcesOpened: '已打开 {count} 个来源页', historyNoReadyTabs: '来源页尚未加载完成', historyActionFailed: '历史记录操作失败'
+});
+Object.assign(TRANSLATIONS.en, {
+  historyNew: '{count} new', historyChanged: '{count} changed', historyRemoved: '{count} removed', historyPages: '{count} page(s)', historyRestore: 'Restore filters', historyOpen: 'Open source', historyRescan: 'Rescan', historyDownload: 'Download', historyZip: 'Download ZIP', historyUnavailable: 'The scan result is unavailable', historyNoSources: 'No source pages are available in this scan', historySourcesOpened: 'Opened {count} source page(s)', historyNoReadyTabs: 'The source pages are not ready yet', historyActionFailed: 'History action failed'
+});
+Object.assign(TRANSLATIONS.zh, {
   invertLibrarySelection: '反选当前结果', clearLibrarySelection: '清除选择'
 });
 Object.assign(TRANSLATIONS.en, {
@@ -3502,7 +4227,7 @@ Object.assign(TRANSLATIONS.en, {
 });
 
 Object.assign(TRANSLATIONS.zh, {
-  scanStats: '发现 {discovered} · 跳过 {skipped} · 已探测 {dimensions} · 失败 {failed}{partial}',
+  scanStats: '发现 {discovered} · 跳过 {skipped} · 已探测 {dimensions} · 复用 {reused} · 失败 {failed}{partial}',
   scanPartial: '部分完成',
   requestTimeout: '请求超时，可能是网络较慢或图片服务器未响应',
   serviceWorkerRestarted: '后台任务因扩展服务重启而中断，请重试失败项',
@@ -3511,7 +4236,7 @@ Object.assign(TRANSLATIONS.zh, {
   largeDownloadWarning: '任务较大，已限制下载节奏；请耐心等待完成。'
 });
 Object.assign(TRANSLATIONS.en, {
-  scanStats: 'Found {discovered} · skipped {skipped} · dimensions {dimensions} · failed {failed}{partial}',
+  scanStats: 'Found {discovered} · skipped {skipped} · dimensions {dimensions} · reused {reused} · failed {failed}{partial}',
   scanPartial: 'partial',
   requestTimeout: 'Request timed out; the network may be slow or the image server may not respond',
   serviceWorkerRestarted: 'The background task was interrupted because the extension worker restarted; retry failed items',
@@ -3531,6 +4256,21 @@ Object.assign(TRANSLATIONS.zh, {
 });
 Object.assign(TRANSLATIONS.en, {
   filterEyebrow: 'FILTERS', resultsTitle: 'Image results', resultsEyebrow: 'CURRENT PAGE IMAGES', selectionTools: 'Selection tools', downloadEyebrow: 'EXPORT SELECTION', downloadOptions: 'Download settings & batch actions', filterLiveHint: 'Filters apply to image results immediately', allImagesFilter: 'All images', activeFilters: '{count} active filters'
+});
+
+Object.assign(TRANSLATIONS.zh, {
+  multiPageEyebrow: '多页面采集', multiPageTitle: '多页面采集', currentTabScope: '当前标签页', selectedTabsScope: '已选 {count} 个标签页', windowTabsScope: '当前窗口 {count} 个标签页', multiPageScope: '采集范围', multiPageCurrentHint: '采集当前激活的标签页', multiPageSelectHint: '将选中的标签页合并为一个结果', selectAllTabs: '全选标签页', clearSelectedTabs: '清除选择', scanMultiPage: '开始采集', noTabs: '当前窗口没有可用标签页', selectTabsFirst: '请先选择至少一个标签页', protectedPage: '此页面不允许扩展访问', activeTab: '当前', multiPageResultTitle: '已采集 {count} 个页面', scanningTab: '正在采集第 {current}/{total} 个页面',
+  byPage: '按页面', byDate: '按日期', bySitePage: '按网站 / 页面', bySiteDate: '按网站 / 日期', exportMarkdown: '导出 Markdown', exportHtml: '导出 HTML', exportContactSheet: '导出联系表', exportLibraryMarkdown: '导出 Markdown', exportLibraryHtml: '导出 HTML', exportLibraryContactSheet: '导出联系表',
+  scanRestoreFilters: '恢复筛选', scanOpenPages: '打开来源页', scanRerun: '重新扫描', scanDownload: '下载结果', scanPages: '{count} 个页面', scanDelta: '新增 {newCount} · 变化 {changedCount} · 移除 {removedCount}', scanActionFailed: '扫描历史操作失败', scanRerunStarted: '已重新开始扫描', scanPagesOpened: '已打开 {count} 个来源页面',
+  appearanceTitle: '外观与快捷键', localSettings: '本地设置', themeMode: '主题', themeAuto: '跟随系统', themeLight: '浅色', themeDark: '深色', compactMode: '紧凑模式', compactModeHint: '减少间距，在窄侧栏显示更多图片。', openShortcuts: '配置快捷键', shortcutHint: '可在 Chrome 扩展快捷键页面自定义', shortcutPageFailed: '无法打开快捷键设置',
+  markdownExport: 'Markdown 图库', htmlExport: 'HTML 图库', contactSheetExport: '图片联系表', galleryEmpty: '没有可导出的图片', galleryExported: '{type} 已开始下载', galleryPartial: '联系表已导出，成功加载 {loaded}/{total} 张图片', galleryFailed: '图库导出失败'
+});
+Object.assign(TRANSLATIONS.en, {
+  multiPageEyebrow: 'MULTI-PAGE', multiPageTitle: 'Multi-page collection', currentTabScope: 'Current tab', selectedTabsScope: '{count} selected tabs', windowTabsScope: '{count} tabs in window', multiPageScope: 'Collection scope', multiPageCurrentHint: 'Collect from the active tab', multiPageSelectHint: 'Merge selected tabs into one result', selectAllTabs: 'Select all tabs', clearSelectedTabs: 'Clear selection', scanMultiPage: 'Start collection', noTabs: 'No usable tabs in this window', selectTabsFirst: 'Select at least one tab first', protectedPage: 'This page cannot be accessed by the extension', activeTab: 'Active', multiPageResultTitle: '{count} pages collected', scanningTab: 'Collecting page {current}/{total}',
+  byPage: 'By page', byDate: 'By date', bySitePage: 'By site / page', bySiteDate: 'By site / date', exportMarkdown: 'Export Markdown', exportHtml: 'Export HTML', exportContactSheet: 'Export contact sheet', exportLibraryMarkdown: 'Export Markdown', exportLibraryHtml: 'Export HTML', exportLibraryContactSheet: 'Export contact sheet',
+  scanRestoreFilters: 'Restore filters', scanOpenPages: 'Open source pages', scanRerun: 'Rescan', scanDownload: 'Download results', scanPages: '{count} pages', scanDelta: '{newCount} new · {changedCount} changed · {removedCount} removed', scanActionFailed: 'Scan history action failed', scanRerunStarted: 'Rescan started', scanPagesOpened: 'Opened {count} source page(s)',
+  appearanceTitle: 'Appearance & shortcuts', localSettings: 'Local settings', themeMode: 'Theme', themeAuto: 'System', themeLight: 'Light', themeDark: 'Dark', compactMode: 'Compact mode', compactModeHint: 'Reduce spacing to show more images in a narrow panel.', openShortcuts: 'Configure shortcuts', shortcutHint: 'Customize them on Chrome\'s extension shortcuts page', shortcutPageFailed: 'Could not open shortcut settings',
+  markdownExport: 'Markdown gallery', htmlExport: 'HTML gallery', contactSheetExport: 'Contact sheet', galleryEmpty: 'There are no images to export', galleryExported: '{type} download started', galleryPartial: 'Contact sheet exported; loaded {loaded}/{total} image(s)', galleryFailed: 'Gallery export failed'
 });
 
 function t(key, values = {}) {
@@ -3555,6 +4295,7 @@ function applyLanguage() {
   document.querySelector('.page-summary')?.setAttribute('aria-label', t('currentPage'));
   document.querySelector('.view-switcher')?.setAttribute('aria-label', t('viewSwitcher'));
   document.querySelector('.filter-panel')?.setAttribute('aria-label', t('filterSection'));
+  document.querySelector('#multiPagePanel')?.setAttribute('aria-label', t('multiPageTitle'));
   document.querySelector('#libraryView')?.setAttribute('aria-label', t('libraryTitle'));
   document.querySelector('#historyView')?.setAttribute('aria-label', t('historyTitle'));
   document.querySelector('#taskView')?.setAttribute('aria-label', t('taskCenter'));
@@ -3587,6 +4328,12 @@ function applyLanguage() {
   setText(els.scanActionLabel, t('rescan'));
   setText(els.filterEyebrow, t('filterEyebrow'));
   setText(els.filterTitle, t('sizeFilterTitle'));
+  setText(els.multiPageEyebrow, t('multiPageEyebrow'));
+  setText(els.multiPageTitle, t('multiPageTitle'));
+  setText(els.multiPageScopeLabel, t('multiPageScope'));
+  setText(els.selectAllTabs, t('selectAllTabs')); setText(els.clearSelectedTabs, t('clearSelectedTabs')); setText(els.scanMultiPage, t('scanMultiPage'));
+  const multiPageOptions = [t('currentTabScope'), t('selectedTabsScope', { count: 0 }).replace(/\s*0\s*/g, '…'), t('windowTabsScope', { count: 0 }).replace(/\s*0\s*/g, '…')];
+  [...(els.multiPageScope?.options || [])].forEach((option, index) => { if (multiPageOptions[index]) option.textContent = multiPageOptions[index]; });
   setText(els.resultsTitle, t('resultsTitle'));
   setText(els.resultsEyebrow, t('resultsEyebrow'));
   setText(els.selectionToolsLabel, t('selectionTools'));
@@ -3596,6 +4343,7 @@ function applyLanguage() {
   if (els.selectionPreset?.options[0]) els.selectionPreset.options[0].textContent = t('selectionPreset');
   setText(els.saveFilterPreset, t('saveFilter')); setText(els.deleteFilterPreset, t('deletePreset')); setText(els.saveSelectionPreset, t('saveSelection')); setText(els.invertSelection, t('invert'));
   setText(els.newCollection, t('newCollection')); setText(els.exportLibrary, t('exportLibrary')); setText(els.exportLibraryResultsJson, t('exportFilteredJson')); setText(els.exportLibraryResultsCsv, t('exportFilteredCsv')); setText(els.importLibrary, t('importLibrary'));
+  setText(els.exportLibraryMarkdown, t('exportLibraryMarkdown')); setText(els.exportLibraryHtml, t('exportLibraryHtml')); setText(els.exportLibraryContactSheet, t('exportLibraryContactSheet'));
   setText(els.previewTitle, state.preview ? fileName(previewCandidates(state.preview)[0]) : t('preview')); setText(els.copyImageUrl, t('copyUrl')); setText(els.openImageUrl, t('openUrl')); setText(els.zoomReset, t('reset'));
   if (els.previewErrorText) els.previewErrorText.textContent = t('previewUnavailable');
   if (els.previewErrorDetail && !els.previewError?.hidden) els.previewErrorDetail.textContent = t('previewFailureHint', { count: state.preview ? previewCandidates(state.preview).length : 0 });
@@ -3629,9 +4377,9 @@ function applyLanguage() {
   const saveText = document.querySelector('.save-option > span'); if (saveText) saveText.textContent = t('saveLocation');
   const downloadCaption = document.querySelector('.download-caption-note'); if (downloadCaption) downloadCaption.textContent = t('downloadSupport');
   const settingLabels = [...document.querySelectorAll('.download-settings > label > span')]; if (settingLabels[0]) settingLabels[0].textContent = t('zipLayout'); if (settingLabels[1]) settingLabels[1].textContent = t('conflictAction'); if (settingLabels[2]) settingLabels[2].textContent = t('filenameTemplate'); if (settingLabels[3]) settingLabels[3].textContent = t('dateFolder');
-  const zipOptions = [t('noGrouping'), t('bySite'), t('byFormat'), t('bySiteFormat')]; [...(els.zipLayout?.options || [])].forEach((option, index) => { if (zipOptions[index]) option.textContent = zipOptions[index]; });
+  const zipOptions = [t('noGrouping'), t('bySite'), t('byFormat'), t('bySiteFormat'), t('byPage'), t('byDate'), t('bySitePage'), t('bySiteDate')]; [...(els.zipLayout?.options || [])].forEach((option, index) => { if (zipOptions[index]) option.textContent = zipOptions[index]; });
   const conflictOptions = [t('conflictUniquify'), t('conflictOverwrite'), t('conflictPrompt')]; [...(els.conflictAction?.options || [])].forEach((option, index) => { if (conflictOptions[index]) option.textContent = conflictOptions[index]; });
-  setText(els.exportJson, t('json')); setText(els.exportCsv, t('csv')); setText(els.copyFilteredUrls, t('copyFilteredUrls'));
+  setText(els.exportJson, t('json')); setText(els.exportCsv, t('csv')); setText(els.exportMarkdown, t('exportMarkdown')); setText(els.exportHtml, t('exportHtml')); setText(els.exportContactSheet, t('exportContactSheet')); setText(els.copyFilteredUrls, t('copyFilteredUrls'));
   setText(els.pageFavoriteSelected, t('pageFavoriteSelected')); setText(els.pageTagSelected, t('pageTagSelected')); setText(els.pageArchiveSelected, t('pageArchiveSelected'));
   setText(els.batchActionTagLabel, t('batchDialogTagLabel')); setText(els.batchActionCollectionLabel, t('batchDialogCollectionLabel')); setText(els.batchActionCancel, t('batchDialogCancel')); setText(els.batchActionConfirm, t('batchDialogConfirm'));
   if (els.batchActionClose) els.batchActionClose.setAttribute('aria-label', t('batchDialogClose'));
@@ -3676,6 +4424,7 @@ function applyLanguage() {
   const favoritesOption = [...(els.libraryScope?.options || [])].find((option) => option.value === 'favorites'); if (favoritesOption) favoritesOption.textContent = t('myFavorites');
   const historyTitle = document.querySelector('#historyView h2'); if (historyTitle) historyTitle.textContent = t('historyTitle');
   setText(els.clearHistory, t('clearHistory'));
+  setText(els.refreshHistory, t('refresh'));
   const blocks = [...document.querySelectorAll('#historyView .history-block-heading strong')]; if (blocks[0]) blocks[0].textContent = t('recentScans'); if (blocks[1]) blocks[1].textContent = t('downloads');
   const historyEmptyTitle = document.querySelector('#historyEmpty strong'); if (historyEmptyTitle) historyEmptyTitle.textContent = t('historyEmpty');
   const historyEmptyHint = document.querySelector('#historyEmpty span'); if (historyEmptyHint) historyEmptyHint.textContent = t('historyEmptyHint');
@@ -3711,6 +4460,8 @@ function applyLanguage() {
   renderCollectionOptions();
   renderSmartCollectionOptions();
   renderSiteAdapters();
+  renderTabList();
+  updateMultiPageSummary();
   const settingsCards = [...document.querySelectorAll('#settingsView .settings-card')];
   const cardHeadings = settingsCards.map((card) => card.querySelector('h3'));
   const cardHints = settingsCards.map((card) => card.querySelector('.settings-card-hint'));
@@ -3720,11 +4471,15 @@ function applyLanguage() {
   if (cardHints[0]) cardHints[0].textContent = t('appliesToSite');
   if (cardHints[1]) cardHints[1].textContent = t('matchesByHost');
   if (cardHints[2]) cardHints[2].textContent = t('noImageSync');
-  if (cardHeadings[3]) cardHeadings[3].textContent = t('configMigration');
-  if (cardHints[3]) cardHints[3].textContent = t('json');
-  [t('customScanRules'), t('siteAdapters'), t('syncTitle'), t('configMigration')].forEach((label, index) => { if (settingsCards[index]) settingsCards[index].setAttribute('aria-label', label); });
+  if (cardHeadings[3]) cardHeadings[3].textContent = t('appearanceTitle');
+  if (cardHeadings[4]) cardHeadings[4].textContent = t('configMigration');
+  if (cardHints[3]) cardHints[3].textContent = t('localSettings');
+  if (cardHints[4]) cardHints[4].textContent = t('json');
+  [t('customScanRules'), t('siteAdapters'), t('syncTitle'), t('appearanceTitle'), t('configMigration')].forEach((label, index) => { if (settingsCards[index]) settingsCards[index].setAttribute('aria-label', label); });
   const migrationNote = document.querySelector('.settings-migration-note'); if (migrationNote) migrationNote.textContent = t('configMigrationNote');
   setText(els.exportScanConfig, t('exportScanConfig')); setText(els.importScanConfig, t('importScanConfig'));
+  setText(els.appearanceTitle, t('appearanceTitle')); setText(els.themeModeLabel, t('themeMode')); setText(els.compactModeLabel, t('compactMode')); setText(els.compactModeHint, t('compactModeHint')); setText(els.openShortcuts, t('openShortcuts')); if (els.shortcutStatus) els.shortcutStatus.textContent = t('shortcutHint');
+  const themeOptions = [t('themeAuto'), t('themeLight'), t('themeDark')]; [...(els.themeMode?.options || [])].forEach((option, index) => { if (themeOptions[index]) option.textContent = themeOptions[index]; });
   const fieldLabels = [...document.querySelectorAll('#settingsView .settings-field > span')];
   [t('includeSelectors'), t('excludeSelectors'), t('hostPattern'), t('imageSelector'), t('extraAttributes'), t('archiveCollection')].forEach((label, index) => { if (fieldLabels[index]) fieldLabels[index].textContent = label; });
   const fieldHints = [...document.querySelectorAll('#settingsView .settings-field small')];
@@ -3771,6 +4526,7 @@ function updateScanStats() {
     skipped: Number(stats.skipped) || 0,
     dimensions: Number(stats.dimensionsChecked) || 0,
     failed: Number(stats.dimensionsFailed) || 0,
+    reused: Number(stats.metadataReused) || 0,
     partial: stats.partial ? ' · ' + t('scanPartial') : ''
   };
   els.scanStats.textContent = t('scanStats', values);

@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录当前 `2.9.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
+本文档记录当前 `3.0.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
 
 最后更新：2026-09-03
 
@@ -8,8 +8,8 @@
 
 - [x] `2.7.0` 稳定性与任务可靠性已完成并发布。
 - [x] `2.8.0` 智能集合与可视化筛选增强已完成并发布。
-- [x] `2.9.0` 主视图聚焦与操作界面优化已完成，待发布。
-- [ ] `3.0.0` 多页面采集工作流待开发。
+- [x] `2.9.0` 主视图聚焦与操作界面优化已完成并发布。
+- [x] `3.0.0` 多页面采集工作流实现已完成，待真实 Chrome 交互验收后发布。
 
 ## 1.0.1
 
@@ -122,7 +122,7 @@
 
 ## English
 
-This document tracks the current `2.9.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
+This document tracks the current `3.0.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
 
 Last updated: 2026-09-03
 
@@ -130,8 +130,8 @@ Last updated: 2026-09-03
 
 - [x] `2.7.0` stability and task-reliability work is complete and released.
 - [x] `2.8.0` smart-collection and visual-filter enhancements are complete and released.
-- [x] `2.9.0` primary-workspace focus and UI refinement are complete and ready for release.
-- [ ] `3.0.0` multi-page collection workflows are planned.
+- [x] `2.9.0` primary-workspace focus and UI refinement are complete and released.
+- [x] `3.0.0` multi-page collection workflows are implemented; release awaits real Chrome interaction validation.
 
 ### 1.0.1 core experience
 
@@ -425,23 +425,23 @@ Last updated: 2026-09-03
 
 ### 中文
 
-- [ ] 支持采集当前标签页、选中的多个标签页或整个窗口中的图片。
-- [ ] 支持将多个页面的结果合并到同一下载任务，并按域名、页面或日期创建 ZIP 子目录。
-- [ ] 增加站点级采集历史和增量扫描，只处理上次扫描后新增或变化的图片。
-- [ ] 支持从扫描历史恢复筛选条件、重新打开来源页面和重新执行下载任务。
-- [ ] 支持导出为 Markdown 图库、HTML 图库和图片联系表。
-- [ ] 增加可配置快捷键和右键菜单中的“保存到指定集合”操作。
-- [ ] 完善深色模式、紧凑模式、焦点状态和键盘操作，提升无障碍体验。
+- [x] 支持采集当前标签页、选中的多个标签页或整个窗口中的图片。
+- [x] 支持将多个页面的结果合并到同一下载任务，并按域名、页面或日期创建 ZIP 子目录。
+- [x] 增加站点级采集历史和增量扫描，只处理上次扫描后新增或变化的图片。
+- [x] 支持从扫描历史恢复筛选条件、重新打开来源页面和重新执行下载任务。
+- [x] 支持导出为 Markdown 图库、HTML 图库和图片联系表。
+- [x] 增加可配置快捷键和右键菜单中的“保存到指定集合”操作。
+- [x] 完善深色模式、紧凑模式、焦点状态和键盘操作，提升无障碍体验。
 
 ### English
 
-- [ ] Collect images from the current tab, selected tabs, or the entire window.
-- [ ] Merge results from multiple pages into one download task and create ZIP subfolders by hostname, page, or date.
-- [ ] Add site-level scan history and incremental scanning that processes only new or changed images.
-- [ ] Restore filters from scan history, reopen source pages, and rerun download tasks.
-- [ ] Export image galleries as Markdown, HTML, or contact sheets.
-- [ ] Add configurable keyboard shortcuts and a context-menu action to save an image to a selected collection.
-- [ ] Improve dark mode, compact mode, focus states, and keyboard interaction for accessibility.
+- [x] Collect images from the current tab, selected tabs, or the entire window.
+- [x] Merge results from multiple pages into one download task and create ZIP subfolders by hostname, page, or date.
+- [x] Add site-level scan history and incremental scanning that processes only new or changed images.
+- [x] Restore filters from scan history, reopen source pages, and rerun download tasks.
+- [x] Export image galleries as Markdown, HTML, or contact sheets.
+- [x] Add configurable keyboard shortcuts and a context-menu action to save an image to a selected collection.
+- [x] Improve dark mode, compact mode, focus states, and keyboard interaction for accessibility.
 
 ## 3.1.0 asset management and deduplication
 

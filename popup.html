@@ -30,6 +30,25 @@
         </div>
       </section>
 
+      <details id="multiPagePanel" class="multi-page-panel">
+        <summary class="filter-summary">
+          <span class="filter-summary-copy"><span id="multiPageEyebrow" class="eyebrow">MULTI-PAGE</span><span id="multiPageTitle" class="filter-title">多页面采集</span></span>
+          <span class="filter-summary-meta"><span id="multiPageStatus" class="filter-active-count">当前标签页</span><span class="details-chevron" aria-hidden="true">⌄</span></span>
+        </summary>
+        <div class="multi-page-content">
+          <div class="multi-page-toolbar">
+            <label class="multi-page-scope"><span id="multiPageScopeLabel">采集范围</span><select id="multiPageScope" aria-label="采集范围"><option value="current">当前标签页</option><option value="selected">选中的标签页</option><option value="window">当前窗口全部标签页</option></select></label>
+            <span id="multiPageHint" class="format-hint">选择多个标签页后合并结果</span>
+          </div>
+          <div id="tabSelectionList" class="tab-selection-list" role="group" aria-label="选择标签页"></div>
+          <div class="multi-page-actions">
+            <button id="selectAllTabs" class="subtle-button" type="button">全选标签页</button>
+            <button id="clearSelectedTabs" class="subtle-button" type="button">清除选择</button>
+            <button id="scanMultiPage" class="primary-button" type="button">开始采集</button>
+          </div>
+        </div>
+      </details>
+
       <nav class="view-switcher" aria-label="视图切换">
         <button id="pageViewButton" class="view-tab active" type="button" aria-selected="true">当前页面</button>
         <button id="libraryViewButton" class="view-tab" type="button" aria-selected="false">素材库 <span id="favoriteCount">0</span></button>
@@ -211,6 +230,10 @@
               <option value="domain">按网站</option>
               <option value="format">按格式</option>
               <option value="domain-format">按网站 / 格式</option>
+              <option value="page">按页面</option>
+              <option value="date">按日期</option>
+              <option value="domain-page">按网站 / 页面</option>
+              <option value="domain-date">按网站 / 日期</option>
             </select></label>
             <label><span>文件冲突</span><select id="conflictAction" aria-label="文件冲突处理方式">
               <option value="uniquify">自动重命名</option>
@@ -223,6 +246,9 @@
           <div class="utility-actions">
             <button id="exportJson" type="button">导出 JSON</button>
             <button id="exportCsv" type="button">导出 CSV</button>
+            <button id="exportMarkdown" type="button">导出 Markdown</button>
+            <button id="exportHtml" type="button">导出 HTML</button>
+            <button id="exportContactSheet" type="button">导出联系表</button>
           </div>
         </div>
         <div class="page-batch-actions">
@@ -290,6 +316,9 @@
           <button id="exportLibrary" class="subtle-button" type="button">导出收藏数据</button>
           <button id="exportLibraryResultsJson" class="subtle-button" type="button">导出筛选 JSON</button>
           <button id="exportLibraryResultsCsv" class="subtle-button" type="button">导出筛选 CSV</button>
+          <button id="exportLibraryMarkdown" class="subtle-button" type="button">导出 Markdown</button>
+          <button id="exportLibraryHtml" class="subtle-button" type="button">导出 HTML</button>
+          <button id="exportLibraryContactSheet" class="subtle-button" type="button">导出联系表</button>
           <button id="importLibrary" class="subtle-button" type="button">导入数据</button>
           <input id="importLibraryFile" type="file" accept="application/json,.json" hidden />
         </div>
@@ -390,6 +419,12 @@
           <div class="settings-card-heading"><div><p class="eyebrow">SYNC</p><h3>可选设置同步</h3></div><span class="settings-card-hint">不上传图片</span></div>
           <label class="sync-option"><input id="syncSettings" type="checkbox" /><span><strong>使用 Chrome 同步设置</strong><small>仅同步扫描规则、站点适配器和偏好，不同步图片、缓存或历史记录。</small></span></label>
           <button id="saveSyncSettings" class="subtle-button" type="button">保存同步设置</button>
+        </section>
+        <section class="settings-card" aria-label="外观与快捷键">
+          <div class="settings-card-heading"><div><p class="eyebrow">APPEARANCE</p><h3 id="appearanceTitle">外观与快捷键</h3></div><span class="settings-card-hint">本地设置</span></div>
+          <label class="settings-field"><span id="themeModeLabel">主题</span><select id="themeMode" aria-label="主题"><option value="auto">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
+          <label class="sync-option"><input id="compactMode" type="checkbox" /><span><strong id="compactModeLabel">紧凑模式</strong><small id="compactModeHint">减少间距，在窄侧栏显示更多图片。</small></span></label>
+          <div class="settings-inline-actions"><button id="openShortcuts" class="subtle-button" type="button">配置快捷键</button><span id="shortcutStatus" class="settings-field-hint"></span></div>
         </section>
         <section class="settings-card" aria-label="扫描配置迁移">
           <div class="settings-card-heading"><div><p class="eyebrow">PORTABILITY</p><h3>扫描配置迁移</h3></div><span class="settings-card-hint">JSON</span></div>

@@ -14,22 +14,27 @@ const metadataCache = new Map();
 const METADATA_CACHE_TTL = 5 * 60 * 1000;
 const IMAGE_REQUEST_TIMEOUT_MS = 15000;
 const METADATA_REQUEST_TIMEOUT_MS = 10000;
+const MAX_ZIP_IMAGES = 1000;
+const MAX_ZIP_BYTES = 256 * 1024 * 1024;
+const MAX_ZIP_DURATION_MS = 5 * 60 * 1000;
 
 const WORKER_TRANSLATIONS = {
   zh: {
     scan: '扫描当前页面', downloadImage: '下载当前图片', favoriteImage: '收藏当前图片',
+    saveToCollection: '保存到指定集合',
     queued: '等待下载队列', queueAhead: '已加入下载队列，前方 {count} 个任务', queueStarting: '正在启动下载任务',
     prepareDownload: '准备提交下载任务', cancelTask: '下载任务已取消', submitting: '正在提交 {current}/{total}：{name}', processed: '已处理 {count}/{total} 张图片', submitted: '下载任务已提交，成功 {count} 张', noStart: '没有图片能够开始下载',
-    prepareRead: '准备读取图片', reading: '正在读取 {current}/{total}：{name}', readCount: '已读取 {count}/{total} 张图片', noZipImages: '没有可加入 ZIP 的图片', cannotRead: '图片无法读取，可能受跨域或防盗链限制', compressing: '正在压缩 {count} 张图片', zipSubmitted: 'ZIP 已提交下载，共 {count} 张图片', zipFailed: 'ZIP 下载失败',
+    prepareRead: '准备读取图片', reading: '正在读取 {current}/{total}：{name}', readCount: '已读取 {count}/{total} 张图片', noZipImages: '没有可加入 ZIP 的图片', cannotRead: '图片无法读取，可能受跨域或防盗链限制', zipLimit: 'ZIP 已达到图片数量或总大小上限', zipTimeout: 'ZIP 读取时间已达到上限', compressing: '正在压缩 {count} 张图片', zipSubmitted: 'ZIP 已提交下载，共 {count} 张图片', zipFailed: 'ZIP 下载失败',
     taskComplete: '任务完成', taskFailed: '下载任务失败', paused: '任务已暂停，当前项目完成后等待继续', resumed: '任务继续执行',
     downloadFailed: '下载失败', readFailed: '读取失败', queueFailed: '下载任务失败',
     loginRequired: '需要登录后才能访问', forbidden: '服务器拒绝访问，可能存在防盗链', notFound: '图片不存在或链接已失效', tooMany: '请求过于频繁，请稍后重试', serverError: '图片服务器暂时不可用', networkError: '网络请求失败或被跨域策略阻止', requestTimeout: '图片请求超时，可能是网络较慢或服务器未响应'
   },
   en: {
     scan: 'Scan current page', downloadImage: 'Download this image', favoriteImage: 'Favorite this image',
+    saveToCollection: 'Save to collection',
     queued: 'Download queue', queueAhead: 'Added to queue; {count} task(s) ahead', queueStarting: 'Starting download task',
     prepareDownload: 'Preparing download tasks', cancelTask: 'Download task cancelled', submitting: 'Submitting {current}/{total}: {name}', processed: 'Processed {count}/{total} image(s)', submitted: 'Download tasks submitted; {count} succeeded', noStart: 'No image could be started',
-    prepareRead: 'Preparing to read images', reading: 'Reading {current}/{total}: {name}', readCount: 'Read {count}/{total} image(s)', noZipImages: 'No images could be added to the ZIP', cannotRead: 'Images could not be read; cross-origin or hotlink protection may be blocking access', compressing: 'Compressing {count} image(s)', zipSubmitted: 'ZIP download submitted with {count} image(s)', zipFailed: 'ZIP download failed',
+    prepareRead: 'Preparing to read images', reading: 'Reading {current}/{total}: {name}', readCount: 'Read {count}/{total} image(s)', noZipImages: 'No images could be added to the ZIP', cannotRead: 'Images could not be read; cross-origin or hotlink protection may be blocking access', zipLimit: 'The ZIP reached its image-count or total-size limit', zipTimeout: 'ZIP reading reached its time limit', compressing: 'Compressing {count} image(s)', zipSubmitted: 'ZIP download submitted with {count} image(s)', zipFailed: 'ZIP download failed',
     taskComplete: 'Task complete', taskFailed: 'Download task failed', paused: 'Task paused; it will continue after the current item', resumed: 'Task resumed',
     downloadFailed: 'Download failed', readFailed: 'Read failed', queueFailed: 'Download task failed',
     loginRequired: 'Sign-in is required to access this image', forbidden: 'The server rejected the request; hotlink protection may be enabled', notFound: 'The image does not exist or the link has expired', tooMany: 'Too many requests; try again later', serverError: 'The image server is temporarily unavailable', networkError: 'The network request failed or was blocked by cross-origin policy', requestTimeout: 'The image request timed out; the network may be slow or the server may not respond'
@@ -96,6 +101,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ ok: true });
     return true;
   }
+  if (message.type === 'collectionsChanged') {
+    createContextMenus();
+    sendResponse({ ok: true });
+    return true;
+  }
   return false;
 });
 
@@ -103,7 +113,9 @@ const CONTEXT_MENU_IDS = {
   root: 'image-collector-root',
   scan: 'image-collector-scan-page',
   download: 'image-collector-download-image',
-  favorite: 'image-collector-favorite-image'
+  favorite: 'image-collector-favorite-image',
+  collection: 'image-collector-save-collection',
+  collectionItemPrefix: 'image-collector-collection-'
 };
 
 async function configureSidePanel() {
@@ -118,6 +130,45 @@ async function configureSidePanel() {
 chrome.runtime.onInstalled.addListener(() => { createContextMenus(); configureSidePanel(); });
 chrome.runtime.onStartup.addListener(() => { createContextMenus(); configureSidePanel(); });
 void configureSidePanel();
+
+const SHORTCUT_COMMANDS = new Set(['open-collector', 'scan-current-page', 'scan-selected-tabs']);
+
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function sendShortcutToPanel(command) {
+  for (const delay of [0, 120, 350, 800, 1400]) {
+    if (delay) await wait(delay);
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'shortcut', command });
+      // A mounted panel can receive the message before its async init has
+      // completed. Keep the persisted command until the panel explicitly
+      // acknowledges that it handled it.
+      if (response?.handled === true) return true;
+    } catch {
+      // The side panel may still be initializing. Retry after it has mounted.
+    }
+  }
+  return false;
+}
+
+chrome.commands?.onCommand.addListener((command) => {
+  if (!SHORTCUT_COMMANDS.has(command)) return;
+  (async () => {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs?.[0];
+    if (!tab?.id) return;
+    const pendingShortcut = { command, createdAt: Date.now() };
+    try { await chrome.storage.local.set({ pendingShortcut }); } catch { /* Best effort fallback for restricted profiles. */ }
+    try { await openCollectorPanel(tab); } catch { return; }
+    const delivered = await sendShortcutToPanel(command);
+    if (delivered) {
+      try { await chrome.storage.local.remove('pendingShortcut'); } catch { /* Best effort only. */ }
+    }
+  })().catch(() => {});
+});
+
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === CONTEXT_MENU_IDS.scan) {
     openCollectorPanel(tab).catch(() => {});
@@ -128,16 +179,32 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     return;
   }
   if (info.menuItemId === CONTEXT_MENU_IDS.favorite) handleContextFavorite(info, tab).catch(() => {});
+  if (String(info.menuItemId || '').startsWith(CONTEXT_MENU_IDS.collectionItemPrefix)) {
+    const collectionId = String(info.menuItemId).slice(CONTEXT_MENU_IDS.collectionItemPrefix.length);
+    handleContextSaveCollection(info, tab, collectionId).catch(() => {});
+  }
 });
 
 async function createContextMenus() {
   const language = await getLanguage();
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({ id: CONTEXT_MENU_IDS.root, title: 'Image Collector', contexts: ['page', 'image'] });
-    chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.scan, title: workerText(language, 'scan'), contexts: ['page'] });
-    chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.download, title: workerText(language, 'downloadImage'), contexts: ['image'] });
-    chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.favorite, title: workerText(language, 'favoriteImage'), contexts: ['image'] });
-  });
+  let collections = [];
+  try { collections = await ImageCollectorDB.listCollections(); } catch { collections = []; }
+  await new Promise((resolve) => chrome.contextMenus.removeAll(resolve));
+  chrome.contextMenus.create({ id: CONTEXT_MENU_IDS.root, title: 'Image Collector', contexts: ['page', 'image'] });
+  chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.scan, title: workerText(language, 'scan'), contexts: ['page'] });
+  chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.download, title: workerText(language, 'downloadImage'), contexts: ['image'] });
+  chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.favorite, title: workerText(language, 'favoriteImage'), contexts: ['image'] });
+  if (collections.length) {
+    chrome.contextMenus.create({ parentId: CONTEXT_MENU_IDS.root, id: CONTEXT_MENU_IDS.collection, title: workerText(language, 'saveToCollection'), contexts: ['image'] });
+    collections.slice(0, 50).forEach((collection) => {
+      chrome.contextMenus.create({
+        parentId: CONTEXT_MENU_IDS.collection,
+        id: CONTEXT_MENU_IDS.collectionItemPrefix + collection.id,
+        title: String(collection.name || 'Collection').slice(0, 80),
+        contexts: ['image']
+      });
+    });
+  }
 }
 
 async function openCollectorPanel(tab) {
@@ -176,6 +243,21 @@ async function handleContextFavorite(info, tab) {
     await ImageCollectorDB.bulkUpsertAndUpdateImages([image], { favorite: true });
   } catch {
     // The context action should not interrupt the page when local storage is unavailable.
+  }
+}
+
+async function handleContextSaveCollection(info, tab, collectionId) {
+  const image = contextImage(info, tab);
+  if (!image || !collectionId) return;
+  let collections = [];
+  try { collections = await ImageCollectorDB.listCollections(); } catch { return; }
+  if (!collections.some((collection) => collection.id === collectionId)) return;
+  try {
+    await ImageCollectorDB.bulkUpsertAndUpdateImages([image], (record) => ({
+      collectionIds: [...new Set([...(record.collectionIds || []), collectionId])]
+    }));
+  } catch {
+    // Saving from the context menu is best effort and must not interrupt the page.
   }
 }
 
@@ -245,7 +327,7 @@ async function downloadFileWithFallback(image, saveAs, settings) {
   throw lastError || new Error('No image URL available');
 }
 
-async function readImageWithFallback(image, job) {
+async function readImageWithFallback(image, job, maxBytes = Infinity) {
   let lastError = null;
   for (const url of imageCandidates(image)) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -259,12 +341,19 @@ async function readImageWithFallback(image, job) {
       try {
         const response = await fetch(url, { credentials: 'omit', redirect: 'follow', signal: controller.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const contentType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+        // Servers sometimes return an HTML login page with a 200 status. Do
+        // not cache or place that response into a ZIP as if it were an image.
+        if (contentType && !contentType.startsWith('image/')) throw new Error(`Unexpected content type: ${contentType}`);
+        const contentLength = Number(response.headers.get('content-length'));
+        if (Number.isFinite(contentLength) && contentLength > maxBytes) throw new Error('Image exceeds ZIP size limit');
         return {
           url,
-          contentType: response.headers.get('content-type') || '',
-          data: new Uint8Array(await response.arrayBuffer())
+          contentType,
+          data: await readResponseBytes(response, maxBytes)
         };
       } catch (error) {
+        if (/exceeds ZIP size limit/i.test(String(error?.message || error))) controller.abort();
         if (timedOut) {
           const timeoutError = new Error('Image request timed out');
           timeoutError.name = 'TimeoutError';
@@ -280,6 +369,35 @@ async function readImageWithFallback(image, job) {
     }
   }
   throw lastError || new Error('No image URL available');
+}
+
+async function readResponseBytes(response, maxBytes = Infinity) {
+  if (!Number.isFinite(maxBytes) || maxBytes < 0 || !response.body?.getReader) {
+    const data = new Uint8Array(await response.arrayBuffer());
+    if (Number.isFinite(maxBytes) && data.byteLength > maxBytes) throw new Error('Image exceeds ZIP size limit');
+    return data;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value?.byteLength || 0;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new Error('Image exceeds ZIP size limit');
+      }
+      if (value?.byteLength) chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const data = new Uint8Array(total);
+  let offset = 0;
+  chunks.forEach((chunk) => { data.set(chunk, offset); offset += chunk.byteLength; });
+  return data;
 }
 
 async function cacheImage(image) {
@@ -341,25 +459,37 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
   const failed = [];
   const completedUrls = [];
   const usedNames = new Set();
+  let totalBytes = 0;
   const total = images.length;
+  const deadline = Date.now() + MAX_ZIP_DURATION_MS;
   const job = getJob(jobId);
   await waitForResume(job);
   sendProgress(jobId, { phase: 'starting', completed: 0, total, failed: 0, percent: 0, detail: workerText(language, 'prepareRead') });
   for (const [index, image] of images.entries()) {
     await waitForResume(job);
     if (job.cancelled) return finishDownloadJob(jobId, { ok: false, failed, completedUrls, cancelled: true, error: workerText(language, 'cancelTask') }, total, failed.length, language);
+    if (Date.now() >= deadline) {
+      failed.push(...images.slice(index).map((pending) => ({ url: pending.url, candidateUrls: imageCandidates(pending), error: workerText(language, 'zipTimeout'), code: 'zip-timeout', stage: 'read' })));
+      break;
+    }
     sendProgress(jobId, {
       phase: 'reading', completed: index, total, failed: failed.length, percent: progressPercent(index, total),
       detail: workerText(language, 'reading', { current: index + 1, total, name: normalizeName(image, '', settings) })
     });
     try {
-      const { url: fetchedUrl, contentType, data } = await readImageWithFallback(image, job);
-      await ImageCollectorDB.putCachedImage(image.url, new Blob([data], { type: (contentType || '').split(';')[0] || 'application/octet-stream' }), { sourceUrl: fetchedUrl, mime: contentType }).catch(() => {});
-      const filename = normalizeName(image, contentType, { ...settings, dateFolder: false });
-      const name = uniqueName(zipPath(image, filename, settings.zipLayout || 'flat', settings, contentType), usedNames);
-      entries.push({ name, data });
-      completedUrls.push(image.url);
-      job.completedUrls.add(image.url);
+      const { url: fetchedUrl, contentType, data } = await readImageWithFallback(image, job, Math.max(0, MAX_ZIP_BYTES - totalBytes));
+      const byteLength = data?.byteLength ?? data?.length ?? 0;
+      if (entries.length >= MAX_ZIP_IMAGES || totalBytes + byteLength > MAX_ZIP_BYTES) {
+        failed.push({ url: image.url, candidateUrls: imageCandidates(image), error: workerText(language, 'zipLimit'), code: 'zip-limit', stage: 'read' });
+      } else {
+        await ImageCollectorDB.putCachedImage(image.url, new Blob([data], { type: (contentType || '').split(';')[0] || 'application/octet-stream' }), { sourceUrl: fetchedUrl, mime: contentType }).catch(() => {});
+        const filename = normalizeName(image, contentType, { ...settings, dateFolder: false });
+        const name = uniqueName(zipPath(image, filename, settings.zipLayout || 'flat', settings, contentType), usedNames);
+        entries.push({ name, data });
+        totalBytes += byteLength;
+        completedUrls.push(image.url);
+        job.completedUrls.add(image.url);
+      }
     } catch (error) {
       if (!job.cancelled) failed.push({ url: image.url, candidateUrls: imageCandidates(image), error: readableError(error, workerText(language, 'readFailed'), language), code: failureCode(error), stage: 'read' });
     }
@@ -613,10 +743,22 @@ function zipPath(image, name, layout, settings = {}, contentType = '') {
   let path = name;
   const hostname = hostnameFor(image.url);
   const format = formatFor(image, contentType);
+  const page = pageFolderFor(image);
   if (layout === 'domain') path = `${safeSegment(hostname)}/${name}`;
   if (layout === 'format') path = `${safeSegment(format)}/${name}`;
   if (layout === 'domain-format') path = `${safeSegment(hostname)}/${safeSegment(format)}/${name}`;
-  return settings.dateFolder ? `${dateStamp()}/${path}` : path;
+  if (layout === 'page') path = `${page}/${name}`;
+  if (layout === 'date') path = `${dateStamp()}/${name}`;
+  if (layout === 'domain-page') path = `${safeSegment(hostname)}/${page}/${name}`;
+  if (layout === 'domain-date') path = `${safeSegment(hostname)}/${dateStamp()}/${name}`;
+  return settings.dateFolder && layout !== 'date' ? `${dateStamp()}/${path}` : path;
+}
+
+function pageFolderFor(image) {
+  const title = image.pageTitle || image.pageName || image.pageUrl || image.frameUrl || 'page';
+  const index = Number(image.pageIndex);
+  const suffix = Number.isInteger(index) && index > 0 ? `-${index + 1}` : '';
+  return safeSegment(`${String(title).replace(/\s+/g, ' ').trim().slice(0, 80) || 'page'}${suffix}`);
 }
 
 function safeSegment(value) { return String(value ?? '').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').trim() || 'other'; }
@@ -660,6 +802,8 @@ function failureCode(error) {
   const status = message.match(/HTTP\s+(\d{3})\b/i)?.[1];
   if (status) return `http-${status}`;
   if (/Failed to fetch|NetworkError|Network request failed|Load failed|跨域/i.test(message)) return 'network';
+  if (/ZIP size limit/i.test(message)) return 'zip-limit';
+  if (/Unexpected content type/i.test(message)) return 'invalid-content-type';
   if (/No image URL available/i.test(message)) return 'missing-url';
   return 'unknown';
 }

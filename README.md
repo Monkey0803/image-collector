@@ -1,6 +1,6 @@
 # Image Collector
 
-> A lightweight Chrome extension for collecting images from the current webpage, filtering them by dimensions and format, and downloading selected images individually or as a ZIP archive.
+> A lightweight Chrome extension for collecting images from the current webpage or multiple tabs, filtering them by dimensions and format, and downloading selected images individually or as a ZIP archive.
 
 [中文](#中文) · [English](#english)
 
@@ -73,6 +73,13 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 主界面优先呈现当前页面、扫描状态、图片结果和下载 ZIP，减少首屏操作干扰
 - 尺寸、格式和来源筛选可收纳展开，并持续显示已启用筛选数量
 - 选择预设、批量操作和下载设置采用渐进式展开，保留完整能力但不遮挡主流程
+- 支持采集当前标签页、选中的多个标签页或当前窗口中的全部标签页，并合并结果
+- 多页面 ZIP 支持按页面、日期、网站/页面和网站/日期建立目录；同名页面会自动编号
+- 历史记录显示扫描页面数、新增/变化/移除数量，并支持恢复筛选、打开来源、重新扫描、下载和下载 ZIP
+- 支持导出 Markdown 图库、HTML 图库和图片联系表；图片加载失败时保留可识别的占位信息
+- 支持在 Chrome 快捷键页面自定义打开扩展、扫描当前页和扫描选中标签页的快捷键
+- 图片右键菜单支持保存到已有本地集合
+- 支持深色模式、紧凑模式、键盘焦点操作，以及跟随当前网页浏览器默认字号和缩放比例
 
 ### 安装方式
 
@@ -199,6 +206,17 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - “全部集合”和“未分类”可以快速切换本地文件夹视图。
 - “导出收藏数据”会生成包含收藏、标签和集合关系的 JSON；在另一台浏览器中使用“导入数据”可以合并恢复这些内容。
 - 顶部 `EN` / `中` 按钮可切换界面语言，语言偏好会保存在本机。
+
+#### 3.0.0 多页面采集与图库导出
+
+- 展开“多页面采集”，选择“当前标签页”“选中的标签页”或“当前窗口全部标签页”。选择标签页模式时，先勾选需要采集的标签页，再点击“开始采集”。Chrome 内部页、商店页等受保护页面会被跳过并显示为部分结果。
+- 多个页面的图片会合并到当前结果中，卡片仍保留页面来源。下载选中图片或 ZIP 时，可以使用“按页面”“按日期”“按网站 / 页面”和“按网站 / 日期”分组；页面名称会清理非法字符，同名页面会自动追加序号。
+- ZIP 读取受单张图片、总大小（256 MB）和总处理时间（5 分钟）限制；超过限制的项目会保留在失败列表中，便于重试或改用普通下载。
+- 每次完整扫描都会写入“历史”。历史条目可以恢复当时的筛选条件、打开来源页、重新扫描，或直接下载当次结果。重新扫描历史记录会自动打开缺失的来源页，并等待页面加载完成。
+- “导出 Markdown”“导出 HTML”会生成本地图库文件；“导出联系表”会生成图片缩略图网格。导出会优先读取本地缓存，无法加载的图片会显示失败占位，不会阻塞整个导出。
+- 在“设置 → 外观与快捷键”中可以打开 Chrome 快捷键配置页。默认提供打开扩展、扫描当前页和扫描选中标签页三个命令，快捷键可按个人习惯修改。
+- 在网页图片上右键打开 Image Collector 菜单，可以将当前图片保存到已有本地集合。新建集合后，右键菜单会自动刷新。
+- 网站级增量扫描会比较本次发现结果与上次扫描的页面签名；未变化且已有元数据的图片会复用本地记录，只对新增或变化图片重新探测。
 
 #### 1.4.0 批量工作流
 
@@ -357,6 +375,17 @@ image_2026.08.20.zip
 - 使用三级 CSS 令牌统一颜色、间距、圆角、阴影、焦点与主按钮状态，并优化窄侧栏排版。
 - 侧边栏文字会跟随当前标签页的浏览器缩放比例和浏览器默认字号变化，不缩放整个侧边栏布局。
 
+#### 3.0.0 多页面采集与图库导出
+
+- Expand **Multi-page collection** and choose **Current tab**, **Selected tabs**, or **All tabs in current window**. In selected-tab mode, check the tabs to include before clicking **Start collection**. Protected Chrome pages are skipped and reported as partial results.
+- Images from multiple pages are merged into one result while retaining page sources. ZIP downloads support **By page**, **By date**, **By site / page**, and **By site / date** layouts; unsafe page-name characters are cleaned and duplicate page names receive a numeric suffix.
+- ZIP reads are bounded per image, to 256 MB total, and to five minutes overall; items over a limit remain in the failure list so they can be retried or downloaded individually.
+- Every full scan is saved in **History**. A history entry can restore its filters, open source pages, rescan, download the result, or create a ZIP. Rescanning automatically opens missing source pages and waits for them to finish loading.
+- **Export Markdown** and **Export HTML** create local gallery files. **Export contact sheet** creates a thumbnail grid; cached data is preferred and failed images become placeholders so one failure does not block the whole export.
+- **Settings → Appearance & shortcuts** opens Chrome's shortcut configuration page. Three commands are provided for opening the collector, scanning the current tab, and scanning selected tabs, and their shortcuts can be customized.
+- Right-click a webpage image and use the Image Collector menu to save it to an existing local collection. The menu refreshes after a new collection is created.
+- Site-level incremental scanning compares page signatures with the previous scan. Unchanged images with existing metadata reuse their local records, while only new or changed images are inspected again.
+
 ### 权限说明
 
 扩展在 `manifest.json` 中声明了以下权限：
@@ -411,7 +440,7 @@ download_image/
 │   ├── icon-48.png     # 扩展管理页图标
 │   └── icon-128.png    # 扩展详情和安装页图标
 ├── LICENSE             # MIT 开源许可证
-├── TODO.md             # 2.9.0 已完成任务和后续路线图
+├── TODO.md             # 3.0.0 已完成任务和后续路线图
 └── README.md           # 中文和英文项目文档
 ```
 
@@ -512,6 +541,13 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Create `YYYY.MM.DD` date folders for regular downloads and ZIP entries, and place ZIP archives under `image_YYYY.MM.DD/`
 - Queue multiple download requests and run them in submission order
 - Report clearer causes for authentication, anti-hotlinking, network, and server failures
+- Collect images from the current tab, selected tabs, or all usable tabs in the current window
+- Merge multi-page results into one download task with ZIP layouts by page, date, site/page, or site/date
+- Save scan history with new/changed/removed counts and restore, reopen, rescan, download, or ZIP actions
+- Export Markdown galleries, HTML galleries, or contact sheets with failure placeholders
+- Configure shortcuts for opening the collector and scanning current or selected tabs
+- Save a webpage image to an existing local collection from the context menu
+- Reuse metadata for unchanged images during incremental scans, and follow the active page's default font size and zoom
 
 ### Installation
 
@@ -776,7 +812,7 @@ download_image/
 │   ├── icon-48.png     # Extensions management icon
 │   └── icon-128.png    # Extension detail and installation icon
 ├── LICENSE             # MIT open-source license
-├── TODO.md             # 2.9.0 checklist and future roadmap
+├── TODO.md             # 3.0.0 checklist and future roadmap
 └── README.md           # Chinese and English documentation
 ```
 
