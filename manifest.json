@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Image Collector",
-  "version": "2.9.0",
-  "description": "识别当前网页图片，支持自定义扫描规则、站点适配、尺寸筛选和文件或 ZIP 下载。",
+  "version": "3.0.0",
+  "description": "识别当前网页或多个标签页中的图片，支持自定义扫描规则、尺寸筛选和文件或 ZIP 下载。",
   "permissions": [
     "activeTab",
+    "tabs",
     "scripting",
     "downloads",
     "storage",
@@ -30,6 +31,20 @@
       "32": "icons/icon-32.png",
       "48": "icons/icon-48.png",
       "128": "icons/icon-128.png"
+    }
+  },
+  "commands": {
+    "scan-current-page": {
+      "suggested_key": { "default": "Ctrl+Shift+Y", "mac": "MacCtrl+Shift+Y" },
+      "description": "Scan the current page"
+    },
+    "scan-selected-tabs": {
+      "suggested_key": { "default": "Ctrl+Shift+U", "mac": "MacCtrl+Shift+U" },
+      "description": "Scan selected tabs"
+    },
+    "open-collector": {
+      "suggested_key": { "default": "Ctrl+Shift+J", "mac": "MacCtrl+Shift+J" },
+      "description": "Open Image Collector"
     }
   },
   "side_panel": {

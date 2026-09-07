@@ -88,6 +88,9 @@
   function normalizeImage(image) {
     const url = imageId(image?.url);
     if (!url) return null;
+    const pageUrls = [...new Set((Array.isArray(image.pageUrls) ? image.pageUrls : [image.pageUrl || image.frameUrl]).map((value) => String(value || '').trim()).filter(Boolean))];
+    const pageTitles = [...new Set((Array.isArray(image.pageTitles) ? image.pageTitles : [image.pageTitle]).map((value) => String(value || '').trim()).filter(Boolean))];
+    const tabIds = [...new Set((Array.isArray(image.tabIds) ? image.tabIds : [image.tabId]).map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0))];
     return {
       id: url,
       url,
@@ -100,6 +103,13 @@
       source: image.source || '',
       frameUrl: image.frameUrl || '',
       alt: image.alt || '',
+      pageUrl: pageUrls[0] || '',
+      pageTitle: pageTitles[0] || '',
+      tabId: tabIds[0] || 0,
+      pageIndex: Number.isInteger(Number(image.pageIndex)) ? Number(image.pageIndex) : 0,
+      pageUrls,
+      pageTitles,
+      tabIds,
       original: Boolean(image.original),
       domain: hostnameFor(url),
       favorite: Boolean(image.favorite),
@@ -120,6 +130,13 @@
       source: image.source || previous?.source || '',
       frameUrl: image.frameUrl || previous?.frameUrl || '',
       alt: image.alt || previous?.alt || '',
+      pageUrl: image.pageUrl || previous?.pageUrl || '',
+      pageTitle: image.pageTitle || previous?.pageTitle || '',
+      tabId: image.tabId || previous?.tabId || 0,
+      pageIndex: Number.isInteger(Number(image.pageIndex)) ? Number(image.pageIndex) : (previous?.pageIndex || 0),
+      pageUrls: [...new Set([...(image.pageUrls || []), ...(previous?.pageUrls || []), image.pageUrl || '', previous?.pageUrl || ''].filter(Boolean))],
+      pageTitles: [...new Set([...(image.pageTitles || []), ...(previous?.pageTitles || []), image.pageTitle || '', previous?.pageTitle || ''].filter(Boolean))],
+      tabIds: [...new Set([...(image.tabIds || []), ...(previous?.tabIds || []), image.tabId || 0, previous?.tabId || 0].filter((value) => Number.isInteger(Number(value)) && Number(value) > 0).map(Number))],
       original: image.original || Boolean(previous?.original),
       favorite: previous ? Boolean(previous.favorite) : image.favorite,
       tags: previous ? cleanTags(previous.tags) : image.tags,
@@ -255,14 +272,44 @@
   }
 
   async function saveScan(images, metadata = {}) {
-    const records = await upsertImages(images);
+    const incomingImages = Array.isArray(images) ? images : [];
+    const reuseUrls = new Set((Array.isArray(metadata.reuseUrls) ? metadata.reuseUrls : []).map(imageId).filter(Boolean));
+    // Existing, unchanged images already have a durable record. Avoid
+    // rewriting them on every scan so incremental scans remain incremental.
+    await upsertImages(incomingImages.filter((image) => !reuseUrls.has(imageId(image?.url))));
+    const imageIds = [...new Set(incomingImages.map((image) => imageId(image?.url)).filter(Boolean))];
+    const pages = (Array.isArray(metadata.pages) ? metadata.pages : []).map((page) => ({
+      tabId: Number(page?.tabId) || 0,
+      pageUrl: String(page?.pageUrl || '').trim(),
+      pageTitle: String(page?.pageTitle || '').trim(),
+      imageIds: Array.isArray(page?.imageIds) ? [...new Set(page.imageIds.map(imageId).filter(Boolean))] : [],
+      signatures: page?.signatures && typeof page.signatures === 'object' ? page.signatures : {},
+      count: Number(page?.count) || 0,
+      createdAt: Number(page?.createdAt) || Date.now()
+    })).filter((page) => page.pageUrl || page.imageIds.length);
+    const imageSnapshots = incomingImages.map((image) => normalizeImage(image)).filter(Boolean).map((image) => {
+      const { favorite: _favorite, tags: _tags, collectionIds: _collectionIds, updatedAt: _updatedAt, ...snapshot } = image;
+      // User-editable library fields are merged from the current record when
+      // a history item is restored; page/source metadata stays immutable.
+      return snapshot;
+    });
     const scan = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       pageUrl: metadata.pageUrl || '',
       pageTitle: metadata.pageTitle || '当前页面',
-      imageIds: records.map((record) => record.id),
-      count: records.length,
+      imageIds,
+      count: imageIds.length,
       duplicateCount: Number(metadata.duplicateCount) || 0,
+      scope: ['current', 'selected', 'window'].includes(metadata.scope) ? metadata.scope : 'current',
+      siteHost: String(metadata.siteHost || '').trim(),
+      pages,
+      imageSnapshots,
+      filters: metadata.filters && typeof metadata.filters === 'object' ? metadata.filters : {},
+      newCount: Number(metadata.newCount) || 0,
+      changedCount: Number(metadata.changedCount) || 0,
+      removedCount: Number(metadata.removedCount) || 0,
+      incremental: metadata.incremental !== false,
+      reuseCount: reuseUrls.size,
       createdAt: Date.now()
     };
     const db = await openDatabase();
@@ -297,6 +344,17 @@
     const transaction = db.transaction(SCAN_STORE, 'readonly');
     const records = await requestValue(transaction.objectStore(SCAN_STORE).getAll());
     return records.sort((left, right) => (right.updatedAt || right.createdAt) - (left.updatedAt || left.createdAt)).slice(0, limit);
+  }
+
+  async function findLatestScanForPages(pageUrls = []) {
+    const targets = new Set((Array.isArray(pageUrls) ? pageUrls : [pageUrls]).map((url) => String(url || '').trim()).filter(Boolean));
+    if (!targets.size) return null;
+    const scans = await listScans(200);
+    return scans.find((scan) => {
+      const pages = Array.isArray(scan.pages) && scan.pages.length ? scan.pages : [{ pageUrl: scan.pageUrl }];
+      const urls = new Set(pages.map((page) => String(page?.pageUrl || '').trim()).filter(Boolean));
+      return urls.size === targets.size && [...targets].every((url) => urls.has(url));
+    }) || null;
   }
 
   async function listDownloads(limit = 30) {
@@ -365,7 +423,20 @@
     if (!scan) return [];
     const transaction = db.transaction(IMAGE_STORE, 'readonly');
     const done = transactionDone(transaction);
-    const records = await Promise.all(scan.imageIds.map((id) => requestValue(transaction.objectStore(IMAGE_STORE).get(id))));
+    const imageIds = Array.isArray(scan.imageIds) ? scan.imageIds : [];
+    const snapshots = new Map((Array.isArray(scan.imageSnapshots) ? scan.imageSnapshots : []).map((image) => [imageId(image?.url), image]).filter(([id]) => id));
+    const records = await Promise.all(imageIds.map(async (id) => {
+      const current = await requestValue(transaction.objectStore(IMAGE_STORE).get(id));
+      const snapshot = snapshots.get(imageId(id));
+      if (!snapshot) return current;
+      return {
+        ...snapshot,
+        favorite: Boolean(current?.favorite),
+        tags: cleanTags(current?.tags),
+        collectionIds: cleanCollectionIds(current?.collectionIds),
+        updatedAt: current?.updatedAt || scan.createdAt || Date.now()
+      };
+    }));
     await done;
     return records.filter(Boolean);
   }
@@ -633,6 +704,7 @@
     saveScan,
     listImages,
     listScans,
+    findLatestScanForPages,
     listDownloads,
     getScanImages,
     setFavorite,
