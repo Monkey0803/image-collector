@@ -407,6 +407,9 @@ async function cacheImage(image) {
     const contentType = (result.contentType || '').split(';')[0] || 'application/octet-stream';
     const blob = new Blob([result.data], { type: contentType });
     const saved = await ImageCollectorDB.putCachedImage(image.url, blob, { sourceUrl: result.url, mime: contentType });
+    // A successful read is the authoritative source for exact and perceptual
+    // deduplication. Hashing is best-effort and never blocks the download.
+    ImageCollectorDB.analyzeImageBlob?.(image.url, blob, { mime: contentType, cacheState: saved ? 'cached' : 'uncached' }).catch(() => {});
     return { ok: saved, url: image.url, sourceUrl: result.url, size: blob.size, mime: contentType };
   } catch (error) {
     return { ok: false, url: image.url || '', error: error?.message || 'cache failed' };
@@ -482,7 +485,9 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
       if (entries.length >= MAX_ZIP_IMAGES || totalBytes + byteLength > MAX_ZIP_BYTES) {
         failed.push({ url: image.url, candidateUrls: imageCandidates(image), error: workerText(language, 'zipLimit'), code: 'zip-limit', stage: 'read' });
       } else {
-        await ImageCollectorDB.putCachedImage(image.url, new Blob([data], { type: (contentType || '').split(';')[0] || 'application/octet-stream' }), { sourceUrl: fetchedUrl, mime: contentType }).catch(() => {});
+        const blob = new Blob([data], { type: (contentType || '').split(';')[0] || 'application/octet-stream' });
+        await ImageCollectorDB.putCachedImage(image.url, blob, { sourceUrl: fetchedUrl, mime: contentType }).catch(() => {});
+        ImageCollectorDB.analyzeImageBlob?.(image.url, blob, { mime: contentType, cacheState: 'cached' }).catch(() => {});
         const filename = normalizeName(image, contentType, { ...settings, dateFolder: false });
         const name = uniqueName(zipPath(image, filename, settings.zipLayout || 'flat', settings, contentType), usedNames);
         entries.push({ name, data });

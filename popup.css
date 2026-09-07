@@ -538,6 +538,18 @@ details[open] > summary .details-chevron { transform: rotate(180deg); }
   .history-item-actions { width: 100%; max-width: none; justify-content: flex-start; padding-left: 33px; }
 }
 
+.duplicate-group-list { display: grid; gap: 8px; margin: 10px 0; }
+.duplicate-group { border: 1px solid var(--color-border); border-radius: 10px; padding: 8px; background: var(--color-surface-subtle); }
+.duplicate-item { display: block; width: 100%; margin-top: 5px; text-align: left; border: 0; background: transparent; color: var(--color-text); cursor: pointer; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.threshold-box { min-width: 120px; }
+.preview-details { margin-top: 10px; border-top: 1px solid var(--color-border); padding-top: 8px; font-size: 11px; }
+.preview-details dl { display: grid; grid-template-columns: 72px 1fr; gap: 4px 8px; margin: 0; }
+.preview-details dt { color: var(--color-text-muted); }
+.preview-details dd { margin: 0; overflow-wrap: anywhere; }
+.preview-candidates { display: grid; gap: 4px; margin-top: 8px; max-height: 90px; overflow: auto; }
+.candidate-url { border: 0; background: transparent; color: var(--color-accent, #4da3ff); text-align: left; font-size: 10px; overflow-wrap: anywhere; cursor: pointer; padding: 0; }
+.preview-detail-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+
 /* 3.0.0 — multi-page collection, accessibility, and appearance */
 .multi-page-panel { margin: 0; border: 1px solid var(--color-border); border-radius: var(--card-radius); background: var(--color-surface); box-shadow: var(--shadow-card); }
 .multi-page-panel > summary { list-style: none; }

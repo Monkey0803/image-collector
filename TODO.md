@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录当前 `3.0.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
+本文档记录当前 `3.1.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
 
 最后更新：2026-09-03
 
@@ -447,20 +447,20 @@ Last updated: 2026-09-03
 
 ### 中文
 
-- [ ] 增加基于文件内容哈希的精确去重，并在无法读取文件内容时回退到 URL 去重。
-- [ ] 增加基于感知哈希的相似图片分组，支持调整相似度阈值。
-- [ ] 显示重复图片组，并支持自动保留尺寸最大、文件最大或原图候选优先的版本。
-- [ ] 增加图片详情面板，展示完整 URL、候选地址、来源元素、iframe、MIME、文件大小、缓存状态和所属集合。
-- [ ] 支持从详情面板复制地址、打开来源页面、下载图片、编辑标签和调整集合关系。
-- [ ] 增加“仅清理失效图片”“仅清理未收藏图片”和“仅清理重复图片”等安全清理策略。
-- [ ] 明确区分“全选当前筛选结果”和“仅选择当前已加载结果”，并支持批量移动、移除标签和导出。
+- [x] 增加基于文件内容哈希的精确去重，并在无法读取文件内容时回退到 URL 去重。
+- [x] 增加基于感知哈希的相似图片分组，支持调整相似度阈值。
+- [x] 显示重复图片组，并支持自动保留尺寸最大、文件最大或原图候选优先的版本。
+- [x] 增加图片详情面板，展示完整 URL、候选地址、来源元素、iframe、MIME、文件大小、缓存状态和所属集合。
+- [x] 支持从详情面板复制地址、打开来源页面、下载图片、编辑标签和调整集合关系。
+- [x] 增加“仅清理失效图片”“仅清理未收藏图片”和“仅清理重复图片”等安全清理策略。
+- [x] 明确区分“全选当前筛选结果”和“仅选择当前已加载结果”，并支持批量移动、移除标签和导出。
 
 ### English
 
-- [ ] Add exact deduplication based on file-content hashes, falling back to URL deduplication when file content cannot be read.
-- [ ] Group visually similar images with perceptual hashes and allow users to adjust the similarity threshold.
-- [ ] Show duplicate groups and allow automatic retention of the largest-dimension, largest-file, or original-candidate version.
-- [ ] Add an image details panel with full URLs, candidate URLs, source element, iframe, MIME type, file size, cache state, and collections.
-- [ ] Allow copying addresses, opening the source page, downloading, editing tags, and changing collection memberships from the details panel.
-- [ ] Add safe cleanup modes for invalid images, non-favorited images, and duplicate images.
-- [ ] Clearly distinguish “select all filtered results” from “select currently loaded results” and support bulk moving, tag removal, and export.
+- [x] Add exact deduplication based on file-content hashes, falling back to URL deduplication when file content cannot be read.
+- [x] Group visually similar images with perceptual hashes and allow users to adjust the similarity threshold.
+- [x] Show duplicate groups and allow automatic retention of the largest-dimension, largest-file, or original-candidate version.
+- [x] Add an image details panel with full URLs, candidate URLs, source element, iframe, MIME type, file size, cache state, and collections.
+- [x] Allow copying addresses, opening the source page, downloading, editing tags, and changing collection memberships from the details panel.
+- [x] Add safe cleanup modes for invalid images, non-favorited images, and duplicate images.
+- [x] Clearly distinguish “select all filtered results” from “select currently loaded results” and support bulk moving, tag removal, and export.
