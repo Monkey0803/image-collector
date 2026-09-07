@@ -282,6 +282,9 @@
             <span aria-hidden="true">⌕</span>
             <input id="librarySearch" type="search" placeholder="搜索图片、域名或标签" autocomplete="off" />
           </label>
+          <select id="libraryDuplicateScope" aria-label="去重筛选"><option value="all">全部素材</option><option value="duplicates">重复图片</option><option value="similar">相似图片</option><option value="invalid">无效图片</option></select>
+          <select id="duplicateStrategy" aria-label="保留策略"><option value="largest-dimension">保留最大尺寸</option><option value="largest-file">保留最大文件</option><option value="original">优先原图</option></select>
+          <label class="search-box threshold-box"><span>相似阈值</span><input id="similarThreshold" type="range" min="0" max="32" value="8" /></label>
         </div>
         <section class="smart-collection-card" aria-label="智能集合管理">
           <div class="smart-collection-heading">
@@ -321,11 +324,13 @@
           <button id="exportLibraryContactSheet" class="subtle-button" type="button">导出联系表</button>
           <button id="importLibrary" class="subtle-button" type="button">导入数据</button>
           <input id="importLibraryFile" type="file" accept="application/json,.json" hidden />
+          <button id="cleanupInvalid" class="subtle-button danger" type="button">清理无效</button><button id="cleanupUnfavorited" class="subtle-button danger" type="button">清理未收藏</button><button id="cleanupDuplicates" class="subtle-button danger" type="button">清理重复</button>
         </div>
         <div id="libraryBatchToolbar" class="library-batch-toolbar" hidden>
-          <label><input id="selectAllLibrary" type="checkbox" /><span>全选</span></label><span id="librarySelectedSummary">已选 0</span><button id="invertLibrarySelection" class="subtle-button" type="button">反选</button><button id="clearLibrarySelection" class="subtle-button" type="button">清除选择</button>
-          <button id="bulkFavorite" class="subtle-button" type="button">批量收藏</button><button id="bulkTag" class="subtle-button" type="button">添加标签</button><button id="bulkCollection" class="subtle-button" type="button">归档到集合</button><button id="bulkDelete" class="subtle-button danger" type="button">删除</button><button id="libraryDownloadSelected" class="subtle-button" type="button" disabled>下载选中</button><button id="libraryZipSelected" class="subtle-button" type="button" disabled>下载 ZIP</button>
+          <label><input id="selectAllLibrary" type="checkbox" /><span>全选筛选结果</span></label><button id="selectLoadedLibrary" class="subtle-button" type="button">选择已加载</button><span id="librarySelectedSummary">已选 0</span><button id="invertLibrarySelection" class="subtle-button" type="button">反选</button><button id="clearLibrarySelection" class="subtle-button" type="button">清除选择</button>
+          <button id="bulkFavorite" class="subtle-button" type="button">批量收藏</button><button id="bulkTag" class="subtle-button" type="button">添加标签</button><button id="bulkRemoveTag" class="subtle-button" type="button">移除标签</button><button id="bulkCollection" class="subtle-button" type="button">归档到集合</button><button id="bulkDelete" class="subtle-button danger" type="button">删除</button><button id="libraryDownloadSelected" class="subtle-button" type="button" disabled>下载选中</button><button id="libraryZipSelected" class="subtle-button" type="button" disabled>下载 ZIP</button>
         </div>
+        <div id="duplicateGroupList" class="duplicate-group-list" hidden></div>
         <div class="library-filter-row">
           <select id="libraryFormat" aria-label="按格式筛选"><option value="all">全部格式</option><option value="jpeg">JPEG</option><option value="png">PNG</option><option value="webp">WEBP</option><option value="avif">AVIF</option><option value="other">其它</option></select>
           <input id="libraryMinWidth" type="number" min="0" step="10" placeholder="最小宽度" aria-label="素材库最小宽度" />
@@ -446,6 +451,7 @@
           </div>
           <p id="previewMeta" class="preview-meta"></p>
           <div class="preview-actions"><button id="copyImageUrl" class="secondary-button" type="button">复制原图地址</button><button id="openImageUrl" class="primary-button" type="button">在新标签页打开</button></div>
+          <section id="previewDetails" class="preview-details" aria-label="图片详情"><dl id="previewDetailsList"></dl><div id="previewCandidates" class="preview-candidates"></div><div class="preview-detail-actions"><button id="previewCopyCandidates" class="secondary-button" type="button">复制所有地址</button><button id="previewOpenSource" class="secondary-button" type="button">打开来源页面</button><button id="previewDownload" class="primary-button" type="button">下载图片</button><button id="previewEditTags" class="secondary-button" type="button">编辑标签</button><select id="previewCollectionSelect" aria-label="修改集合"></select></div></section>
         </div>
       </div>
       <div id="batchActionModal" class="batch-action-modal" hidden role="dialog" aria-modal="true" aria-labelledby="batchActionTitle" aria-describedby="batchActionDescription">

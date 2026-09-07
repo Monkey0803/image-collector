@@ -16,12 +16,19 @@ function pngDimensions(file) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-test('release metadata is aligned with the 3.0.0 milestone', () => {
-  assert.equal(manifest.version, '3.0.0');
+test('release metadata is aligned with the 3.1.0 milestone', () => {
+  assert.equal(manifest.version, '3.1.0');
+  assert.match(todo, /## 3\.1\.0 asset management and deduplication/);
+  assert.doesNotMatch(todo, /## 3\.1\.0 asset management and deduplication[\s\S]*- \[ \]/);
   assert.match(todo, /## 3\.0\.0 multi-page collection workflows/);
-  assert.match(todo, /current `3\.0\.0` release/);
-  assert.match(todo, /release awaits real Chrome interaction validation/);
   assert.match(read('README.md'), /current webpage or multiple tabs/);
+});
+
+test('3.1.0 asset management contracts are wired', () => {
+  for (const marker of ['hashBlob', 'perceptualHash', 'listDuplicateGroups', 'listSimilarGroups', 'cleanupImages', 'analyzeImageBlob']) assert.match(library, new RegExp(`function ${marker}`));
+  for (const id of ['libraryDuplicateScope', 'duplicateStrategy', 'similarThreshold', 'duplicateGroupList', 'previewDetails', 'selectLoadedLibrary', 'bulkRemoveTag', 'cleanupDuplicates']) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(popup, /renderDuplicateGroups/);
+  assert.match(popup, /renderPreviewDetails/);
 });
 
 test('3.0.0 icon assets are present, referenced, and readable at Chrome sizes', () => {

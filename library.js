@@ -2,7 +2,7 @@
   'use strict';
 
   const DB_NAME = 'image-collector-library';
-  const DB_VERSION = 3;
+  const DB_VERSION = 4;
   const IMAGE_STORE = 'images';
   const CACHE_STORE = 'imageCache';
   const SCAN_STORE = 'scans';
@@ -21,6 +21,12 @@
           store.createIndex('byFavorite', 'favorite');
           store.createIndex('byUpdatedAt', 'updatedAt');
           store.createIndex('byDomain', 'domain');
+          store.createIndex('byContentHash', 'contentHash');
+          store.createIndex('byPerceptualHash', 'perceptualHash');
+        } else {
+          const store = request.transaction.objectStore(IMAGE_STORE);
+          if (!store.indexNames.contains('byContentHash')) store.createIndex('byContentHash', 'contentHash');
+          if (!store.indexNames.contains('byPerceptualHash')) store.createIndex('byPerceptualHash', 'perceptualHash');
         }
         if (!db.objectStoreNames.contains(CACHE_STORE)) {
           const store = db.createObjectStore(CACHE_STORE, { keyPath: 'id' });
@@ -115,6 +121,14 @@
       favorite: Boolean(image.favorite),
       tags: cleanTags(image.tags),
       collectionIds: cleanCollectionIds(image.collectionIds),
+      candidateUrls: [...new Set((Array.isArray(image.candidateUrls) ? image.candidateUrls : [image.originalUrl, image.displayUrl, image.url]).map(imageId).filter(Boolean))].slice(0, 12),
+      sourceElement: String(image.sourceElement || '').slice(0, 500),
+      iframe: Boolean(image.iframe),
+      cacheState: ['cached', 'uncached', 'unknown'].includes(image.cacheState) ? image.cacheState : 'unknown',
+      contentHash: String(image.contentHash || '').trim().slice(0, 128),
+      perceptualHash: String(image.perceptualHash || '').trim().slice(0, 64),
+      valid: image.valid !== false,
+      invalidReason: String(image.invalidReason || '').slice(0, 240),
       updatedAt: Date.now()
     };
   }
@@ -141,6 +155,14 @@
       favorite: previous ? Boolean(previous.favorite) : image.favorite,
       tags: previous ? cleanTags(previous.tags) : image.tags,
       collectionIds: previous ? cleanCollectionIds(previous.collectionIds) : image.collectionIds,
+      candidateUrls: [...new Set([...(image.candidateUrls || []), ...(previous?.candidateUrls || []), image.url].filter(Boolean))].slice(0, 12),
+      sourceElement: image.sourceElement || previous?.sourceElement || '',
+      iframe: image.iframe || Boolean(previous?.iframe),
+      cacheState: image.cacheState !== 'unknown' ? image.cacheState : (previous?.cacheState || 'unknown'),
+      contentHash: image.contentHash || previous?.contentHash || '',
+      perceptualHash: image.perceptualHash || previous?.perceptualHash || '',
+      valid: image.valid === false ? false : previous?.valid !== false,
+      invalidReason: image.invalidReason || previous?.invalidReason || '',
       createdAt: previous?.createdAt || Date.now()
     };
   }
@@ -455,6 +477,103 @@
     return record;
   }
 
+  async function hashBlob(blob) {
+    if (!blob || typeof blob.arrayBuffer !== 'function' || !global.crypto?.subtle) return '';
+    const digest = await global.crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function perceptualHash(blob) {
+    if (!blob || typeof global.createImageBitmap !== 'function') return '';
+    let bitmap;
+    try {
+      bitmap = await global.createImageBitmap(blob);
+      const canvas = global.OffscreenCanvas ? new global.OffscreenCanvas(8, 8) : null;
+      if (!canvas) return '';
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) return '';
+      context.drawImage(bitmap, 0, 0, 8, 8);
+      const pixels = context.getImageData(0, 0, 8, 8).data;
+      const values = [];
+      for (let index = 0; index < pixels.length; index += 4) values.push((pixels[index] * 299 + pixels[index + 1] * 587 + pixels[index + 2] * 114) / 1000);
+      const average = values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
+      return values.map((value) => value >= average ? '1' : '0').join('');
+    } catch { return ''; }
+    finally { bitmap?.close?.(); }
+  }
+
+  async function analyzeImageBlob(url, blob, metadata = {}) {
+    const id = imageId(url);
+    if (!id || !blob) return null;
+    const [contentHash, perceptual] = await Promise.all([hashBlob(blob).catch(() => ''), perceptualHash(blob).catch(() => '')]);
+    return updateImage(id, {
+      contentHash,
+      perceptualHash: perceptual,
+      size: Number(blob.size) || 0,
+      mime: metadata.mime || blob.type || '',
+      cacheState: metadata.cacheState || 'cached',
+      valid: true,
+      invalidReason: ''
+    });
+  }
+
+  function duplicateKey(record) {
+    return record?.contentHash ? `content:${record.contentHash}` : `url:${String(record?.url || '').split('#')[0]}`;
+  }
+
+  async function listDuplicateGroups(strategy = 'largest-dimension') {
+    const records = await listImages();
+    const groups = new Map();
+    records.forEach((record) => {
+      const key = duplicateKey(record);
+      if (!key) return;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(record);
+    });
+    return [...groups.entries()].filter(([, items]) => items.length > 1).map(([key, items]) => {
+      const sorted = [...items].sort((left, right) => {
+        if (strategy === 'largest-file') return (right.size || 0) - (left.size || 0);
+        if (strategy === 'original') return Number(right.original) - Number(left.original) || (right.size || 0) - (left.size || 0);
+        return ((right.width || 0) * (right.height || 0)) - ((left.width || 0) * (left.height || 0)) || (right.size || 0) - (left.size || 0);
+      });
+      return { key, exact: key.startsWith('content:'), items: sorted, keeper: sorted[0]?.url || '' };
+    });
+  }
+
+  function hammingDistance(left, right) {
+    if (!left || !right || left.length !== right.length) return Number.MAX_SAFE_INTEGER;
+    let distance = 0;
+    for (let index = 0; index < left.length; index += 1) if (left[index] !== right[index]) distance += 1;
+    return distance;
+  }
+
+  async function listSimilarGroups(threshold = 8) {
+    const records = (await listImages()).filter((record) => record.perceptualHash);
+    const maxDistance = Math.max(0, Math.min(64, Number(threshold) || 8));
+    const groups = [];
+    const visited = new Set();
+    records.forEach((record) => {
+      if (visited.has(record.url)) return;
+      const items = records.filter((candidate) => hammingDistance(record.perceptualHash, candidate.perceptualHash) <= maxDistance);
+      if (items.length > 1) { items.forEach((item) => visited.add(item.url)); groups.push({ key: `similar:${record.perceptualHash}`, distance: maxDistance, items }); }
+    });
+    return groups;
+  }
+
+  async function cleanupImages(mode, strategy = 'largest-dimension') {
+    const records = await listImages();
+    let targets = [];
+    if (mode === 'invalid') targets = records.filter((record) => record.valid === false || !record.url);
+    else if (mode === 'unfavorited') targets = records.filter((record) => !record.favorite);
+    else if (mode === 'duplicates') {
+      const groups = await listDuplicateGroups(strategy);
+      const keepers = new Set(groups.map((group) => group.keeper));
+      targets = groups.flatMap((group) => group.items.filter((item) => !keepers.has(item.url)));
+    }
+    const count = await deleteImages(targets.map((record) => record.url));
+    return { count, urls: targets.map((record) => record.url) };
+  }
+
   function setFavorite(url, favorite) { return updateImage(url, { favorite }); }
 
   async function toggleFavorite(url) {
@@ -716,6 +835,7 @@
     createCollection,
     listCollections,
     setImageCollections,
+    updateImage,
     bulkUpdateImages,
     deleteImages,
     getStorageStats,
@@ -724,6 +844,12 @@
     importLibrary,
     countFavorites,
     clearHistory,
-    cleanTags
+    cleanTags,
+    hashBlob,
+    perceptualHash,
+    analyzeImageBlob,
+    listDuplicateGroups,
+    listSimilarGroups,
+    cleanupImages
   };
 })(typeof self === 'undefined' ? globalThis : self);
