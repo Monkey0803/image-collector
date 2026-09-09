@@ -9,7 +9,7 @@
 - [x] `2.7.0` 稳定性与任务可靠性已完成并发布。
 - [x] `2.8.0` 智能集合与可视化筛选增强已完成并发布。
 - [x] `2.9.0` 主视图聚焦与操作界面优化已完成并发布。
-- [x] `3.0.0` 多页面采集工作流实现已完成，待真实 Chrome 交互验收后发布。
+- [x] `3.0.0` 多页面采集工作流实现并发布；真实 Chrome 交互回归仍作为持续验收项。
 
 ## 1.0.1
 
@@ -122,7 +122,7 @@
 
 ## English
 
-This document tracks the current `3.0.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
+This document tracks the current `3.1.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
 
 Last updated: 2026-09-03
 
@@ -131,7 +131,7 @@ Last updated: 2026-09-03
 - [x] `2.7.0` stability and task-reliability work is complete and released.
 - [x] `2.8.0` smart-collection and visual-filter enhancements are complete and released.
 - [x] `2.9.0` primary-workspace focus and UI refinement are complete and released.
-- [x] `3.0.0` multi-page collection workflows are implemented; release awaits real Chrome interaction validation.
+- [x] `3.0.0` multi-page collection workflows are implemented and released; real Chrome interaction regression remains a continuous validation item.
 
 ### 1.0.1 core experience
 

@@ -444,7 +444,7 @@ download_image/
 │   ├── icon-48.png     # 扩展管理页图标
 │   └── icon-128.png    # 扩展详情和安装页图标
 ├── LICENSE             # MIT 开源许可证
-├── TODO.md             # 3.0.0 已完成任务和后续路线图
+├── TODO.md             # 3.1.0 已完成任务和后续路线图
 └── README.md           # 中文和英文项目文档
 ```
 
@@ -816,7 +816,7 @@ download_image/
 │   ├── icon-48.png     # Extensions management icon
 │   └── icon-128.png    # Extension detail and installation icon
 ├── LICENSE             # MIT open-source license
-├── TODO.md             # 3.0.0 checklist and future roadmap
+├── TODO.md             # 3.1.0 checklist and future roadmap
 └── README.md           # Chinese and English documentation
 ```
 

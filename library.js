@@ -517,6 +517,18 @@
     });
   }
 
+  async function backfillHashes(limit = 20) {
+    const records = (await listImages()).filter((record) => !record.contentHash);
+    let processed = 0;
+    for (const record of records.slice(0, Math.max(0, Number(limit) || 20))) {
+      const cached = await getCachedImage(record.url);
+      if (!cached?.blob) continue;
+      await analyzeImageBlob(record.url, cached.blob, { mime: cached.mime, cacheState: 'cached' }).catch(() => {});
+      processed += 1;
+    }
+    return processed;
+  }
+
   function duplicateKey(record) {
     return record?.contentHash ? `content:${record.contentHash}` : `url:${String(record?.url || '').split('#')[0]}`;
   }
@@ -697,9 +709,10 @@
     const ids = [...new Set((Array.isArray(urls) ? urls : []).map(imageId).filter(Boolean))];
     if (!ids.length) return 0;
     const db = await openDatabase();
-    const transaction = db.transaction(IMAGE_STORE, 'readwrite');
+    const transaction = db.transaction([IMAGE_STORE, CACHE_STORE], 'readwrite');
     const store = transaction.objectStore(IMAGE_STORE);
-    ids.forEach((id) => store.delete(id));
+    const cacheStore = transaction.objectStore(CACHE_STORE);
+    ids.forEach((id) => { store.delete(id); cacheStore.delete(id); });
     await transactionDone(transaction);
     return ids.length;
   }
@@ -848,6 +861,7 @@
     hashBlob,
     perceptualHash,
     analyzeImageBlob,
+    backfillHashes,
     listDuplicateGroups,
     listSimilarGroups,
     cleanupImages
