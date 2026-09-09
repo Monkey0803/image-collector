@@ -16,8 +16,8 @@ function pngDimensions(file) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-test('release metadata is aligned with the 3.1.0 milestone', () => {
-  assert.equal(manifest.version, '3.1.0');
+test('release metadata is aligned with the 3.2.0 milestone', () => {
+  assert.equal(manifest.version, '3.2.0');
   assert.match(todo, /## 3\.1\.0 asset management and deduplication/);
   const milestone = todo.split('## 3.1.0 asset management and deduplication')[1].split('## 3.2.0 release quality and validation')[0];
   assert.doesNotMatch(milestone, /- \[ \]/);
