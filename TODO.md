@@ -464,3 +464,21 @@ Last updated: 2026-09-03
 - [x] Allow copying addresses, opening the source page, downloading, editing tags, and changing collection memberships from the details panel.
 - [x] Add safe cleanup modes for invalid images, non-favorited images, and duplicate images.
 - [x] Clearly distinguish “select all filtered results” from “select currently loaded results” and support bulk moving, tag removal, and export.
+
+## 3.2.0 release quality and validation
+
+### 中文
+
+- [x] 增加可重复的扩展打包脚本，并在打包前校验 manifest、入口文件、图标和 JavaScript 语法。
+- [x] 在开发文档中说明本地打包和发布前检查方式。
+- [x] 建立真实 Chrome 核心流程回归清单，并记录当前页、多页面、历史和打包流程的实测结果。
+- [ ] 评估扩展网站访问权限，补充跨域、防盗链、失效图片和异常响应的验收用例。
+- [ ] 验证大页面、1000 张图片、缓存上限和大型 ZIP 的性能与稳定性。
+
+### English
+
+- [x] Add a reproducible extension packaging script that validates the manifest, entry points, icons, and JavaScript syntax before packaging.
+- [x] Document local packaging and pre-release checks.
+- [ ] Establish a real Chrome regression checklist covering current-page, multi-page, history, ZIP, Library, and shortcut flows.
+- [ ] Review website access permissions and add acceptance cases for cross-origin, hotlink-protected, expired, and malformed image responses.
+- [ ] Verify performance and stability with large pages, 1,000 images, cache limits, and large ZIP jobs.

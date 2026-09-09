@@ -19,7 +19,8 @@ function pngDimensions(file) {
 test('release metadata is aligned with the 3.1.0 milestone', () => {
   assert.equal(manifest.version, '3.1.0');
   assert.match(todo, /## 3\.1\.0 asset management and deduplication/);
-  assert.doesNotMatch(todo, /## 3\.1\.0 asset management and deduplication[\s\S]*- \[ \]/);
+  const milestone = todo.split('## 3.1.0 asset management and deduplication')[1].split('## 3.2.0 release quality and validation')[0];
+  assert.doesNotMatch(milestone, /- \[ \]/);
   assert.match(todo, /## 3\.0\.0 multi-page collection workflows/);
   assert.match(read('README.md'), /current webpage or multiple tabs/);
 });
@@ -49,6 +50,12 @@ test('manifest local entry points exist and shortcut defaults are distinct', () 
   }
   const defaults = Object.values(manifest.commands || {}).map((command) => command.suggested_key?.default).filter(Boolean);
   assert.equal(new Set(defaults).size, defaults.length);
+});
+
+test('scan-limit control is wired to runtime state', () => {
+  assert.match(read('popup.html'), /id="scanLimit"/);
+  assert.match(popup, /scanLimit: \$\('#scanLimit'\)/);
+  assert.match(popup, /on\(els\.scanLimit, 'change'/);
 });
 
 test('loading and progress recovery UI contracts remain wired', () => {
@@ -103,6 +110,7 @@ test('3.0.0 multi-page scanning and incremental metadata reuse are wired', () =>
   assert.match(popup, /selectedTabIds: \[\]/);
   assert.match(popup, /selectedTabIds: \[\.\.\.state\.selectedTabIds\]/);
   assert.match(popup, /currentIsPlaceholder/);
+  assert.match(popup, /tabListRefreshToken/);
   for (const id of ['multiPagePanel', 'tabSelectionList', 'scanMultiPage', 'exportMarkdown', 'exportHtml', 'exportContactSheet']) {
     assert.match(html, new RegExp(`id="${id}"`));
   }

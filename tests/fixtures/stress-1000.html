@@ -1,0 +1,17 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Image Collector stress fixture</title>
+<main id="images"></main>
+<script>
+  const root = document.querySelector('#images');
+  const fragment = document.createDocumentFragment();
+  for (let index = 0; index < 1000; index += 1) {
+    const image = document.createElement('img');
+    image.width = 64 + (index % 8) * 16;
+    image.height = 64 + (index % 6) * 16;
+    image.alt = `stress-${index}`;
+    image.src = `img.svg?index=${index}`;
+    fragment.append(image);
+  }
+  root.append(fragment);
+</script>

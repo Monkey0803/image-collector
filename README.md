@@ -444,6 +444,8 @@ download_image/
 │   ├── icon-48.png     # 扩展管理页图标
 │   └── icon-128.png    # 扩展详情和安装页图标
 ├── LICENSE             # MIT 开源许可证
+├── QA.md               # 发布前 Chrome 验收清单
+├── SECURITY.md         # 权限和本地数据边界说明
 ├── TODO.md             # 3.1.0 已完成任务和后续路线图
 └── README.md           # 中文和英文项目文档
 ```
@@ -458,6 +460,14 @@ download_image/
 node --check popup.js
 node --check service-worker.js
 ```
+
+生成可发布的扩展压缩包并同时执行 manifest、资源和 JavaScript 语法检查：
+
+```bash
+scripts/package-extension.sh
+```
+
+默认输出到 `dist/image-collector-<version>.zip`。压缩包只包含扩展运行所需文件，可以直接用于“加载已解压的扩展程序”前的解压测试。
 
 ### 在 GitHub 上发布
 
