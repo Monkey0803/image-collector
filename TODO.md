@@ -18,10 +18,12 @@
 ## 已知缺陷（2026-09-11 真机验收发现）
 
 - [x] `library.js` 的 `listImages({ favoriteOnly: true })` 曾使用 `IDBKeyRange.only(true)`，但 `favorite` 以布尔值存储，而布尔值不是合法的 IndexedDB 键，因此调用会抛 `DataError`，导出的 `countFavorites()` 完全不可用。已改为使用既有的内存过滤，不再查询 `byFavorite` 索引，并补充回归断言；界面原本未调用该 API，故无用户可见影响。
+- [ ] `service-worker.js:317` 的 `handleContextSaveCollection` 在读取本地集合失败时 `catch { return; }` 静默返回，右键“保存到指定集合”会无提示地什么都不做。与 `3.2.2` 修复的快捷键静默失败属同一类问题，但不在该版本范围内。
 
 ## Known defects (found by the 2026-09-11 real-browser acceptance)
 
 - [x] `listImages({ favoriteOnly: true })` in `library.js` used to call `IDBKeyRange.only(true)`, but `favorite` is stored as a boolean and booleans are not valid IndexedDB keys, so the call threw `DataError` and the exported `countFavorites()` was unusable. It now uses the existing in-memory filter and no longer queries the `byFavorite` index, with a regression assertion added. The UI never called this API, so there was no user-visible impact.
+- [ ] `handleContextSaveCollection` in `service-worker.js:317` returns silently via `catch { return; }` when reading local collections fails, so the right-click "save to a specific collection" action does nothing without any notice. Same class of silent failure as the shortcut bug fixed in `3.2.2`, but out of scope for that release.
 
 ## 1.0.1
 
