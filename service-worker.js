@@ -15,6 +15,9 @@ const METADATA_CACHE_TTL = 5 * 60 * 1000;
 const IMAGE_REQUEST_TIMEOUT_MS = 15000;
 const METADATA_REQUEST_TIMEOUT_MS = 10000;
 const MAX_ZIP_IMAGES = 1000;
+// Must match MAX_METADATA_INSPECTIONS in popup.js: one HEAD request per image.
+const MAX_METADATA_INSPECTIONS = 1000;
+const METADATA_INSPECT_BUDGET_MS = 25000;
 const MAX_ZIP_BYTES = 256 * 1024 * 1024;
 const MAX_ZIP_DURATION_MS = 5 * 60 * 1000;
 
@@ -527,8 +530,8 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
 }
 
 async function inspectImages(images) {
-  const source = [...new Map(images.slice(0, 300).filter((image) => image?.url).map((image) => [image.url, image])).values()];
-  const deadline = Date.now() + 9000;
+  const source = [...new Map(images.slice(0, MAX_METADATA_INSPECTIONS).filter((image) => image?.url).map((image) => [image.url, image])).values()];
+  const deadline = Date.now() + METADATA_INSPECT_BUDGET_MS;
   const inspectOne = async (image) => {
     if (Date.now() >= deadline) return { url: image.url, size: 0, mime: '' };
     const cached = metadataCache.get(image.url);

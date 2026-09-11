@@ -16,8 +16,8 @@ function pngDimensions(file) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-test('release metadata is aligned with the 3.2.0 milestone', () => {
-  assert.equal(manifest.version, '3.2.0');
+test('release metadata is aligned with the 3.2.1 milestone', () => {
+  assert.equal(manifest.version, '3.2.1');
   assert.match(todo, /## 3\.1\.0 asset management and deduplication/);
   const milestone = todo.split('## 3.1.0 asset management and deduplication')[1].split('## 3.2.0 release quality and validation')[0];
   assert.doesNotMatch(milestone, /- \[ \]/);
@@ -154,28 +154,51 @@ test('the 3.0.0 checklist has no unfinished entries', () => {
   assert.doesNotMatch(section, /- \[ \]/);
 });
 
-test('the 3.2.0 checklist stays in sync across languages and ships its deliverables', () => {
-  const section = todo.split('## 3.2.0 release quality and validation')[1];
-  assert.ok(section, 'TODO.md must document the 3.2.0 milestone');
-  const [chinese, english] = section.split('### English');
-  assert.ok(chinese && english, 'the 3.2.0 milestone must document both languages');
+test('milestone checklists stay in sync across languages and ship their deliverables', () => {
+  const milestones = [
+    ['## 3.2.0 release quality and validation', '## 3.2.1'],
+    ['## 3.2.1', null],
+  ];
   const tally = (text) => ({
     total: (text.match(/^- \[[ x]\]/gm) || []).length,
     unfinished: (text.match(/^- \[ \]/gm) || []).length,
   });
-  assert.ok(tally(chinese).total > 0, 'the 3.2.0 milestone must list tasks');
-  assert.deepEqual(tally(chinese), tally(english), '3.2.0 task states must match across languages');
+  for (const [heading, next] of milestones) {
+    const tail = todo.split(heading)[1];
+    assert.ok(tail, `${heading} must exist in TODO.md`);
+    const section = next ? tail.split(next)[0] : tail;
+    const [chinese, english] = section.split('### English');
+    assert.ok(chinese && english, `${heading} must document both languages`);
+    assert.ok(tally(chinese).total > 0, `${heading} must list tasks`);
+    assert.deepEqual(tally(chinese), tally(english), `${heading} task states must match across languages`);
+  }
   assert.equal(fs.existsSync('scripts/package-extension.sh'), true, 'the packaging script must exist');
   assert.match(read('README.md'), /scripts\/package-extension\.sh/);
 });
 
+test('metadata inspection covers the scan ceiling instead of stopping at 300', () => {
+  // 3.2.1: one HEAD request per image, so the ceiling must cover every scan-limit
+  // choice and must be declared identically in the popup and the service worker.
+  const ceiling = (source) => Number((source.match(/MAX_METADATA_INSPECTIONS\s*=\s*(\d+)/) || [])[1]);
+  assert.equal(ceiling(popup), 1000, 'popup.js must declare MAX_METADATA_INSPECTIONS');
+  assert.equal(ceiling(worker), ceiling(popup), 'popup and worker ceilings must match');
+  assert.doesNotMatch(popup, /state\.images\.slice\(0, 300\)/);
+  assert.doesNotMatch(worker, /images\.slice\(0, 300\)/);
+  assert.match(popup, /metadataTruncated/);
+  assert.match(popup, /scanMetadataTruncated/);
+  assert.match(worker, /METADATA_INSPECT_BUDGET_MS/);
+});
+
 test('favorite filtering never queries the boolean index', () => {
-  // favorite is stored as a boolean; booleans are not valid IndexedDB keys, so
-  // IDBKeyRange.only(true) throws DataError. Filtering must stay in memory.
+  // favorite is a boolean; booleans are not valid IndexedDB keys, so the
+  // byFavorite index is unusable. Filtering must stay in memory and the index
+  // must be dropped from existing databases.
   // Strip line comments first so explanatory text cannot satisfy the assertion.
   const code = library.replace(/^\s*\/\/.*$/gm, '');
   assert.doesNotMatch(code, /IDBKeyRange\.only\(true\)/);
   assert.doesNotMatch(code, /\.index\('byFavorite'\)/);
+  assert.doesNotMatch(code, /createIndex\('byFavorite'/);
+  assert.match(code, /deleteIndex\('byFavorite'\)/);
   assert.match(code, /if \(options\.favoriteOnly && !record\.favorite\) return false;/);
   assert.match(code, /async function countFavorites\(\)/);
 });

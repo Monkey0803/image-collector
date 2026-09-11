@@ -2,7 +2,7 @@
   'use strict';
 
   const DB_NAME = 'image-collector-library';
-  const DB_VERSION = 4;
+  const DB_VERSION = 5;
   const IMAGE_STORE = 'images';
   const CACHE_STORE = 'imageCache';
   const SCAN_STORE = 'scans';
@@ -18,7 +18,6 @@
         const db = request.result;
         if (!db.objectStoreNames.contains(IMAGE_STORE)) {
           const store = db.createObjectStore(IMAGE_STORE, { keyPath: 'id' });
-          store.createIndex('byFavorite', 'favorite');
           store.createIndex('byUpdatedAt', 'updatedAt');
           store.createIndex('byDomain', 'domain');
           store.createIndex('byContentHash', 'contentHash');
@@ -27,6 +26,9 @@
           const store = request.transaction.objectStore(IMAGE_STORE);
           if (!store.indexNames.contains('byContentHash')) store.createIndex('byContentHash', 'contentHash');
           if (!store.indexNames.contains('byPerceptualHash')) store.createIndex('byPerceptualHash', 'perceptualHash');
+          // `favorite` is a boolean and booleans are not valid IndexedDB keys,
+          // so this index could never be queried. Drop it from existing databases.
+          if (store.indexNames.contains('byFavorite')) store.deleteIndex('byFavorite');
         }
         if (!db.objectStoreNames.contains(CACHE_STORE)) {
           const store = db.createObjectStore(CACHE_STORE, { keyPath: 'id' });
@@ -345,9 +347,8 @@
     const db = await openDatabase();
     const transaction = db.transaction(IMAGE_STORE, 'readonly');
     const store = transaction.objectStore(IMAGE_STORE);
-    // `favorite` is stored as a boolean, and booleans are not valid IndexedDB
-    // keys: the byFavorite index cannot be queried with IDBKeyRange.only(true)
-    // without throwing DataError. Read all records and filter in memory below.
+    // `favorite` is a boolean, which IndexedDB cannot index, so favorites are
+    // filtered in memory below instead of through an index.
     const source = store.getAll();
     const records = await requestValue(source);
     const query = String(options.query || '').trim().toLowerCase();

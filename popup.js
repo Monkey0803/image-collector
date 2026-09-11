@@ -61,7 +61,7 @@ const state = {
   taskRecords: [],
   taskRecoveryPromise: null,
   taskRefreshTimer: null,
-  scanStats: { discovered: 0, duplicates: 0, skipped: 0, dimensionsChecked: 0, dimensionsFailed: 0, metadataReused: 0, partial: false },
+  scanStats: { discovered: 0, duplicates: 0, skipped: 0, dimensionsChecked: 0, dimensionsFailed: 0, metadataReused: 0, metadataTruncated: 0, partial: false },
   downloadMetrics: { startedAt: 0, total: 0 },
   librarySelected: new Set(), libraryFormat: 'all', libraryMinWidth: '', libraryMaxWidth: '', libraryMinHeight: '', libraryMaxHeight: '', libraryMinSize: '', libraryMaxSize: '', librarySort: 'updated', storageStats: null,
   libraryRefreshToken: 0,
@@ -2959,7 +2959,7 @@ async function scanPage(options = {}) {
     state.selected.clear();
     state.duplicateCount = 0;
     state.pageRecords = [];
-    state.scanStats = { discovered: 0, duplicates: 0, skipped: 0, dimensionsChecked: 0, dimensionsFailed: 0, metadataReused: 0, partial: false };
+    state.scanStats = { discovered: 0, duplicates: 0, skipped: 0, dimensionsChecked: 0, dimensionsFailed: 0, metadataReused: 0, metadataTruncated: 0, partial: false };
     state.retryImages = [];
     updateRetryUI();
     renderFormatTabs();
@@ -3136,8 +3136,14 @@ async function archiveImagesBySiteAdapters(images, pageUrl) {
   }
 }
 
+// File size / MIME inspection costs one HEAD request per image, so it is capped.
+// The cap must cover every scan-limit choice (200 / 500 / 1000) instead of
+// silently stopping at 300; keep it in sync with service-worker.js.
+const MAX_METADATA_INSPECTIONS = 1000;
+
 async function loadImageMetadata(scanId, options = {}) {
-  const images = state.images.slice(0, 300);
+  const images = state.images.slice(0, MAX_METADATA_INSPECTIONS);
+  state.scanStats.metadataTruncated = Math.max(0, state.images.length - images.length);
   if (!images.length) {
     updateScanStats();
     return;
@@ -3167,7 +3173,7 @@ async function loadImageMetadata(scanId, options = {}) {
     if (imagesToInspect.length) {
       const response = await withTimeout(
         () => chrome.runtime.sendMessage({ type: 'inspectImages', images: imagesToInspect }),
-        12000,
+        30000,
         t('metadataTimeout')
       );
       if (scanId !== state.scanId || !Array.isArray(response?.items)) return;
@@ -4314,7 +4320,8 @@ Object.assign(TRANSLATIONS.en, {
 });
 
 Object.assign(TRANSLATIONS.zh, {
-  scanStats: '发现 {discovered} · 跳过 {skipped} · 已探测 {dimensions} · 复用 {reused} · 失败 {failed}{partial}',
+  scanStats: '发现 {discovered} · 跳过 {skipped} · 已探测 {dimensions} · 复用 {reused} · 失败 {failed}{truncated}{partial}',
+  scanMetadataTruncated: ' · {count} 张未探测',
   scanPartial: '部分完成',
   requestTimeout: '请求超时，可能是网络较慢或图片服务器未响应',
   serviceWorkerRestarted: '后台任务因扩展服务重启而中断，请重试失败项',
@@ -4323,7 +4330,8 @@ Object.assign(TRANSLATIONS.zh, {
   largeDownloadWarning: '任务较大，已限制下载节奏；请耐心等待完成。'
 });
 Object.assign(TRANSLATIONS.en, {
-  scanStats: 'Found {discovered} · skipped {skipped} · dimensions {dimensions} · reused {reused} · failed {failed}{partial}',
+  scanStats: 'Found {discovered} · skipped {skipped} · dimensions {dimensions} · reused {reused} · failed {failed}{truncated}{partial}',
+  scanMetadataTruncated: ' · {count} not inspected',
   scanPartial: 'partial',
   requestTimeout: 'Request timed out; the network may be slow or the image server may not respond',
   serviceWorkerRestarted: 'The background task was interrupted because the extension worker restarted; retry failed items',
@@ -4614,6 +4622,7 @@ function updateScanStats() {
     dimensions: Number(stats.dimensionsChecked) || 0,
     failed: Number(stats.dimensionsFailed) || 0,
     reused: Number(stats.metadataReused) || 0,
+    truncated: stats.metadataTruncated ? ' · ' + t('scanMetadataTruncated', { count: stats.metadataTruncated }) : '',
     partial: stats.partial ? ' · ' + t('scanPartial') : ''
   };
   els.scanStats.textContent = t('scanStats', values);
