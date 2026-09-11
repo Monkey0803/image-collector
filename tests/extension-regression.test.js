@@ -169,6 +169,17 @@ test('the 3.2.0 checklist stays in sync across languages and ships its deliverab
   assert.match(read('README.md'), /scripts\/package-extension\.sh/);
 });
 
+test('favorite filtering never queries the boolean index', () => {
+  // favorite is stored as a boolean; booleans are not valid IndexedDB keys, so
+  // IDBKeyRange.only(true) throws DataError. Filtering must stay in memory.
+  // Strip line comments first so explanatory text cannot satisfy the assertion.
+  const code = library.replace(/^\s*\/\/.*$/gm, '');
+  assert.doesNotMatch(code, /IDBKeyRange\.only\(true\)/);
+  assert.doesNotMatch(code, /\.index\('byFavorite'\)/);
+  assert.match(code, /if \(options\.favoriteOnly && !record\.favorite\) return false;/);
+  assert.match(code, /async function countFavorites\(\)/);
+});
+
 test('text scale follows the active tab zoom without scaling the whole panel', () => {
   assert.match(popup, /function applyBrowserTextScale/);
   assert.match(popup, /function readBrowserDefaultTextScale/);
