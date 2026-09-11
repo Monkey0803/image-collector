@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录当前 `3.2.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
+本文档记录当前 `3.2.1` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
 
 最后更新：2026-09-11
 
@@ -10,6 +10,8 @@
 - [x] `2.8.0` 智能集合与可视化筛选增强已完成并发布。
 - [x] `2.9.0` 主视图聚焦与操作界面优化已完成并发布。
 - [x] `3.0.0` 多页面采集工作流实现并发布；真实 Chrome 交互回归仍作为持续验收项。
+- [x] `3.2.0` 发布质量与真机验收已完成；验收发现的两处缺陷在 `3.2.1` 修复。
+- [ ] `3.3.0` 尚未定义范围。
 
 ## 已知缺陷（2026-09-11 真机验收发现）
 
@@ -130,7 +132,7 @@
 
 ## English
 
-This document tracks the current `3.2.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
+This document tracks the current `3.2.1` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
 
 Last updated: 2026-09-11
 
@@ -140,6 +142,8 @@ Last updated: 2026-09-11
 - [x] `2.8.0` smart-collection and visual-filter enhancements are complete and released.
 - [x] `2.9.0` primary-workspace focus and UI refinement are complete and released.
 - [x] `3.0.0` multi-page collection workflows are implemented and released; real Chrome interaction regression remains a continuous validation item.
+- [x] `3.2.0` release quality and real-browser acceptance are complete; the two defects it found are fixed in `3.2.1`.
+- [ ] `3.3.0` scope is not defined yet.
 
 ### 1.0.1 core experience
 
@@ -494,3 +498,19 @@ Last updated: 2026-09-11
 - [ ] Manually verify the three physical keyboard shortcuts in real Chrome.
 - [x] Review website access permissions and add acceptance cases for cross-origin, hotlink-protected, expired, and malformed image responses; the conclusion is to keep `<all_urls>`.
 - [x] Verify performance and stability with large pages, 1,000 images, cache limits, and large ZIP jobs.
+
+## 3.2.1 metadata coverage and index cleanup
+
+### 中文
+
+- [x] 修复大页面元数据被静默截断的问题：文件大小与 MIME 探测上限由 300 张提升到 1000 张，与扫描上限和 ZIP 上限一致，popup 与 Service Worker 使用同一上限值。
+- [x] 探测仍被截断时在扫描统计中显示未探测数量，不再静默丢弃。
+- [x] 移除 `byFavorite` 死索引：`favorite` 是布尔值，而布尔值不是合法的 IndexedDB 键，该索引从未可查询；数据库版本升至 5 并在升级时删除既有索引。
+- [x] 补充回归断言，锁定探测上限一致性、截断提示与索引移除。
+
+### English
+
+- [x] Fix silent metadata truncation on large pages: raise the file-size and MIME inspection ceiling from 300 to 1,000 images, matching the scan limit and the ZIP limit, with the popup and Service Worker sharing one ceiling value.
+- [x] Surface the not-inspected count in the scan statistics instead of dropping it silently.
+- [x] Remove the dead `byFavorite` index: `favorite` is a boolean and booleans are not valid IndexedDB keys, so the index was never queryable; bump the database version to 5 and delete the index during upgrade.
+- [x] Add regression assertions locking the shared ceiling, the truncation notice, and the index removal.

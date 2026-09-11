@@ -1,4 +1,4 @@
-# Image Collector 3.2.0 验收清单
+# Image Collector 3.2.1 验收清单
 
 ## 验收环境
 
@@ -52,6 +52,49 @@
   不含图片地址、`data:` 内容或缓存数据。
 - [x] 清理操作确认门禁：确认框取消后素材数量保持不变。
 
+## 3.2.1 变更验证（2026-09-11）
+
+### 元数据探测上限
+
+真机实测同一夹具页面在修复前后的文件大小/MIME 覆盖：
+
+| 页面 | 发现 | 有尺寸 | 修复前有大小/MIME | 修复后有大小/MIME |
+| --- | --- | --- | --- | --- |
+| 200 张 | 200 | 200 | 200 | 200 |
+| 1000 张 | 1000 | 1000 | **300** | **1000** |
+
+- [x] 1000 张页面的文件大小与 MIME 覆盖由 300 张提升到 1000 张。
+- [x] `popup.js` 与 `service-worker.js` 使用同名同值上限（`MAX_METADATA_INSPECTIONS = 1000`），
+  回归测试断言两者一致且不再出现 `slice(0, 300)`。
+- [x] 仍被截断时扫描统计显示未探测数量（新增 `metadataTruncated` 与中英文案）。
+
+提升上限的代价（同一夹具对比）：
+
+| 场景 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 1000 张本地页扫描耗时 | 2.9 s | 3.8 s |
+| 1000 张页 JS 堆 | 44.5 → 22.7 MB | 37.5 → 65.5 MB |
+| 500 张远程页扫描耗时 | 6.4 s | 8.4 s |
+| 500 张远程页已探测 | 300 | 500（其中 29 张 HEAD 失败） |
+
+耗时与堆占用上升属于预期（多出 700 次 HEAD 与对应元数据），界面响应仍为 2 ms。
+
+### IndexedDB 迁移（v4 → v5）
+
+用真实浏览器构造 v4 数据库（旧数据层、5 条记录、3 条收藏、含 `byFavorite` 索引），
+再换成 3.2.1 数据层重启同一 profile，验证真实 `onupgradeneeded` 路径：
+
+- [x] 数据库版本由 4 升级到 5。
+- [x] `byFavorite` 索引被删除。
+- [x] 5 条图片记录全部保留。
+- [x] 其余索引（`byUpdatedAt` / `byDomain` / `byContentHash` / `byPerceptualHash`）保留。
+- [x] 升级后 `countFavorites()` 返回 3，`listImages({ favoriteOnly: true })` 返回 3。
+
+### 回归
+
+- [x] 全量真机回归 16/16 通过（3.2.1 代码）。
+- [x] `tests/extension-regression.test.js` 19/19、`tests/smart-collections.test.js` 4/4 通过。
+
 ## 待验证
 
 - [ ] 在真实 Chrome 中手动按下三个快捷键（`Ctrl+Shift+Y` / `Ctrl+Shift+U` / `Ctrl+Shift+J`），
@@ -59,17 +102,27 @@
   无法合成浏览器级快捷键。
 - [ ] 需要登录态的站点上的限流与防盗链行为（本次夹具未包含登录场景）。
 
-## 本次验收发现的问题
+## 本次验收发现并修复的问题
 
-- **`listImages({ favoriteOnly: true })` 与 `countFavorites()` 始终抛错**（原 `library.js:348`）。
-  `favorite` 以布尔值存储，而布尔值不是合法的 IndexedDB 键，
+### 1. `listImages({ favoriteOnly: true })` 与 `countFavorites()` 始终抛错
+
+- 原因（原 `library.js:348`）：`favorite` 以布尔值存储，而布尔值不是合法的 IndexedDB 键，
   `IDBKeyRange.only(true)` 抛 `DataError: The parameter is not a valid key`。
-  - 复现：素材库收藏任意图片后调用 `ImageCollectorDB.countFavorites()`。
-  - 影响：仅是导出的数据层 API 缺陷。界面上的收藏数由 `popup.js:1078` 自行过滤计算，
-    因此用户看不到异常；但任何调用该导出 API 的代码都会失败。
-  - 已修复：改为读取全部记录并使用已有的内存过滤（`listImages` 内原本就有该过滤），
-    不再触碰 `byFavorite` 索引；无需数据库版本升级或数据迁移。
-    `tests/extension-regression.test.js` 增加了对应断言，禁止再次出现布尔索引查询。
+- 复现：素材库收藏任意图片后调用 `ImageCollectorDB.countFavorites()`。
+- 影响：仅是导出的数据层 API 缺陷。界面上的收藏数由 `popup.js:1078` 自行过滤计算，
+  因此用户看不到异常；但任何调用该导出 API 的代码都会失败。
+- 修复：改为读取全部记录并使用 `listImages` 内已有的内存过滤，不再触碰 `byFavorite` 索引。
+  同时把 `byFavorite` 索引从 schema 移除（数据库版本升至 5，升级时 `deleteIndex`），
+  因为布尔键索引本身不可能被查询。回归断言禁止再次出现布尔索引查询。
+
+### 2. 大页面文件大小/MIME 被静默截断到 300 张
+
+- 原因：`popup.js` 与 `service-worker.js` 各有一处 `slice(0, 300)`，且 worker 只有 9 秒预算。
+  两者叠加后，扫描上限选 1000 或“不限”时仍只探测前 300 张。
+- 影响：第 301 张之后的图片没有文件大小与 MIME，导致按文件大小筛选和排序结果不完整，
+  ZIP 大小预估偏低；README「已知限制」和界面均未提示，属于静默降级。
+- 修复：上限提升到 1000（与扫描上限、`MAX_ZIP_IMAGES` 一致），两处共享同名常量，
+  worker 预算放宽到 25 秒；仍被截断时在扫描统计中显示未探测数量，并写入 README 已知限制。
 
 ## 执行命令
 
