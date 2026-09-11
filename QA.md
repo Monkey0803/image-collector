@@ -1,4 +1,4 @@
-# Image Collector 3.2.1 验收清单
+# Image Collector 3.2.2 验收清单
 
 ## 验收环境
 
@@ -95,11 +95,30 @@
 - [x] 全量真机回归 16/16 通过（3.2.1 代码）。
 - [x] `tests/extension-regression.test.js` 19/19、`tests/smart-collections.test.js` 4/4 通过。
 
+## 3.2.2 变更验证（2026-09-11）
+
+### 侧边栏快捷键
+
+真机报障：`Ctrl+Shift+J` 按下无反应。排查后确认根因：
+
+- `sidePanel.open()` 要求用户手势，而命令处理函数在调用前有两次 `await`，键盘手势在异步间隔中过期；
+- `open()` 抛出的错误被空 `catch { return; }` 静默吞掉，因此表现为"按了没反应"；
+- 三个快捷键共用同一个打开面板的调用，所以 `Ctrl+Shift+Y` / `Ctrl+Shift+U` 在面板关闭时同样受影响。
+
+修复后由用户在真实 Chrome 中逐项确认：
+
+- [x] `Ctrl+Shift+J`：打开侧边栏；再按一次**关闭**侧边栏（改绑 `_execute_action` 后由 Chrome 原生切换）。
+- [x] `Ctrl+Shift+Y`：面板关闭时按下会打开并扫描当前标签页。
+- [x] `Ctrl+Shift+U`：勾选多个标签页后按下会打开、切换到"已选标签页"范围并扫描。
+- [x] 绑定校验：`_execute_action` / `scan-current-page` / `scan-selected-tabs` 三个键位均被 Chrome 接受；
+  `open-collector` 保留为默认未绑定命令。
+- [x] 失败不再静默：`open()` 失败会写入 `chrome.storage.local.shortcutDiagnostic` 并输出到控制台，
+  同时不再终止后续扫描投递。
+- [x] `tests/extension-regression.test.js` 20/20、`tests/smart-collections.test.js` 4/4 通过。
+- [x] 真机验收 S1 / S4 通过。
+
 ## 待验证
 
-- [ ] 在真实 Chrome 中手动按下三个快捷键（`Ctrl+Shift+Y` / `Ctrl+Shift+U` / `Ctrl+Shift+J`），
-  确认物理按键触发。自动化只能验证 `chrome.commands.onCommand` 之后的恢复分支，
-  无法合成浏览器级快捷键。
 - [ ] 需要登录态的站点上的限流与防盗链行为（本次夹具未包含登录场景）。
 
 ## 本次验收发现并修复的问题
@@ -123,6 +142,16 @@
   ZIP 大小预估偏低；README「已知限制」和界面均未提示，属于静默降级。
 - 修复：上限提升到 1000（与扫描上限、`MAX_ZIP_IMAGES` 一致），两处共享同名常量，
   worker 预算放宽到 25 秒；仍被截断时在扫描统计中显示未探测数量，并写入 README 已知限制。
+
+### 3. 快捷键按下无反应
+
+- 原因：`sidePanel.open()` 要求用户手势，而命令处理函数在调用前有两次 `await`，键盘手势在异步间隔中过期，
+  `open()` 抛错后又被空 `catch { return; }` 静默吞掉，因此表现为完全没有反应。
+- 影响：三个快捷键共用同一个打开面板的调用，所以面板关闭时 `Ctrl+Shift+J` / `Ctrl+Shift+Y` / `Ctrl+Shift+U` 全部失效。
+- 修复：在监听器内同步调用 `open()`（活动标签页 id 由 `onActivated` / `onFocusChanged` 同步维护，冷启动回退到查询），
+  失败写入 `shortcutDiagnostic` 并输出到控制台，且不再终止后续扫描投递。
+  另外把 `Ctrl+Shift+J` 改绑到 `_execute_action`，让侧边栏可以打开也可以关闭——
+  side panel 没有 `close()` API，自定义命令无法实现切换，只有 Chrome 的图标动作原生支持。
 
 ## 执行命令
 

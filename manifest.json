@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Image Collector",
-  "version": "3.2.1",
+  "version": "3.2.2",
   "description": "识别当前网页或多个标签页中的图片，支持自定义扫描规则、尺寸筛选和文件或 ZIP 下载。",
   "permissions": [
     "activeTab",
@@ -42,9 +42,11 @@
       "suggested_key": { "default": "Ctrl+Shift+U", "mac": "MacCtrl+Shift+U" },
       "description": "Scan selected tabs"
     },
+    "_execute_action": {
+      "suggested_key": { "default": "Ctrl+Shift+J", "mac": "MacCtrl+Shift+J" }
+    },
     "open-collector": {
-      "suggested_key": { "default": "Ctrl+Shift+J", "mac": "MacCtrl+Shift+J" },
-      "description": "Open Image Collector"
+      "description": "Open Image Collector and show the current page"
     }
   },
   "side_panel": {

@@ -77,7 +77,7 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 多页面 ZIP 支持按页面、日期、网站/页面和网站/日期建立目录；同名页面会自动编号
 - 历史记录显示扫描页面数、新增/变化/移除数量，并支持恢复筛选、打开来源、重新扫描、下载和下载 ZIP
 - 支持导出 Markdown 图库、HTML 图库和图片联系表；图片加载失败时保留可识别的占位信息
-- 支持在 Chrome 快捷键页面自定义打开扩展、扫描当前页和扫描选中标签页的快捷键
+- 支持在 Chrome 快捷键页面自定义打开/关闭扩展侧边栏、扫描当前页和扫描选中标签页的快捷键
 - 图片右键菜单支持保存到已有本地集合
 - 支持深色模式、紧凑模式、键盘焦点操作，以及跟随当前网页浏览器默认字号和缩放比例
 
@@ -218,7 +218,7 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - ZIP 读取受单张图片、总大小（256 MB）和总处理时间（5 分钟）限制；超过限制的项目会保留在失败列表中，便于重试或改用普通下载。
 - 每次完整扫描都会写入“历史”。历史条目可以恢复当时的筛选条件、打开来源页、重新扫描，或直接下载当次结果。重新扫描历史记录会自动打开缺失的来源页，并等待页面加载完成。
 - “导出 Markdown”“导出 HTML”会生成本地图库文件；“导出联系表”会生成图片缩略图网格。导出会优先读取本地缓存，无法加载的图片会显示失败占位，不会阻塞整个导出。
-- 在“设置 → 外观与快捷键”中可以打开 Chrome 快捷键配置页。默认提供打开扩展、扫描当前页和扫描选中标签页三个命令，快捷键可按个人习惯修改。
+- 在“设置 → 外观与快捷键”中可以打开 Chrome 快捷键配置页。默认 `Ctrl+Shift+J` 绑定到扩展图标动作，与点击工具栏图标等价，**可以打开也可以关闭侧边栏**；`Ctrl+Shift+Y` 扫描当前页，`Ctrl+Shift+U` 扫描选中标签页。另外还提供“打开并切回当前页”命令（默认未绑定），快捷键都可在该页面按个人习惯修改。
 - 在网页图片上右键打开 Image Collector 菜单，可以将当前图片保存到已有本地集合。新建集合后，右键菜单会自动刷新。
 - 网站级增量扫描会比较本次发现结果与上次扫描的页面签名；未变化且已有元数据的图片会复用本地记录，只对新增或变化图片重新探测。
 
@@ -386,7 +386,7 @@ image_2026.08.20.zip
 - ZIP reads are bounded per image, to 256 MB total, and to five minutes overall; items over a limit remain in the failure list so they can be retried or downloaded individually.
 - Every full scan is saved in **History**. A history entry can restore its filters, open source pages, rescan, download the result, or create a ZIP. Rescanning automatically opens missing source pages and waits for them to finish loading.
 - **Export Markdown** and **Export HTML** create local gallery files. **Export contact sheet** creates a thumbnail grid; cached data is preferred and failed images become placeholders so one failure does not block the whole export.
-- **Settings → Appearance & shortcuts** opens Chrome's shortcut configuration page. Three commands are provided for opening the collector, scanning the current tab, and scanning selected tabs, and their shortcuts can be customized.
+- **Settings → Appearance & shortcuts** opens Chrome's shortcut configuration page. `Ctrl+Shift+J` is bound to the extension action, which is equivalent to clicking the toolbar icon and **toggles the side panel open and closed**; `Ctrl+Shift+Y` scans the current tab and `Ctrl+Shift+U` scans selected tabs. An additional "open and show the current page" command is provided unbound by default, and every shortcut can be customized on that page.
 - Right-click a webpage image and use the Image Collector menu to save it to an existing local collection. The menu refreshes after a new collection is created.
 - Site-level incremental scanning compares page signatures with the previous scan. Unchanged images with existing metadata reuse their local records, while only new or changed images are inspected again.
 
@@ -448,7 +448,7 @@ download_image/
 ├── LICENSE             # MIT 开源许可证
 ├── QA.md               # 发布前 Chrome 验收清单
 ├── SECURITY.md         # 权限和本地数据边界说明
-├── TODO.md             # 3.2.1 已完成任务和后续路线图
+├── TODO.md             # 3.2.2 已完成任务和后续路线图
 ├── README.md           # 中文和英文项目文档
 ├── scripts/
 │   └── package-extension.sh          # 校验并打包扩展为可发布 ZIP
@@ -567,7 +567,7 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Merge multi-page results into one download task with ZIP layouts by page, date, site/page, or site/date
 - Save scan history with new/changed/removed counts and restore, reopen, rescan, download, or ZIP actions
 - Export Markdown galleries, HTML galleries, or contact sheets with failure placeholders
-- Configure shortcuts for opening the collector and scanning current or selected tabs
+- Configure shortcuts for toggling the side panel and for scanning current or selected tabs
 - Save a webpage image to an existing local collection from the context menu
 - Reuse metadata for unchanged images during incremental scans, and follow the active page's default font size and zoom
 
@@ -838,7 +838,7 @@ download_image/
 ├── LICENSE             # MIT open-source license
 ├── QA.md               # Pre-release Chrome acceptance checklist
 ├── SECURITY.md         # Permission and local-data boundary notes
-├── TODO.md             # 3.2.1 checklist and future roadmap
+├── TODO.md             # 3.2.2 checklist and future roadmap
 ├── README.md           # Chinese and English documentation
 ├── scripts/
 │   └── package-extension.sh          # Validate and package the release ZIP

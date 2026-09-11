@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录当前 `3.2.1` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
+本文档记录当前 `3.2.2` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
 
 最后更新：2026-09-11
 
@@ -11,6 +11,8 @@
 - [x] `2.9.0` 主视图聚焦与操作界面优化已完成并发布。
 - [x] `3.0.0` 多页面采集工作流实现并发布；真实 Chrome 交互回归仍作为持续验收项。
 - [x] `3.2.0` 发布质量与真机验收已完成；验收发现的两处缺陷在 `3.2.1` 修复。
+- [x] `3.2.1` 元数据覆盖与索引清理已发布。
+- [x] `3.2.2` 侧边栏快捷键可靠性修复已发布。
 - [ ] `3.3.0` 尚未定义范围。
 
 ## 已知缺陷（2026-09-11 真机验收发现）
@@ -132,7 +134,7 @@
 
 ## English
 
-This document tracks the current `3.2.1` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
+This document tracks the current `3.2.2` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
 
 Last updated: 2026-09-11
 
@@ -143,6 +145,8 @@ Last updated: 2026-09-11
 - [x] `2.9.0` primary-workspace focus and UI refinement are complete and released.
 - [x] `3.0.0` multi-page collection workflows are implemented and released; real Chrome interaction regression remains a continuous validation item.
 - [x] `3.2.0` release quality and real-browser acceptance are complete; the two defects it found are fixed in `3.2.1`.
+- [x] `3.2.1` metadata coverage and index cleanup are released.
+- [x] `3.2.2` side panel shortcut reliability is released.
 - [ ] `3.3.0` scope is not defined yet.
 
 ### 1.0.1 core experience
@@ -485,7 +489,7 @@ Last updated: 2026-09-11
 - [x] 在开发文档中说明本地打包和发布前检查方式。
 - [x] 建立真实 Chrome 核心流程回归清单，并记录当前页、多页面、历史和打包流程的实测结果。
 - [x] 补齐 ZIP 和素材库流程的真机回归记录。
-- [ ] 在真实 Chrome 中手动验证三个快捷键的物理按键触发。
+- [x] 在真实 Chrome 中手动验证三个快捷键的物理按键触发。
 - [x] 评估扩展网站访问权限，补充跨域、防盗链、失效图片和异常响应的验收用例；结论为保留 `<all_urls>`。
 - [x] 验证大页面、1000 张图片、缓存上限和大型 ZIP 的性能与稳定性。
 
@@ -495,7 +499,7 @@ Last updated: 2026-09-11
 - [x] Document local packaging and pre-release checks.
 - [x] Establish a real Chrome regression checklist and record results for the current-page, multi-page, history, and packaging flows.
 - [x] Complete real-device regression records for the ZIP and Library flows.
-- [ ] Manually verify the three physical keyboard shortcuts in real Chrome.
+- [x] Manually verify the three physical keyboard shortcuts in real Chrome.
 - [x] Review website access permissions and add acceptance cases for cross-origin, hotlink-protected, expired, and malformed image responses; the conclusion is to keep `<all_urls>`.
 - [x] Verify performance and stability with large pages, 1,000 images, cache limits, and large ZIP jobs.
 
@@ -514,3 +518,23 @@ Last updated: 2026-09-11
 - [x] Surface the not-inspected count in the scan statistics instead of dropping it silently.
 - [x] Remove the dead `byFavorite` index: `favorite` is a boolean and booleans are not valid IndexedDB keys, so the index was never queryable; bump the database version to 5 and delete the index during upgrade.
 - [x] Add regression assertions locking the shared ceiling, the truncation notice, and the index removal.
+
+## 3.2.2 side panel shortcut reliability
+
+### 中文
+
+- [x] 修复快捷键无法打开侧边栏：`sidePanel.open()` 要求用户手势，而命令处理函数在调用前有两次 `await`，手势过期后 `open()` 抛错，又被空 `catch` 静默吞掉。现在在监听器内同步调用 `open()`，让面板抢在手势有效期内打开。
+- [x] 同步跟踪当前活动标签页 id（`onActivated` / `onFocusChanged` / `onInstalled` / `onStartup`），Service Worker 冷启动时回退到查询路径。
+- [x] 快捷键失败不再静默：记录 `{command, stage, message, at}` 到 `chrome.storage.local.shortcutDiagnostic` 并输出到控制台；`open()` 失败也不再终止后续扫描投递。
+- [x] 将 `Ctrl+Shift+J` 改绑到保留命令 `_execute_action`，使侧边栏可以打开也可以关闭：`sidePanel` 没有 `close()` API，自定义命令只能打开，而 Chrome 的图标动作原生支持切换。`open-collector` 保留为默认未绑定命令。
+- [x] 在真实 Chrome 中验证三个快捷键（`Ctrl+Shift+J` / `Ctrl+Shift+Y` / `Ctrl+Shift+U`）的物理按键触发。
+- [x] 补充回归断言：面板必须在首个 `await` 之前打开、`_execute_action` 携带开关键、静默 `catch` 不得回归。
+
+### English
+
+- [x] Fix shortcuts failing to open the side panel: `sidePanel.open()` requires a user gesture, the command handler awaited twice before calling it, the gesture expired, `open()` rejected, and an empty `catch` swallowed the error. The panel is now opened synchronously inside the listener so it lands inside the gesture.
+- [x] Track the active tab id synchronously (`onActivated` / `onFocusChanged` / `onInstalled` / `onStartup`), with a query fallback for a cold service worker.
+- [x] Shortcut failures are no longer silent: `{command, stage, message, at}` is recorded to `chrome.storage.local.shortcutDiagnostic` and logged, and a failed `open()` no longer aborts the scan delivery.
+- [x] Rebind `Ctrl+Shift+J` to the reserved `_execute_action` command so the side panel can be opened and closed: the side panel API has no `close()`, a custom command can only open, while Chrome's action toggles natively. `open-collector` stays available but unbound by default.
+- [x] Verify all three shortcuts (`Ctrl+Shift+J` / `Ctrl+Shift+Y` / `Ctrl+Shift+U`) with physical key presses in real Chrome.
+- [x] Add regression assertions: the panel must open before the first `await`, `_execute_action` must carry the toggle key, and the silent `catch` must not return.
