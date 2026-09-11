@@ -16,8 +16,8 @@ function pngDimensions(file) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-test('release metadata is aligned with the 3.2.1 milestone', () => {
-  assert.equal(manifest.version, '3.2.1');
+test('release metadata is aligned with the 3.2.2 milestone', () => {
+  assert.equal(manifest.version, '3.2.2');
   assert.match(todo, /## 3\.1\.0 asset management and deduplication/);
   const milestone = todo.split('## 3.1.0 asset management and deduplication')[1].split('## 3.2.0 release quality and validation')[0];
   assert.doesNotMatch(milestone, /- \[ \]/);
@@ -90,7 +90,12 @@ test('3.0.0 worker contracts include shortcuts, collection menus, and page/date 
   assert.match(worker, /function readResponseBytes/);
   assert.match(worker, /invalid-content-type/);
   assert.match(popup, /sendResponse\(\{ handled: handleShortcutCommand/);
-  assert.match(manifest.commands['open-collector'].suggested_key.default, /^Ctrl\+Shift\+J$/);
+  // The side-panel key must go through the reserved _execute_action command:
+  // sidePanel.open() can only open, never close, so a custom command cannot
+  // toggle. Chrome's action toggles because openPanelOnActionClick is enabled.
+  assert.match(manifest.commands['_execute_action'].suggested_key.default, /^Ctrl\+Shift\+J$/);
+  assert.equal(manifest.commands['open-collector'].suggested_key, undefined);
+  assert.match(worker, /setPanelBehavior\(\{ openPanelOnActionClick: true \}\)/);
 });
 
 test('scan history remains compatible with pre-3.0 records', () => {
@@ -154,10 +159,18 @@ test('the 3.0.0 checklist has no unfinished entries', () => {
   assert.doesNotMatch(section, /- \[ \]/);
 });
 
+test('the 3.2.0 checklist has no unfinished entries', () => {
+  // The last 3.2.0 item was the manual shortcut verification; it is now recorded
+  // as done, so the milestone is closed and must stay closed.
+  const section = todo.split('## 3.2.0 release quality and validation')[1].split('## 3.2.1')[0];
+  assert.doesNotMatch(section, /- \[ \]/);
+});
+
 test('milestone checklists stay in sync across languages and ship their deliverables', () => {
   const milestones = [
     ['## 3.2.0 release quality and validation', '## 3.2.1'],
-    ['## 3.2.1', null],
+    ['## 3.2.1 metadata coverage and index cleanup', '## 3.2.2'],
+    ['## 3.2.2 side panel shortcut reliability', null],
   ];
   const tally = (text) => ({
     total: (text.match(/^- \[[ x]\]/gm) || []).length,
@@ -201,6 +214,28 @@ test('favorite filtering never queries the boolean index', () => {
   assert.match(code, /deleteIndex\('byFavorite'\)/);
   assert.match(code, /if \(options\.favoriteOnly && !record\.favorite\) return false;/);
   assert.match(code, /async function countFavorites\(\)/);
+});
+
+test('the shortcut handler opens the panel before any await', () => {
+  // A keyboard command's user gesture expires across async gaps, so awaiting
+  // tabs.query before sidePanel.open() makes open() reject with
+  // "may only be called in response to a user gesture" — and the old code then
+  // swallowed that error with `catch { return; }`, leaving the shortcut inert.
+  const start = worker.indexOf('chrome.commands?.onCommand.addListener');
+  assert.ok(start > -1, 'the command listener must exist');
+  // Strip line comments so prose about awaiting cannot satisfy the ordering check.
+  const body = worker.slice(start, worker.indexOf('\n});', start)).replace(/^\s*\/\/.*$/gm, '');
+  const openAt = body.indexOf('openCollectorPanelForShortcut(');
+  const firstAwait = body.indexOf('await ');
+  assert.ok(openAt > -1, 'the listener must open the panel through openCollectorPanelForShortcut');
+  assert.ok(firstAwait === -1 || openAt < firstAwait, 'the panel must be opened before the first await');
+  assert.doesNotMatch(body, /catch \{ return; \}/, 'the panel-open failure must not be swallowed');
+  assert.match(body, /recordShortcutDiagnostic/);
+  assert.match(worker, /function openCollectorPanelForShortcut\(tabsPromise\)/);
+  assert.match(worker, /function recordShortcutDiagnostic\(/);
+  assert.match(worker, /function rememberActiveTab\(\)/);
+  assert.match(worker, /chrome\.tabs\?\.onActivated\?\.addListener\(rememberActiveTab\)/);
+  assert.match(worker, /shortcutDiagnostic/);
 });
 
 test('text scale follows the active tab zoom without scaling the whole panel', () => {

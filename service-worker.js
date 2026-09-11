@@ -130,9 +130,28 @@ async function configureSidePanel() {
   }
 }
 
-chrome.runtime.onInstalled.addListener(() => { createContextMenus(); configureSidePanel(); });
-chrome.runtime.onStartup.addListener(() => { createContextMenus(); configureSidePanel(); });
+chrome.runtime.onInstalled.addListener(() => { createContextMenus(); configureSidePanel(); rememberActiveTab(); });
+chrome.runtime.onStartup.addListener(() => { createContextMenus(); configureSidePanel(); rememberActiveTab(); });
 void configureSidePanel();
+
+// A keyboard command's user gesture expires across async gaps: awaiting
+// tabs.query (or anything else) before sidePanel.open() makes open() reject with
+// "may only be called in response to a user gesture". Track the active tab
+// synchronously so the command handler can open the panel before any await.
+let activeTabIdForShortcut = null;
+
+function rememberActiveTab() {
+  chrome.tabs.query({ active: true, currentWindow: true })
+    .then((tabs) => {
+      const id = tabs?.[0]?.id;
+      if (typeof id === 'number') activeTabIdForShortcut = id;
+    })
+    .catch(() => {});
+}
+
+chrome.tabs?.onActivated?.addListener(rememberActiveTab);
+chrome.windows?.onFocusChanged?.addListener(rememberActiveTab);
+void rememberActiveTab();
 
 const SHORTCUT_COMMANDS = new Set(['open-collector', 'scan-current-page', 'scan-selected-tabs']);
 
@@ -158,18 +177,24 @@ async function sendShortcutToPanel(command) {
 
 chrome.commands?.onCommand.addListener((command) => {
   if (!SHORTCUT_COMMANDS.has(command)) return;
+  // Start the query but do NOT await it before opening the panel: awaiting here
+  // is what let the keyboard gesture expire.
+  const tabsPromise = chrome.tabs.query({ active: true, currentWindow: true }).catch(() => []);
+  const opening = openCollectorPanelForShortcut(tabsPromise);
+  const pendingShortcut = { command, createdAt: Date.now() };
   (async () => {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const tab = tabs?.[0];
-    if (!tab?.id) return;
-    const pendingShortcut = { command, createdAt: Date.now() };
     try { await chrome.storage.local.set({ pendingShortcut }); } catch { /* Best effort fallback for restricted profiles. */ }
-    try { await openCollectorPanel(tab); } catch { return; }
+    const panelError = await opening;
+    if (panelError) recordShortcutDiagnostic(command, 'open-panel', panelError);
     const delivered = await sendShortcutToPanel(command);
     if (delivered) {
       try { await chrome.storage.local.remove('pendingShortcut'); } catch { /* Best effort only. */ }
+      return;
     }
-  })().catch(() => {});
+    // Keep the persisted command so it still applies the next time the panel
+    // mounts, and record why the shortcut produced no visible effect.
+    recordShortcutDiagnostic(command, 'deliver', panelError || 'panel did not acknowledge');
+  })().catch((error) => recordShortcutDiagnostic(command, 'unexpected', String(error?.message || error)));
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -216,6 +241,42 @@ async function openCollectorPanel(tab) {
     return;
   }
   if (chrome.action?.openPopup) await chrome.action.openPopup();
+}
+
+// Opens the panel using the synchronously tracked tab id so that no await runs
+// between the command's user gesture and sidePanel.open(). Returns an empty
+// string on success and a readable reason otherwise, so callers can report it
+// instead of silently doing nothing.
+function openCollectorPanelForShortcut(tabsPromise) {
+  if (!chrome.sidePanel?.open) return Promise.resolve('sidePanel.unavailable');
+  if (typeof activeTabIdForShortcut === 'number') {
+    try {
+      // Called synchronously inside the command's user gesture, before any await.
+      return Promise.resolve(chrome.sidePanel.open({ tabId: activeTabIdForShortcut }))
+        .then(() => '')
+        .catch((error) => `${error?.name || 'Error'}: ${error?.message || error}`);
+    } catch (error) {
+      return Promise.resolve(`${error?.name || 'Error'}: ${error?.message || error}`);
+    }
+  }
+  // Cold service worker: the tracked tab id is not known yet. Fall back to the
+  // query; the gesture may already be spent, but this is no worse than before
+  // and it still reports what happened.
+  return Promise.resolve(tabsPromise)
+    .then((tabs) => {
+      const tab = Array.isArray(tabs) ? tabs[0] : null;
+      if (!tab?.id) return 'no-active-tab';
+      return openCollectorPanel(tab)
+        .then(() => '')
+        .catch((error) => `${error?.name || 'Error'}: ${error?.message || error}`);
+    })
+    .catch((error) => `${error?.name || 'Error'}: ${error?.message || error}`);
+}
+
+function recordShortcutDiagnostic(command, stage, message) {
+  const diagnostic = { command, stage, message, at: Date.now() };
+  console.error('[Image Collector] shortcut did not complete', diagnostic);
+  chrome.storage.local.set({ shortcutDiagnostic: diagnostic }).catch(() => {});
 }
 
 function contextImage(info, tab) {
