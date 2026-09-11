@@ -11,6 +11,14 @@
 - [x] `2.9.0` 主视图聚焦与操作界面优化已完成并发布。
 - [x] `3.0.0` 多页面采集工作流实现并发布；真实 Chrome 交互回归仍作为持续验收项。
 
+## 已知缺陷（2026-09-11 真机验收发现）
+
+- [x] `library.js` 的 `listImages({ favoriteOnly: true })` 曾使用 `IDBKeyRange.only(true)`，但 `favorite` 以布尔值存储，而布尔值不是合法的 IndexedDB 键，因此调用会抛 `DataError`，导出的 `countFavorites()` 完全不可用。已改为使用既有的内存过滤，不再查询 `byFavorite` 索引，并补充回归断言；界面原本未调用该 API，故无用户可见影响。
+
+## Known defects (found by the 2026-09-11 real-browser acceptance)
+
+- [x] `listImages({ favoriteOnly: true })` in `library.js` used to call `IDBKeyRange.only(true)`, but `favorite` is stored as a boolean and booleans are not valid IndexedDB keys, so the call threw `DataError` and the exported `countFavorites()` was unusable. It now uses the existing in-memory filter and no longer queries the `byFavorite` index, with a regression assertion added. The UI never called this API, so there was no user-visible impact.
+
 ## 1.0.1
 
 ### 第一优先级：核心体验
@@ -472,15 +480,17 @@ Last updated: 2026-09-11
 - [x] 增加可重复的扩展打包脚本，并在打包前校验 manifest、入口文件、图标和 JavaScript 语法。
 - [x] 在开发文档中说明本地打包和发布前检查方式。
 - [x] 建立真实 Chrome 核心流程回归清单，并记录当前页、多页面、历史和打包流程的实测结果。
-- [ ] 补齐 ZIP、素材库和快捷键流程的真机回归记录。
-- [ ] 评估扩展网站访问权限，补充跨域、防盗链、失效图片和异常响应的验收用例。
-- [ ] 验证大页面、1000 张图片、缓存上限和大型 ZIP 的性能与稳定性。
+- [x] 补齐 ZIP 和素材库流程的真机回归记录。
+- [ ] 在真实 Chrome 中手动验证三个快捷键的物理按键触发。
+- [x] 评估扩展网站访问权限，补充跨域、防盗链、失效图片和异常响应的验收用例；结论为保留 `<all_urls>`。
+- [x] 验证大页面、1000 张图片、缓存上限和大型 ZIP 的性能与稳定性。
 
 ### English
 
 - [x] Add a reproducible extension packaging script that validates the manifest, entry points, icons, and JavaScript syntax before packaging.
 - [x] Document local packaging and pre-release checks.
 - [x] Establish a real Chrome regression checklist and record results for the current-page, multi-page, history, and packaging flows.
-- [ ] Complete real-device regression records for the ZIP, Library, and shortcut flows.
-- [ ] Review website access permissions and add acceptance cases for cross-origin, hotlink-protected, expired, and malformed image responses.
-- [ ] Verify performance and stability with large pages, 1,000 images, cache limits, and large ZIP jobs.
+- [x] Complete real-device regression records for the ZIP and Library flows.
+- [ ] Manually verify the three physical keyboard shortcuts in real Chrome.
+- [x] Review website access permissions and add acceptance cases for cross-origin, hotlink-protected, expired, and malformed image responses; the conclusion is to keep `<all_urls>`.
+- [x] Verify performance and stability with large pages, 1,000 images, cache limits, and large ZIP jobs.

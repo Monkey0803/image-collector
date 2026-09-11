@@ -397,6 +397,7 @@ image_2026.08.20.zip
 | 权限 | 用途 |
 | --- | --- |
 | `activeTab` | 访问用户当前主动打开的标签页 |
+| `tabs` | 读取当前窗口的标签页列表，支持多页面采集 |
 | `scripting` | 在当前页面执行图片扫描逻辑 |
 | `downloads` | 下载图片和 ZIP 文件 |
 | `storage` | 保存筛选条件和保存位置设置 |
@@ -785,6 +786,7 @@ The scan flow is: load saved configuration → match adapters for the current ho
 | Permission | Purpose |
 | --- | --- |
 | `activeTab` | Access the tab that the user is actively using |
+| `tabs` | Read the current window's tab list for multi-page collection |
 | `scripting` | Run the image scanning logic in the current page |
 | `downloads` | Download image files and ZIP archives |
 | `storage` | Store filter and save-location preferences |
