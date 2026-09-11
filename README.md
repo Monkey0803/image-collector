@@ -397,6 +397,7 @@ image_2026.08.20.zip
 | 权限 | 用途 |
 | --- | --- |
 | `activeTab` | 访问用户当前主动打开的标签页 |
+| `tabs` | 读取当前窗口的标签页列表，支持多页面采集 |
 | `scripting` | 在当前页面执行图片扫描逻辑 |
 | `downloads` | 下载图片和 ZIP 文件 |
 | `storage` | 保存筛选条件和保存位置设置 |
@@ -444,8 +445,16 @@ download_image/
 │   ├── icon-48.png     # 扩展管理页图标
 │   └── icon-128.png    # 扩展详情和安装页图标
 ├── LICENSE             # MIT 开源许可证
-├── TODO.md             # 3.1.0 已完成任务和后续路线图
-└── README.md           # 中文和英文项目文档
+├── QA.md               # 发布前 Chrome 验收清单
+├── SECURITY.md         # 权限和本地数据边界说明
+├── TODO.md             # 3.2.0 已完成任务和后续路线图
+├── README.md           # 中文和英文项目文档
+├── scripts/
+│   └── package-extension.sh          # 校验并打包扩展为可发布 ZIP
+└── tests/
+    ├── extension-regression.test.js  # 发布元数据、入口和 UI 契约回归
+    ├── smart-collections.test.js     # 智能集合规则回归
+    └── fixtures/                     # 压力页面与图片夹具
 ```
 
 ### 开发和调试
@@ -458,6 +467,14 @@ download_image/
 node --check popup.js
 node --check service-worker.js
 ```
+
+生成可发布的扩展压缩包并同时执行 manifest、资源和 JavaScript 语法检查：
+
+```bash
+scripts/package-extension.sh
+```
+
+默认输出到 `dist/image-collector-<version>.zip`。压缩包只包含扩展运行所需文件，可以直接用于“加载已解压的扩展程序”前的解压测试。
 
 ### 在 GitHub 上发布
 
@@ -769,6 +786,7 @@ The scan flow is: load saved configuration → match adapters for the current ho
 | Permission | Purpose |
 | --- | --- |
 | `activeTab` | Access the tab that the user is actively using |
+| `tabs` | Read the current window's tab list for multi-page collection |
 | `scripting` | Run the image scanning logic in the current page |
 | `downloads` | Download image files and ZIP archives |
 | `storage` | Store filter and save-location preferences |
@@ -816,8 +834,16 @@ download_image/
 │   ├── icon-48.png     # Extensions management icon
 │   └── icon-128.png    # Extension detail and installation icon
 ├── LICENSE             # MIT open-source license
-├── TODO.md             # 3.1.0 checklist and future roadmap
-└── README.md           # Chinese and English documentation
+├── QA.md               # Pre-release Chrome acceptance checklist
+├── SECURITY.md         # Permission and local-data boundary notes
+├── TODO.md             # 3.2.0 checklist and future roadmap
+├── README.md           # Chinese and English documentation
+├── scripts/
+│   └── package-extension.sh          # Validate and package the release ZIP
+└── tests/
+    ├── extension-regression.test.js  # Release metadata, entry-point, and UI contract checks
+    ├── smart-collections.test.js     # Smart-collection rule checks
+    └── fixtures/                     # Stress page and image fixtures
 ```
 
 ### Development and debugging

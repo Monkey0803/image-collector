@@ -345,9 +345,10 @@
     const db = await openDatabase();
     const transaction = db.transaction(IMAGE_STORE, 'readonly');
     const store = transaction.objectStore(IMAGE_STORE);
-    const source = options.favoriteOnly && global.IDBKeyRange
-      ? store.index('byFavorite').getAll(global.IDBKeyRange.only(true))
-      : store.getAll();
+    // `favorite` is stored as a boolean, and booleans are not valid IndexedDB
+    // keys: the byFavorite index cannot be queried with IDBKeyRange.only(true)
+    // without throwing DataError. Read all records and filter in memory below.
+    const source = store.getAll();
     const records = await requestValue(source);
     const query = String(options.query || '').trim().toLowerCase();
     const tag = String(options.tag || '').trim().toLowerCase();

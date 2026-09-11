@@ -8,6 +8,7 @@ const state = {
   tabId: null,
   tabScope: 'current',
   availableTabs: [],
+  tabListRefreshToken: 0,
   selectedTabIds: new Set(),
   pageRecords: [],
   lastScan: null,
@@ -385,8 +386,10 @@ function renderTabList() {
 
 async function refreshTabList() {
   if (!chrome.tabs?.query) return;
+  const refreshToken = ++state.tabListRefreshToken;
   try {
     const tabs = await withTimeout(() => chrome.tabs.query({ currentWindow: true }), 2000, '读取标签页列表超时');
+    if (refreshToken !== state.tabListRefreshToken) return;
     state.availableTabs = (Array.isArray(tabs) ? tabs : []).filter((tab) => tab?.id);
     const availableIds = new Set(state.availableTabs.map((tab) => tab.id));
     state.selectedTabIds = new Set([...state.selectedTabIds].filter((id) => availableIds.has(id)));
@@ -394,6 +397,7 @@ async function refreshTabList() {
     if (!state.selectedTabIds.size && active?.id) state.selectedTabIds.add(active.id);
     renderTabList();
   } catch {
+    if (refreshToken !== state.tabListRefreshToken) return;
     state.availableTabs = [];
     renderTabList();
   }
@@ -439,7 +443,7 @@ const els = {
   aspectVisualTabs: [...document.querySelectorAll('.aspect-visual-tab')], minAspect: $('#minAspect'), maxAspect: $('#maxAspect'), aspectTrack: $('#aspectTrack'), aspectRangeValue: $('#aspectRangeValue'),
   filterPanel: $('#filterPanel'), filterActiveCount: $('#filterActiveCount'), filterEyebrow: $('#filterEyebrow'), filterTitle: $('#filterTitle'), clearFilters: $('#clearFilters'), selectAll: $('#selectAll'), resultCount: $('#resultCount'), resultsTitle: $('#resultsTitle'), resultsEyebrow: $('#resultsEyebrow'), selectionToolsLabel: $('#selectionToolsLabel'), downloadOptionsLabel: $('#downloadOptionsLabel'), downloadEyebrow: $('#downloadEyebrow'), scanActionLabel: document.querySelector('.scan-action-label'),
   selectedSummary: $('#selectedSummary'), searchInput: $('#searchInput'), sortSelect: $('#sortSelect'),
-  originalOnly: $('#originalOnly'), aspectRatio: $('#aspectRatio'), zipLayout: $('#zipLayout'), conflictAction: $('#conflictAction'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'), sourceTabs: [...document.querySelectorAll('[data-source]')], exportMarkdown: $('#exportMarkdown'), exportHtml: $('#exportHtml'), exportContactSheet: $('#exportContactSheet'),
+  originalOnly: $('#originalOnly'), aspectRatio: $('#aspectRatio'), scanLimit: $('#scanLimit'), zipLayout: $('#zipLayout'), conflictAction: $('#conflictAction'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'), sourceTabs: [...document.querySelectorAll('[data-source]')], exportMarkdown: $('#exportMarkdown'), exportHtml: $('#exportHtml'), exportContactSheet: $('#exportContactSheet'),
   pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'), taskViewButton: $('#taskViewButton'), settingsViewButton: $('#settingsViewButton'),
   libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryScope: $('#libraryScope'), libraryDuplicateScope: $('#libraryDuplicateScope'), duplicateStrategy: $('#duplicateStrategy'), similarThreshold: $('#similarThreshold'), duplicateGroupList: $('#duplicateGroupList'), cleanupInvalid: $('#cleanupInvalid'), cleanupUnfavorited: $('#cleanupUnfavorited'), cleanupDuplicates: $('#cleanupDuplicates'), librarySmartCollection: $('#librarySmartCollection'), syncPageFilters: $('#syncPageFilters'), reapplySmartCollections: $('#reapplySmartCollections'), newSmartCollection: $('#newSmartCollection'), smartCollectionTitle: $('#smartCollectionTitle'), smartCollectionHint: $('#smartCollectionHint'), smartCollectionEditor: $('#smartCollectionEditor'), smartCollectionName: $('#smartCollectionName'), smartCollectionLogic: $('#smartCollectionLogic'), smartRuleNameLabel: $('#smartRuleNameLabel'), smartRuleLogicLabel: $('#smartRuleLogicLabel'), smartConditionsLabel: $('#smartConditionsLabel'), addSmartCondition: $('#addSmartCondition'), smartConditionList: $('#smartConditionList'), smartRulePreview: $('#smartRulePreview'), cancelSmartCollection: $('#cancelSmartCollection'), saveSmartCollection: $('#saveSmartCollection'), smartCollectionList: $('#smartCollectionList'), smartCollectionEmpty: $('#smartCollectionEmpty'),
   librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), exportLibraryResultsJson: $('#exportLibraryResultsJson'), exportLibraryResultsCsv: $('#exportLibraryResultsCsv'), exportLibraryMarkdown: $('#exportLibraryMarkdown'), exportLibraryHtml: $('#exportLibraryHtml'), exportLibraryContactSheet: $('#exportLibraryContactSheet'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'), libraryBatchToolbar: $('#libraryBatchToolbar'), selectAllLibrary: $('#selectAllLibrary'), selectLoadedLibrary: $('#selectLoadedLibrary'), librarySelectedSummary: $('#librarySelectedSummary'), invertLibrarySelection: $('#invertLibrarySelection'), clearLibrarySelection: $('#clearLibrarySelection'), bulkFavorite: $('#bulkFavorite'), bulkTag: $('#bulkTag'), bulkRemoveTag: $('#bulkRemoveTag'), bulkCollection: $('#bulkCollection'), bulkDelete: $('#bulkDelete'), libraryDownloadSelected: $('#libraryDownloadSelected'), libraryZipSelected: $('#libraryZipSelected'), libraryFormat: $('#libraryFormat'), libraryMinWidth: $('#libraryMinWidth'), libraryMaxWidth: $('#libraryMaxWidth'), libraryMinHeight: $('#libraryMinHeight'), libraryMaxHeight: $('#libraryMaxHeight'), libraryMinSize: $('#libraryMinSize'), libraryMaxSize: $('#libraryMaxSize'), librarySort: $('#librarySort'),

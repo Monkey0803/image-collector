@@ -16,10 +16,11 @@ function pngDimensions(file) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-test('release metadata is aligned with the 3.1.0 milestone', () => {
-  assert.equal(manifest.version, '3.1.0');
+test('release metadata is aligned with the 3.2.0 milestone', () => {
+  assert.equal(manifest.version, '3.2.0');
   assert.match(todo, /## 3\.1\.0 asset management and deduplication/);
-  assert.doesNotMatch(todo, /## 3\.1\.0 asset management and deduplication[\s\S]*- \[ \]/);
+  const milestone = todo.split('## 3.1.0 asset management and deduplication')[1].split('## 3.2.0 release quality and validation')[0];
+  assert.doesNotMatch(milestone, /- \[ \]/);
   assert.match(todo, /## 3\.0\.0 multi-page collection workflows/);
   assert.match(read('README.md'), /current webpage or multiple tabs/);
 });
@@ -49,6 +50,12 @@ test('manifest local entry points exist and shortcut defaults are distinct', () 
   }
   const defaults = Object.values(manifest.commands || {}).map((command) => command.suggested_key?.default).filter(Boolean);
   assert.equal(new Set(defaults).size, defaults.length);
+});
+
+test('scan-limit control is wired to runtime state', () => {
+  assert.match(read('popup.html'), /id="scanLimit"/);
+  assert.match(popup, /scanLimit: \$\('#scanLimit'\)/);
+  assert.match(popup, /on\(els\.scanLimit, 'change'/);
 });
 
 test('loading and progress recovery UI contracts remain wired', () => {
@@ -103,6 +110,7 @@ test('3.0.0 multi-page scanning and incremental metadata reuse are wired', () =>
   assert.match(popup, /selectedTabIds: \[\]/);
   assert.match(popup, /selectedTabIds: \[\.\.\.state\.selectedTabIds\]/);
   assert.match(popup, /currentIsPlaceholder/);
+  assert.match(popup, /tabListRefreshToken/);
   for (const id of ['multiPagePanel', 'tabSelectionList', 'scanMultiPage', 'exportMarkdown', 'exportHtml', 'exportContactSheet']) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
@@ -144,6 +152,32 @@ test('the 2.9.0 checklist has no unfinished entries', () => {
 test('the 3.0.0 checklist has no unfinished entries', () => {
   const section = todo.split('## 3.0.0 multi-page collection workflows')[1].split('## 3.1.0')[0];
   assert.doesNotMatch(section, /- \[ \]/);
+});
+
+test('the 3.2.0 checklist stays in sync across languages and ships its deliverables', () => {
+  const section = todo.split('## 3.2.0 release quality and validation')[1];
+  assert.ok(section, 'TODO.md must document the 3.2.0 milestone');
+  const [chinese, english] = section.split('### English');
+  assert.ok(chinese && english, 'the 3.2.0 milestone must document both languages');
+  const tally = (text) => ({
+    total: (text.match(/^- \[[ x]\]/gm) || []).length,
+    unfinished: (text.match(/^- \[ \]/gm) || []).length,
+  });
+  assert.ok(tally(chinese).total > 0, 'the 3.2.0 milestone must list tasks');
+  assert.deepEqual(tally(chinese), tally(english), '3.2.0 task states must match across languages');
+  assert.equal(fs.existsSync('scripts/package-extension.sh'), true, 'the packaging script must exist');
+  assert.match(read('README.md'), /scripts\/package-extension\.sh/);
+});
+
+test('favorite filtering never queries the boolean index', () => {
+  // favorite is stored as a boolean; booleans are not valid IndexedDB keys, so
+  // IDBKeyRange.only(true) throws DataError. Filtering must stay in memory.
+  // Strip line comments first so explanatory text cannot satisfy the assertion.
+  const code = library.replace(/^\s*\/\/.*$/gm, '');
+  assert.doesNotMatch(code, /IDBKeyRange\.only\(true\)/);
+  assert.doesNotMatch(code, /\.index\('byFavorite'\)/);
+  assert.match(code, /if \(options\.favoriteOnly && !record\.favorite\) return false;/);
+  assert.match(code, /async function countFavorites\(\)/);
 });
 
 test('text scale follows the active tab zoom without scaling the whole panel', () => {
