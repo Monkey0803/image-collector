@@ -154,6 +154,21 @@ test('the 3.0.0 checklist has no unfinished entries', () => {
   assert.doesNotMatch(section, /- \[ \]/);
 });
 
+test('the 3.2.0 checklist stays in sync across languages and ships its deliverables', () => {
+  const section = todo.split('## 3.2.0 release quality and validation')[1];
+  assert.ok(section, 'TODO.md must document the 3.2.0 milestone');
+  const [chinese, english] = section.split('### English');
+  assert.ok(chinese && english, 'the 3.2.0 milestone must document both languages');
+  const tally = (text) => ({
+    total: (text.match(/^- \[[ x]\]/gm) || []).length,
+    unfinished: (text.match(/^- \[ \]/gm) || []).length,
+  });
+  assert.ok(tally(chinese).total > 0, 'the 3.2.0 milestone must list tasks');
+  assert.deepEqual(tally(chinese), tally(english), '3.2.0 task states must match across languages');
+  assert.equal(fs.existsSync('scripts/package-extension.sh'), true, 'the packaging script must exist');
+  assert.match(read('README.md'), /scripts\/package-extension\.sh/);
+});
+
 test('text scale follows the active tab zoom without scaling the whole panel', () => {
   assert.match(popup, /function applyBrowserTextScale/);
   assert.match(popup, /function readBrowserDefaultTextScale/);

@@ -1,8 +1,8 @@
 # Image Collector TODO
 
-本文档记录当前 `3.1.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
+本文档记录当前 `3.2.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
 
-最后更新：2026-09-03
+最后更新：2026-09-11
 
 ## 当前状态
 
@@ -122,9 +122,9 @@
 
 ## English
 
-This document tracks the current `3.1.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
+This document tracks the current `3.2.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
 
-Last updated: 2026-09-03
+Last updated: 2026-09-11
 
 ## Current status
 
@@ -472,6 +472,7 @@ Last updated: 2026-09-03
 - [x] 增加可重复的扩展打包脚本，并在打包前校验 manifest、入口文件、图标和 JavaScript 语法。
 - [x] 在开发文档中说明本地打包和发布前检查方式。
 - [x] 建立真实 Chrome 核心流程回归清单，并记录当前页、多页面、历史和打包流程的实测结果。
+- [ ] 补齐 ZIP、素材库和快捷键流程的真机回归记录。
 - [ ] 评估扩展网站访问权限，补充跨域、防盗链、失效图片和异常响应的验收用例。
 - [ ] 验证大页面、1000 张图片、缓存上限和大型 ZIP 的性能与稳定性。
 
@@ -479,6 +480,7 @@ Last updated: 2026-09-03
 
 - [x] Add a reproducible extension packaging script that validates the manifest, entry points, icons, and JavaScript syntax before packaging.
 - [x] Document local packaging and pre-release checks.
-- [ ] Establish a real Chrome regression checklist covering current-page, multi-page, history, ZIP, Library, and shortcut flows.
+- [x] Establish a real Chrome regression checklist and record results for the current-page, multi-page, history, and packaging flows.
+- [ ] Complete real-device regression records for the ZIP, Library, and shortcut flows.
 - [ ] Review website access permissions and add acceptance cases for cross-origin, hotlink-protected, expired, and malformed image responses.
 - [ ] Verify performance and stability with large pages, 1,000 images, cache limits, and large ZIP jobs.

@@ -446,8 +446,14 @@ download_image/
 ├── LICENSE             # MIT 开源许可证
 ├── QA.md               # 发布前 Chrome 验收清单
 ├── SECURITY.md         # 权限和本地数据边界说明
-├── TODO.md             # 3.1.0 已完成任务和后续路线图
-└── README.md           # 中文和英文项目文档
+├── TODO.md             # 3.2.0 已完成任务和后续路线图
+├── README.md           # 中文和英文项目文档
+├── scripts/
+│   └── package-extension.sh          # 校验并打包扩展为可发布 ZIP
+└── tests/
+    ├── extension-regression.test.js  # 发布元数据、入口和 UI 契约回归
+    ├── smart-collections.test.js     # 智能集合规则回归
+    └── fixtures/                     # 压力页面与图片夹具
 ```
 
 ### 开发和调试
@@ -826,8 +832,16 @@ download_image/
 │   ├── icon-48.png     # Extensions management icon
 │   └── icon-128.png    # Extension detail and installation icon
 ├── LICENSE             # MIT open-source license
-├── TODO.md             # 3.1.0 checklist and future roadmap
-└── README.md           # Chinese and English documentation
+├── QA.md               # Pre-release Chrome acceptance checklist
+├── SECURITY.md         # Permission and local-data boundary notes
+├── TODO.md             # 3.2.0 checklist and future roadmap
+├── README.md           # Chinese and English documentation
+├── scripts/
+│   └── package-extension.sh          # Validate and package the release ZIP
+└── tests/
+    ├── extension-regression.test.js  # Release metadata, entry-point, and UI contract checks
+    ├── smart-collections.test.js     # Smart-collection rule checks
+    └── fixtures/                     # Stress page and image fixtures
 ```
 
 ### Development and debugging
