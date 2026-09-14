@@ -242,7 +242,7 @@ async function readBrowserDefaultTextScale(tabId = null) {
       const results = await withTimeout(
         () => chrome.scripting.executeScript({ target: { tabId }, func: measureDefaultWebFontSize }),
         1200,
-        '读取网页默认字号超时'
+        t('timeoutFontSize')
       );
       const pageFontSize = Number(results?.[0]?.result);
       if (Number.isFinite(pageFontSize) && pageFontSize > 0) return pageFontSize / 16;
@@ -282,7 +282,7 @@ async function syncBrowserTextScale(tabId = null) {
     const tabs = await withTimeout(
       () => chrome.tabs.query({ active: true, currentWindow: true }),
       1500,
-      '读取当前网页缩放比例超时'
+      t('timeoutZoom')
     );
     targetTabId = tabs[0]?.id;
   }
@@ -295,7 +295,7 @@ async function syncBrowserTextScale(tabId = null) {
     zoomFactor = await withTimeout(
       () => chrome.tabs.getZoom(targetTabId),
       1500,
-      '读取当前网页缩放比例超时'
+      t('timeoutZoom')
     );
   } catch {
     // Keep the last known zoom when the active page is protected or closing.
@@ -394,7 +394,7 @@ async function refreshTabList() {
   if (!chrome.tabs?.query) return;
   const refreshToken = ++state.tabListRefreshToken;
   try {
-    const tabs = await withTimeout(() => chrome.tabs.query({ currentWindow: true }), 2000, '读取标签页列表超时');
+    const tabs = await withTimeout(() => chrome.tabs.query({ currentWindow: true }), 2000, t('timeoutTabList'));
     if (refreshToken !== state.tabListRefreshToken) return;
     state.availableTabs = (Array.isArray(tabs) ? tabs : []).filter((tab) => tab?.id);
     const availableIds = new Set(state.availableTabs.map((tab) => tab.id));
@@ -564,14 +564,14 @@ async function init() {
   const defaults = { filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, aspectRatio: 'all', zipLayout: 'flat', conflictAction: 'uniquify', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false, tabScope: 'current', selectedTabIds: [], themeMode: 'auto', compactMode: false, scanRules: normalizeScanRules(), siteAdapters: [], smartCollectionsVersion: SMART_COLLECTIONS_VERSION, smartCollections: [], syncSettings: false };
   let saved = defaults;
   try {
-    saved = (await withTimeout(() => chrome.storage.local.get(defaults), 1500, '读取扩展设置超时')) || defaults;
+    saved = (await withTimeout(() => chrome.storage.local.get(defaults), 1500, t('timeoutSettings'))) || defaults;
   } catch {
     // Settings are optional. Continue with defaults so the page scan remains usable.
   }
   let synced = {};
   if (saved.syncSettings && chrome.storage.sync?.get) {
     try {
-      synced = await withTimeout(() => chrome.storage.sync.get(SYNC_SETTING_KEYS), 1200, '读取同步设置超时');
+      synced = await withTimeout(() => chrome.storage.sync.get(SYNC_SETTING_KEYS), 1200, t('timeoutSyncSettings'));
     } catch {
       synced = {};
     }
@@ -1119,10 +1119,10 @@ function renderDuplicateGroups() {
   const visibleGroups = groups.slice(0, state.duplicateGroupLimit);
   visibleGroups.forEach((group, index) => {
     const section = document.createElement('section'); section.className = 'duplicate-group';
-    const heading = document.createElement('strong'); heading.textContent = `${state.libraryDuplicateScope === 'similar' ? '相似组' : '重复组'} ${index + 1} · ${group.items.length} 张`;
+    const heading = document.createElement('strong'); heading.textContent = `${state.libraryDuplicateScope === 'similar' ? t('similarGroupLabel') : t('duplicateGroupLabel')} ${index + 1} · ${t('groupImageCount', { count: group.items.length })}`;
     section.append(heading);
     group.items.forEach((item) => {
-      const button = document.createElement('button'); button.type = 'button'; button.className = 'duplicate-item'; button.textContent = `${item.width || 0}×${item.height || 0} · ${fileName(item.url)}${group.keeper === item.url ? ' · 保留' : ''}`;
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'duplicate-item'; button.textContent = `${item.width || 0}×${item.height || 0} · ${fileName(item.url)}${group.keeper === item.url ? ' · ' + t('keepMarker') : ''}`;
       button.addEventListener('click', () => openPreview(item)); section.append(button);
     });
     els.duplicateGroupList.append(section);
@@ -1144,11 +1144,11 @@ function renderDuplicateGroups() {
 }
 
 async function cleanupLibraryMode(mode) {
-  const labels = { invalid: '无效图片', unfavorited: '未收藏图片', duplicates: '重复图片' };
-  if (!window.confirm(`确定清理${labels[mode] || mode}吗？此操作不可撤销。`)) return;
+  const labels = { invalid: t('cleanupInvalidLabel'), unfavorited: t('cleanupUnfavoritedLabel'), duplicates: t('cleanupDuplicatesLabel') };
+  if (!window.confirm(t('cleanupConfirm', { label: labels[mode] || mode }))) return;
   try {
     const result = await ImageCollectorDB.cleanupImages(mode, state.duplicateStrategy);
-    state.librarySelected.clear(); await refreshLibraryData(); showToast(`已清理 ${result.count || 0} 张图片`);
+    state.librarySelected.clear(); await refreshLibraryData(); showToast(t('cleanupDone', { count: result.count || 0 }));
   } catch { showToast(t('bulkActionFailed')); }
 }
 
@@ -2014,11 +2014,11 @@ async function bulkUpdateLibrary(action) {
       await ImageCollectorDB.bulkUpdateImages(urls, (record) => ({ tags: [...new Set([...(record.tags || []), cleanTag])] }));
       showToast(t('bulkTagDone'));
     } else if (action === 'remove-tag') {
-      const tag = window.prompt('请输入要移除的标签');
+      const tag = window.prompt(t('removeTagPrompt'));
       if (!tag?.trim()) return;
       const cleanTag = tag.trim();
       await ImageCollectorDB.bulkUpdateImages(urls, (record) => ({ tags: (record.tags || []).filter((item) => item !== cleanTag) }));
-      showToast('标签已批量移除');
+      showToast(t('bulkRemoveTagDone'));
     } else if (action === 'collection') {
       state.collections = await ImageCollectorDB.listCollections();
       if (!state.collections.length) { showToast(t('createCollectionFirst')); return; }
@@ -2152,7 +2152,7 @@ function markdownLabel(record) {
 }
 
 function toMarkdownGallery(records, title) {
-  const countLabel = state.language === 'en' ? `${records.length} image(s)` : `共 ${records.length} 张图片`;
+  const countLabel = t('galleryImageCount', { count: records.length });
   const lines = [`# ${title}`, '', countLabel, ''];
   records.forEach((record) => {
     const url = exportUrl(record.originalUrl) || exportUrl(record.displayUrl) || exportUrl(record.url);
@@ -2166,11 +2166,11 @@ function toHtmlGallery(records, title) {
   const cards = records.map((record) => {
     const url = exportUrl(record.originalUrl) || exportUrl(record.displayUrl) || exportUrl(record.url);
     if (!url) return '';
-    const dimensions = record.width && record.height ? `${record.width} × ${record.height}px` : '尺寸未知';
+    const dimensions = record.width && record.height ? `${record.width} × ${record.height}px` : t('unknownDimensions');
     return `<article class="card"><a href="${escapeHtml(url)}" target="_blank" rel="noreferrer"><img src="${escapeHtml(url)}" alt="${escapeHtml(record.name)}" loading="lazy"></a><strong>${escapeHtml(record.name)}</strong><span>${escapeHtml(dimensions)} · ${escapeHtml(record.format || 'other')}</span></article>`;
   }).filter(Boolean).join('\n');
   const language = state.language === 'en' ? 'en' : 'zh-CN';
-  const exportedLabel = state.language === 'en' ? `${records.length} image(s) · exported by Image Collector` : `${records.length} 张图片 · 由 Image Collector 导出`;
+  const exportedLabel = t('galleryExported', { count: records.length });
   return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style> :root{color-scheme:light}*{box-sizing:border-box}body{margin:0;padding:32px;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#26333d;background:#f4f6f8}main{max-width:1440px;margin:auto}h1{margin:0 0 6px;font-size:28px}p{margin:0 0 24px;color:#6f7c85}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px}.card{min-width:0;padding:10px;border:1px solid #dfe7eb;border-radius:14px;background:#fff;box-shadow:0 5px 16px #17212b12}.card a{display:block;height:170px;border-radius:9px;background:#eef3f5;overflow:hidden}.card img{width:100%;height:100%;object-fit:contain}.card strong,.card span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.card strong{margin-top:9px}.card span{margin-top:2px;color:#82909a;font-size:12px}</style></head><body><main><h1>${escapeHtml(title)}</h1><p>${escapeHtml(exportedLabel)}</p><section class="grid">${cards}</section></main></body></html>`;
 }
 
@@ -2459,7 +2459,7 @@ function recoverTaskState() {
   const attempt = withTimeout(
     () => chrome.runtime.sendMessage({ type: 'recoverDownloadTasks' }),
     1500,
-    '任务状态恢复超时'
+    t('timeoutTaskRecovery')
   );
   state.taskRecoveryPromise = attempt.catch(() => {
     state.taskRecoveryPromise = null;
@@ -2683,10 +2683,10 @@ function updatePreviewContent(image) {
 function renderPreviewDetails(image) {
   if (!els.previewDetailsList) return;
   els.previewDetailsList.replaceChildren();
-  const details = [['完整 URL', image.url], ['来源元素', image.sourceElement || image.source], ['iframe', image.iframe ? '是' : '否'], ['MIME', image.mime || image.format], ['文件大小', formatBytes(image.size || 0)], ['缓存', image.cacheState || 'unknown'], ['集合', (image.collectionIds || []).map((id) => state.collections.find((c) => c.id === id)?.name || id).join(', ') || '未分类'], ['精确哈希', image.contentHash || '未分析'], ['感知哈希', image.perceptualHash || '未分析']];
+  const details = [[t('detailUrl'), image.url], [t('detailSourceElement'), image.sourceElement || image.source], [t('detailIframe'), image.iframe ? t('detailYes') : t('detailNo')], [t('detailMime'), image.mime || image.format], [t('detailFileSize'), formatBytes(image.size || 0)], [t('detailCache'), image.cacheState || 'unknown'], [t('detailCollections'), (image.collectionIds || []).map((id) => state.collections.find((c) => c.id === id)?.name || id).join(', ') || t('detailUncategorized')], [t('detailContentHash'), image.contentHash || t('detailNotAnalyzed')], [t('detailPerceptualHash'), image.perceptualHash || t('detailNotAnalyzed')]];
   details.forEach(([label, value]) => { const dt = document.createElement('dt'); dt.textContent = label; const dd = document.createElement('dd'); dd.textContent = String(value || '—'); els.previewDetailsList.append(dt, dd); });
-  if (els.previewCandidates) { els.previewCandidates.replaceChildren(); previewCandidates(image).concat(image.candidateUrls || []).filter((url, i, arr) => arr.indexOf(url) === i).forEach((url) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'candidate-url'; button.textContent = url; button.title = '复制地址'; button.addEventListener('click', () => copyText(url)); els.previewCandidates.append(button); }); }
-  if (els.previewCollectionSelect) { els.previewCollectionSelect.replaceChildren(); const none = document.createElement('option'); none.value = ''; none.textContent = '添加到集合…'; els.previewCollectionSelect.append(none); state.collections.forEach((collection) => { const option = document.createElement('option'); option.value = collection.id; option.textContent = collection.name; els.previewCollectionSelect.append(option); }); }
+  if (els.previewCandidates) { els.previewCandidates.replaceChildren(); previewCandidates(image).concat(image.candidateUrls || []).filter((url, i, arr) => arr.indexOf(url) === i).forEach((url) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'candidate-url'; button.textContent = url; button.title = t('copyAddress'); button.addEventListener('click', () => copyText(url)); els.previewCandidates.append(button); }); }
+  if (els.previewCollectionSelect) { els.previewCollectionSelect.replaceChildren(); const none = document.createElement('option'); none.value = ''; none.textContent = t('addToCollection'); els.previewCollectionSelect.append(none); state.collections.forEach((collection) => { const option = document.createElement('option'); option.value = collection.id; option.textContent = collection.name; els.previewCollectionSelect.append(option); }); }
 }
 
 async function copyText(value) { try { await navigator.clipboard.writeText(String(value || '')); showToast(t('copySuccess')); } catch { showToast(t('copyFailed')); } }
@@ -2764,7 +2764,7 @@ async function loadPreviewWithFallback(image, options = {}) {
         return;
       }
     }
-    if (token === previewLoadToken) { showPreviewError(t('previewFailureHint', { count: candidates.length })); ImageCollectorDB.updateImage?.(image.url, { valid: false, invalidReason: '所有候选地址均无法加载' }).catch(() => {}); }
+    if (token === previewLoadToken) { showPreviewError(t('previewFailureHint', { count: candidates.length })); ImageCollectorDB.updateImage?.(image.url, { valid: false, invalidReason: t('invalidReasonAllCandidatesFailed') }).catch(() => {}); }
   };
   els.previewImage.onerror = handleFailure;
   els.previewImage.onload = () => {
@@ -4401,6 +4401,77 @@ Object.assign(TRANSLATIONS.en, {
   markdownExport: 'Markdown gallery', htmlExport: 'HTML gallery', contactSheetExport: 'Contact sheet', galleryEmpty: 'There are no images to export', galleryExported: '{type} download started', galleryPartial: 'Contact sheet exported; loaded {loaded}/{total} image(s)', galleryFailed: 'Gallery export failed'
 });
 
+
+// 3.3.1: copy that previously bypassed t(), plus the timeout and gallery strings.
+Object.assign(TRANSLATIONS.zh, {
+  invalidReasonAllCandidatesFailed: '所有候选地址均无法加载',
+  duplicateGroupLabel: '重复组', similarGroupLabel: '相似组', groupImageCount: '{count} 张', keepMarker: '保留',
+  cleanupInvalidLabel: '无效图片', cleanupUnfavoritedLabel: '未收藏图片', cleanupDuplicatesLabel: '重复图片',
+  cleanupConfirm: '确定清理{label}吗？此操作不可撤销。', cleanupDone: '已清理 {count} 张图片',
+  removeTagPrompt: '请输入要移除的标签', bulkRemoveTagDone: '标签已批量移除',
+  unknownDimensions: '尺寸未知',
+  detailUrl: '完整 URL', detailSourceElement: '来源元素', detailIframe: 'iframe', detailMime: 'MIME',
+  detailFileSize: '文件大小', detailCache: '缓存', detailCollections: '集合',
+  detailContentHash: '精确哈希', detailPerceptualHash: '感知哈希',
+  detailUncategorized: '未分类', detailNotAnalyzed: '未分析', detailYes: '是', detailNo: '否',
+  copyAddress: '复制地址', addToCollection: '添加到集合…',
+  galleryImageCount: '共 {count} 张图片', galleryExported: '{count} 张图片 · 由 Image Collector 导出',
+  timeoutFontSize: '读取网页默认字号超时', timeoutZoom: '读取当前网页缩放比例超时',
+  timeoutTabList: '读取标签页列表超时', timeoutSettings: '读取扩展设置超时',
+  timeoutSyncSettings: '读取同步设置超时', timeoutTaskRecovery: '任务状态恢复超时',
+  copySuccess: '已复制到剪贴板', smartRuleVersionUnsupported: '智能集合规则版本不受支持，已跳过',
+  smartCollectionNamePlaceholder: '例如：大尺寸 PNG',
+  includeSelectorsPlaceholder: '例如：.gallery img, picture source',
+  excludeSelectorsPlaceholder: '例如：.avatar, .icon',
+  adapterHostPlaceholder: '例如：xiaohongshu.com 或 *.example.com',
+  adapterSelectorPlaceholder: '例如：.note-container img',
+  adapterAttributesPlaceholder: '例如：data-original,data-full',
+  libraryFormatAll: '全部格式', libraryFormatOther: '其它',
+  librarySortUpdated: '最近更新', librarySortWidth: '宽度', librarySortHeight: '高度', librarySortSize: '文件大小',
+  libraryScopeFavorites: '我的收藏', libraryScopeAllImages: '全部图片', libraryScopeAllAssets: '全部素材',
+  libraryScopeDuplicates: '重复图片', libraryScopeSimilar: '相似图片', libraryScopeInvalid: '无效图片',
+  keepLargestDimension: '保留最大尺寸', keepLargestFile: '保留最大文件', keepOriginal: '优先原图',
+  ariaScanScope: '采集范围', ariaTabSelection: '选择标签页', ariaFilterPreset: '筛选预设',
+  ariaMinSize: '最小文件大小 KB', ariaMaxSize: '最大文件大小 KB', ariaAspectFilter: '按宽高比筛选',
+  ariaLibraryScope: '素材库筛选范围', ariaDedupeFilter: '去重筛选', ariaKeepStrategy: '保留策略',
+  ariaPreviewCollection: '修改集合',
+  previewCopyAll: '复制所有地址', previewOpenSource: '打开来源页面', previewDownload: '下载图片', previewEditTags: '编辑标签', ariaMinAspect: '最小宽高比', ariaMaxAspect: '最大宽高比', ariaSourceFilter: '按图片来源筛选', ariaZipLayout: 'ZIP 文件夹分组方式', ariaConflictAction: '文件冲突处理方式', ariaSmartCollectionFilter: '智能集合筛选', ariaLibrarySearch: '搜索素材库', ariaSmartCollectionManager: '智能集合管理', ariaLibraryFormat: '按格式筛选', ariaLibraryMinWidth: '素材库最小宽度', ariaLibraryMaxWidth: '素材库最大宽度', ariaLibraryMinHeight: '素材库最小高度', ariaLibraryMaxHeight: '素材库最大高度', ariaLibraryMinSize: '素材库最小文件大小 KB', ariaLibraryMaxSize: '素材库最大文件大小 KB', ariaLibrarySort: '素材库排序', ariaSizeDistribution: '文件大小数量分布', ariaLibraryMinAspect: '素材库最小宽高比', ariaLibraryMaxAspect: '素材库最大宽高比', ariaAspectDistribution: '宽高比数量分布', ariaHistory: '扫描和下载历史', ariaSettings: '扩展设置', ariaScanRules: '扫描规则', ariaSiteAdapters: '站点适配规则', ariaSyncSettings: '设置同步', ariaImageDetails: '图片详情', similarThresholdLabel: '相似阈值', cleanupInvalidAction: '清理无效', cleanupUnfavoritedAction: '清理未收藏', cleanupDuplicatesAction: '清理重复'
+});
+Object.assign(TRANSLATIONS.en, {
+  invalidReasonAllCandidatesFailed: 'None of the candidate addresses could be loaded',
+  duplicateGroupLabel: 'Duplicate group', similarGroupLabel: 'Similar group', groupImageCount: '{count} images', keepMarker: 'keep',
+  cleanupInvalidLabel: 'invalid images', cleanupUnfavoritedLabel: 'non-favorited images', cleanupDuplicatesLabel: 'duplicate images',
+  cleanupConfirm: 'Clear {label}? This cannot be undone.', cleanupDone: 'Cleared {count} image(s)',
+  removeTagPrompt: 'Tag to remove', bulkRemoveTagDone: 'Tags removed',
+  unknownDimensions: 'Unknown size',
+  detailUrl: 'Full URL', detailSourceElement: 'Source element', detailIframe: 'iframe', detailMime: 'MIME',
+  detailFileSize: 'File size', detailCache: 'Cache', detailCollections: 'Collections',
+  detailContentHash: 'Content hash', detailPerceptualHash: 'Perceptual hash',
+  detailUncategorized: 'Uncategorized', detailNotAnalyzed: 'Not analyzed', detailYes: 'Yes', detailNo: 'No',
+  copyAddress: 'Copy address', addToCollection: 'Add to collection…',
+  galleryImageCount: '{count} image(s)', galleryExported: '{count} image(s) · exported by Image Collector',
+  timeoutFontSize: "Timed out reading the page's default font size", timeoutZoom: 'Timed out reading the current page zoom',
+  timeoutTabList: 'Timed out reading the tab list', timeoutSettings: 'Timed out reading extension settings',
+  timeoutSyncSettings: 'Timed out reading synced settings', timeoutTaskRecovery: 'Timed out recovering task state',
+  copySuccess: 'Copied to clipboard', smartRuleVersionUnsupported: 'The smart-collection rule version is not supported and was skipped',
+  smartCollectionNamePlaceholder: 'For example: Large PNG',
+  includeSelectorsPlaceholder: '.gallery img, picture source',
+  excludeSelectorsPlaceholder: '.avatar, .icon',
+  adapterHostPlaceholder: 'xiaohongshu.com or *.example.com',
+  adapterSelectorPlaceholder: '.note-container img',
+  adapterAttributesPlaceholder: 'data-original,data-full',
+  libraryFormatAll: 'All formats', libraryFormatOther: 'Other',
+  librarySortUpdated: 'Recently updated', librarySortWidth: 'Width', librarySortHeight: 'Height', librarySortSize: 'File size',
+  libraryScopeFavorites: 'My favorites', libraryScopeAllImages: 'All images', libraryScopeAllAssets: 'All assets',
+  libraryScopeDuplicates: 'Duplicate images', libraryScopeSimilar: 'Similar images', libraryScopeInvalid: 'Invalid images',
+  keepLargestDimension: 'Keep largest dimensions', keepLargestFile: 'Keep largest file', keepOriginal: 'Prefer original',
+  ariaScanScope: 'Collection scope', ariaTabSelection: 'Tab selection', ariaFilterPreset: 'Filter preset',
+  ariaMinSize: 'Minimum file size in KB', ariaMaxSize: 'Maximum file size in KB', ariaAspectFilter: 'Filter by aspect ratio',
+  ariaLibraryScope: 'Library filter scope', ariaDedupeFilter: 'Duplicate filter', ariaKeepStrategy: 'Keep strategy',
+  ariaPreviewCollection: 'Change collection',
+  previewCopyAll: 'Copy all addresses', previewOpenSource: 'Open source page', previewDownload: 'Download image', previewEditTags: 'Edit tags', ariaMinAspect: 'Minimum aspect ratio', ariaMaxAspect: 'Maximum aspect ratio', ariaSourceFilter: 'Filter by discovery source', ariaZipLayout: 'ZIP folder grouping', ariaConflictAction: 'File conflict handling', ariaSmartCollectionFilter: 'Smart collection filter', ariaLibrarySearch: 'Search the library', ariaSmartCollectionManager: 'Smart collection management', ariaLibraryFormat: 'Filter by format', ariaLibraryMinWidth: 'Library minimum width', ariaLibraryMaxWidth: 'Library maximum width', ariaLibraryMinHeight: 'Library minimum height', ariaLibraryMaxHeight: 'Library maximum height', ariaLibraryMinSize: 'Library minimum file size in KB', ariaLibraryMaxSize: 'Library maximum file size in KB', ariaLibrarySort: 'Library sort', ariaSizeDistribution: 'File size distribution', ariaLibraryMinAspect: 'Library minimum aspect ratio', ariaLibraryMaxAspect: 'Library maximum aspect ratio', ariaAspectDistribution: 'Aspect ratio distribution', ariaHistory: 'Scan and download history', ariaSettings: 'Extension settings', ariaScanRules: 'Scan rules', ariaSiteAdapters: 'Site adapter rules', ariaSyncSettings: 'Settings sync', ariaImageDetails: 'Image details', similarThresholdLabel: 'Similarity threshold', cleanupInvalidAction: 'Clear invalid', cleanupUnfavoritedAction: 'Clear non-favorited', cleanupDuplicatesAction: 'Clear duplicates'
+});
+
 function t(key, values = {}) {
   const raw = TRANSLATIONS[state.language]?.[key] ?? TRANSLATIONS.zh[key] ?? key;
   const text = Array.isArray(raw) ? raw : String(raw);
@@ -4524,7 +4595,7 @@ function applyLanguage() {
   document.querySelector('.smart-collection-card')?.setAttribute('aria-label', t('smartCollections'));
   setText(els.smartCollectionTitle, t('smartCollections')); setText(els.smartCollectionHint, t('smartCollectionHint')); setText(els.syncPageFilters, t('syncPageFilters')); setText(els.reapplySmartCollections, t('reapplySmartCollections')); setText(els.newSmartCollection, t('newSmartCollection'));
   setText(els.smartRuleNameLabel, t('smartRuleName')); setText(els.smartRuleLogicLabel, t('smartRuleLogic')); setText(els.smartConditionsLabel, t('smartConditions')); setText(els.addSmartCondition, t('addCondition')); setText(els.cancelSmartCollection, t('cancelSmartCollection')); setText(els.saveSmartCollection, t('saveSmartCollection'));
-  if (els.smartCollectionName) els.smartCollectionName.placeholder = state.language === 'en' ? 'For example: Large PNG' : '例如：大尺寸 PNG';
+  if (els.smartCollectionName) els.smartCollectionName.placeholder = t('smartCollectionNamePlaceholder');
   if (els.smartCollectionLogic) { const logicOptions = [t('smartAnd'), t('smartOr')]; [...els.smartCollectionLogic.options].forEach((option, index) => { option.textContent = logicOptions[index]; }); }
   if (els.librarySearch) els.librarySearch.placeholder = t('librarySearch');
   if (els.libraryMinWidth) els.libraryMinWidth.placeholder = t('libraryMinWidth');
@@ -4574,8 +4645,57 @@ function applyLanguage() {
   const libraryAspectLabel = document.querySelector('.library-visual-filters .mini-range-control:last-child > span'); if (libraryAspectLabel) libraryAspectLabel.textContent = t('aspectRatio');
   const scrollLabel = document.querySelector('.scan-options label:nth-child(2) > span'); if (scrollLabel) scrollLabel.textContent = t('autoScroll');
   const scanOptions = t('imageOptions'); [...(els.scanLimit?.options || [])].forEach((option, index) => { if (scanOptions[index]) option.textContent = scanOptions[index]; });
-  const libraryFormatOptions = state.language === 'en' ? ['All formats', 'JPEG', 'PNG', 'WEBP', 'AVIF', 'Other'] : ['全部格式', 'JPEG', 'PNG', 'WEBP', 'AVIF', '其它']; [...(els.libraryFormat?.options || [])].forEach((option, index) => { if (libraryFormatOptions[index]) option.textContent = libraryFormatOptions[index]; });
-  const librarySortOptions = state.language === 'en' ? ['Recently updated', 'Width', 'Height', 'File size'] : ['最近更新', '宽度', '高度', '文件大小']; [...(els.librarySort?.options || [])].forEach((option, index) => { if (librarySortOptions[index]) option.textContent = librarySortOptions[index]; });
+  const libraryFormatOptions = [t('libraryFormatAll'), 'JPEG', 'PNG', 'WEBP', 'AVIF', t('libraryFormatOther')]; [...(els.libraryFormat?.options || [])].forEach((option, index) => { if (libraryFormatOptions[index]) option.textContent = libraryFormatOptions[index]; });
+  const librarySortOptions = [t('librarySortUpdated'), t('librarySortWidth'), t('librarySortHeight'), t('librarySortSize')]; [...(els.librarySort?.options || [])].forEach((option, index) => { if (librarySortOptions[index]) option.textContent = librarySortOptions[index]; });
+  // 3.3.1: options, aria-labels, and preview actions that were never localised.
+  const libraryScopeOptions = [t('libraryScopeFavorites'), t('libraryScopeAllImages')];
+  [...(els.libraryScope?.options || [])].forEach((option, index) => { if (libraryScopeOptions[index]) option.textContent = libraryScopeOptions[index]; });
+  const dedupeOptions = [t('libraryScopeAllAssets'), t('libraryScopeDuplicates'), t('libraryScopeSimilar'), t('libraryScopeInvalid')];
+  [...(els.libraryDuplicateScope?.options || [])].forEach((option, index) => { if (dedupeOptions[index]) option.textContent = dedupeOptions[index]; });
+  const keepOptions = [t('keepLargestDimension'), t('keepLargestFile'), t('keepOriginal')];
+  [...(els.duplicateStrategy?.options || [])].forEach((option, index) => { if (keepOptions[index]) option.textContent = keepOptions[index]; });
+  const setAria = (selector, key) => { const node = document.querySelector(selector); if (node) node.setAttribute('aria-label', t(key)); };
+  setAria('#multiPageScope', 'ariaScanScope');
+  setAria('#tabSelectionList', 'ariaTabSelection');
+  setAria('#filterPreset', 'ariaFilterPreset');
+  setAria('#minSize', 'ariaMinSize');
+  setAria('#maxSize', 'ariaMaxSize');
+  setAria('#aspectVisualTabs', 'ariaAspectFilter');
+  setAria('#aspectRatio', 'ariaAspectFilter');
+  setAria('#libraryScope', 'ariaLibraryScope');
+  setAria('#libraryDuplicateScope', 'ariaDedupeFilter');
+  setAria('#duplicateStrategy', 'ariaKeepStrategy');
+  setAria('#previewCollectionSelect', 'ariaPreviewCollection');
+  setText(els.previewCopyCandidates, t('previewCopyAll'));
+  setText(els.previewOpenSource, t('previewOpenSource'));
+  setText(els.previewDownload, t('previewDownload'));
+  setText(els.previewEditTags, t('previewEditTags'));
+  // Any static aria-label whose text already exists as a translation value is
+  // localised automatically, using both languages so switching back also works.
+  const labelToKey = new Map();
+  ['zh', 'en'].forEach((lang) => Object.entries(TRANSLATIONS[lang] || {}).forEach(([key, value]) => {
+    if (typeof value === 'string' && value) labelToKey.set(value, key);
+  }));
+  document.querySelectorAll('[aria-label]').forEach((node) => {
+    const key = labelToKey.get(node.getAttribute('aria-label') || '');
+    if (!key) return;
+    const translated = TRANSLATIONS[state.language]?.[key];
+    if (typeof translated === 'string' && translated) node.setAttribute('aria-label', translated);
+  });
+  // Leaf static label spans are localised the same way, skipping the dynamic
+  // content areas whose text is produced by the app itself.
+  const dynamicAreas = '#imageGrid, #libraryGrid, #duplicateGroupList, #taskList, #smartCollectionList, #previewDetailsList, #tabSelectionList, #scanHistory';
+  document.querySelectorAll('span').forEach((node) => {
+    if (node.children.length || node.id) return;
+    if (node.closest(dynamicAreas)) return;
+    const key = labelToKey.get((node.textContent || '').trim());
+    if (!key) return;
+    const translated = TRANSLATIONS[state.language]?.[key];
+    if (typeof translated === 'string' && translated) node.textContent = translated;
+  });
+  setText(els.cleanupInvalid, t('cleanupInvalidAction'));
+  setText(els.cleanupUnfavorited, t('cleanupUnfavoritedAction'));
+  setText(els.cleanupDuplicates, t('cleanupDuplicatesAction'));
   setText(els.selectAllLibrary?.nextElementSibling, t('selectAll')); setText(els.invertLibrarySelection, t('invertLibrarySelection')); setText(els.clearLibrarySelection, t('clearLibrarySelection')); setText(els.bulkFavorite, t('bulkFavorite')); setText(els.bulkTag, t('bulkTag')); setText(els.bulkCollection, t('bulkCollection')); setText(els.bulkDelete, t('bulkDelete')); setText(els.libraryDownloadSelected, t('libraryDownloadSelected')); setText(els.libraryZipSelected, t('libraryZipSelected'));
   const taskEmptyTitle = document.querySelector('#taskEmpty strong'); if (taskEmptyTitle) taskEmptyTitle.textContent = t('taskEmpty');
   const taskEmptyHint = document.querySelector('#taskEmpty span'); if (taskEmptyHint) taskEmptyHint.textContent = t('taskEmptyHint');
@@ -4584,7 +4704,7 @@ function applyLanguage() {
     els.retryButton.innerHTML = `${t('retryFailedItems')} <span id="retryCount">${els.retryCount?.textContent || '0'}</span>`;
     els.retryCount = $('#retryCount');
   }
-  const initialProgressDetail = els.progressDetail; if (initialProgressDetail && (!initialProgressDetail.textContent || initialProgressDetail.textContent === '等待任务开始')) initialProgressDetail.textContent = t('waitingTask');
+  const initialProgressDetail = els.progressDetail; if (initialProgressDetail && (!initialProgressDetail.textContent || initialProgressDetail.textContent === t('waitingTask'))) initialProgressDetail.textContent = t('waitingTask');
   renderCollectionOptions();
   renderSmartCollectionOptions();
   renderSiteAdapters();
@@ -4617,11 +4737,11 @@ function applyLanguage() {
   setText(els.saveScanRules, t('saveScanRules')); setText(els.saveSiteAdapter, t('saveSiteAdapter')); setText(els.clearSiteAdapter, t('clearForm')); setText(els.saveSyncSettings, t('saveSyncSettings'));
   const syncLabel = document.querySelector('#syncSettings + span strong'); if (syncLabel) syncLabel.textContent = t('useChromeSync');
   const syncDescription = document.querySelector('#syncSettings + span small'); if (syncDescription) syncDescription.textContent = t('syncDescription');
-  if (els.includeSelectors) els.includeSelectors.placeholder = state.language === 'en' ? '.gallery img, picture source' : '例如：.gallery img, picture source';
-  if (els.excludeSelectors) els.excludeSelectors.placeholder = state.language === 'en' ? '.avatar, .icon' : '例如：.avatar, .icon';
-  if (els.adapterHost) els.adapterHost.placeholder = state.language === 'en' ? '*.example.com or example.com' : '例如：xiaohongshu.com 或 *.example.com';
-  if (els.adapterSelector) els.adapterSelector.placeholder = state.language === 'en' ? '.note-container img' : '例如：.note-container img';
-  if (els.adapterAttributes) els.adapterAttributes.placeholder = state.language === 'en' ? 'data-original,data-full' : '例如：data-original,data-full';
+  if (els.includeSelectors) els.includeSelectors.placeholder = t('includeSelectorsPlaceholder');
+  if (els.excludeSelectors) els.excludeSelectors.placeholder = t('excludeSelectorsPlaceholder');
+  if (els.adapterHost) els.adapterHost.placeholder = t('adapterHostPlaceholder');
+  if (els.adapterSelector) els.adapterSelector.placeholder = t('adapterSelectorPlaceholder');
+  if (els.adapterAttributes) els.adapterAttributes.placeholder = t('adapterAttributesPlaceholder');
   updateSliderUI('width'); updateSliderUI('height');
   els.widthValue?.setAttribute('title', `${t('widthMin')} / ${t('widthMax')}`);
   els.heightValue?.setAttribute('title', `${t('heightMin')} / ${t('heightMax')}`);

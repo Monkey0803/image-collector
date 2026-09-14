@@ -172,7 +172,8 @@ test('milestone checklists stay in sync across languages and ship their delivera
     ['## 3.2.0 release quality and validation', '## 3.2.1', true],
     ['## 3.2.1 metadata coverage and index cleanup', '## 3.2.2', true],
     ['## 3.2.2 side panel shortcut reliability', '## 3.3.0', true],
-    ['## 3.3.0 silent truncation cleanup and CI', null, true],
+    ['## 3.3.0 silent truncation cleanup and CI', '## 3.3.1', true],
+    ['## 3.3.1 interface language completeness', null, false],
   ];
   const tally = (text) => ({
     total: (text.match(/^- \[[ x]\]/gm) || []).length,
@@ -302,6 +303,49 @@ test('README Chinese and English halves stay in sync', () => {
     // format names are intentionally identical in both halves
     .filter((line) => !/^- (JPEG|PNG|WEBP|AVIF)$/.test(line.trim()));
   assert.deepEqual(leakedIntoChinese, [], 'the Chinese half must not contain English entries');
+});
+
+test('every t() key is defined in both languages', () => {
+  // 3.3.1: t() falls back to Chinese, so a key missing from the English table
+  // silently renders Chinese copy in the English interface. Requiring two
+  // definitions (one per language) catches both missing and half-added keys.
+  const used = new Set([...popup.matchAll(/\bt\('([a-zA-Z0-9_]+)'/g)].map((match) => match[1]));
+  assert.ok(used.size > 300, `expected the popup to use many translation keys, saw ${used.size}`);
+  const definitions = (key) => (popup.match(new RegExp(`(^|[^a-zA-Z0-9_])${key}:`, 'g')) || []).length;
+  const thin = [...used].filter((key) => definitions(key) < 2);
+  assert.deepEqual(thin, [], 'these keys are used by t() but are not defined in both languages');
+});
+
+test('user-visible copy outside the translation tables stays translated', () => {
+  // 3.3.1: the popup previously carried hardcoded Chinese for group headings,
+  // cleanup dialogs, prompts, details labels, and placeholders.
+  const lines = popup.split('\n');
+  const skip = new Set();
+  lines.forEach((line, index) => {
+    const base = /const TRANSLATIONS = \{/.test(line);
+    const assigned = /Object\.assign\(TRANSLATIONS\.(zh|en)/.test(line);
+    if (!base && !assigned) return;
+    const closer = base ? /^\};$/ : /^\}\);$/;
+    for (let i = index; i < lines.length; i += 1) {
+      skip.add(i);
+      if (closer.test(lines[i])) break;
+    }
+  });
+  const ALLOWED = [
+    // the collector is injected into the page, where t() does not exist
+    /options\.language === 'en' \?/,
+    // the language button intentionally shows the other language's label
+    /setText\(els\.language, state\.language === 'en' \?/,
+  ];
+  const leaked = [];
+  lines.forEach((line, index) => {
+    if (skip.has(index)) return;
+    if (!/[\u4e00-\u9fff]/.test(line)) return;
+    if (/^\s*(\/\/|\*)/.test(line)) return;
+    if (ALLOWED.some((pattern) => pattern.test(line))) return;
+    leaked.push(`L${index + 1}: ${line.trim().slice(0, 80)}`);
+  });
+  assert.deepEqual(leaked, [], 'Chinese copy must live in the translation tables');
 });
 
 test('text scale follows the active tab zoom without scaling the whole panel', () => {
