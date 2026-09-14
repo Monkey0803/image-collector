@@ -9,10 +9,12 @@
   <body>
     <main class="app-shell">
       <header class="topbar">
-        <img class="brand-icon" src="icons/icon.svg" alt="" aria-hidden="true" />
-        <div class="brand-copy">
-          <p class="eyebrow">IMAGE TOOLKIT</p>
-          <h1>Image Collector</h1>
+        <div class="topbar-identity" aria-label="当前页面">
+          <span class="page-icon" id="pageIcon">◎</span>
+          <div class="page-copy">
+            <strong id="pageTitle">正在读取当前页面</strong>
+            <span id="pageUrl">—</span>
+          </div>
         </div>
         <div class="topbar-actions">
           <span id="scanStatus" class="scan-status">扫描中</span>
@@ -21,40 +23,15 @@
         </div>
       </header>
 
-      <section class="page-summary" aria-label="当前页面">
-        <div class="page-icon" id="pageIcon">◎</div>
-        <div class="page-copy">
-          <strong id="pageTitle">正在读取当前页面</strong>
-          <span id="pageUrl">—</span>
-          <small id="scanStats" class="scan-stats" aria-live="polite"></small>
-        </div>
-      </section>
+      <small id="scanStats" class="scan-stats" aria-live="polite"></small>
 
-      <details id="multiPagePanel" class="multi-page-panel">
-        <summary class="filter-summary">
-          <span class="filter-summary-copy"><span id="multiPageEyebrow" class="eyebrow">MULTI-PAGE</span><span id="multiPageTitle" class="filter-title">多页面采集</span></span>
-          <span class="filter-summary-meta"><span id="multiPageStatus" class="filter-active-count">当前标签页</span><span class="details-chevron" aria-hidden="true">⌄</span></span>
-        </summary>
-        <div class="multi-page-content">
-          <div class="multi-page-toolbar">
-            <label class="multi-page-scope"><span id="multiPageScopeLabel">采集范围</span><select id="multiPageScope" aria-label="采集范围"><option value="current">当前标签页</option><option value="selected">选中的标签页</option><option value="window">当前窗口全部标签页</option></select></label>
-            <span id="multiPageHint" class="format-hint">选择多个标签页后合并结果</span>
-          </div>
-          <div id="tabSelectionList" class="tab-selection-list" role="group" aria-label="选择标签页"></div>
-          <div class="multi-page-actions">
-            <button id="selectAllTabs" class="subtle-button" type="button">全选标签页</button>
-            <button id="clearSelectedTabs" class="subtle-button" type="button">清除选择</button>
-            <button id="scanMultiPage" class="primary-button" type="button">开始采集</button>
-          </div>
-        </div>
-      </details>
 
       <nav class="view-switcher" aria-label="视图切换">
-        <button id="pageViewButton" class="view-tab active" type="button" aria-selected="true">当前页面</button>
-        <button id="libraryViewButton" class="view-tab" type="button" aria-selected="false">素材库 <span id="favoriteCount">0</span></button>
-        <button id="historyViewButton" class="view-tab" type="button" aria-selected="false">历史</button>
-        <button id="taskViewButton" class="view-tab" type="button" aria-selected="false">任务</button>
-        <button id="settingsViewButton" class="view-tab" type="button" aria-selected="false">设置</button>
+        <button id="pageViewButton" class="view-tab active" type="button" aria-selected="true" title="当前页面"><span class="view-tab-icon" aria-hidden="true">▤</span><span class="view-tab-text">当前页面</span></button>
+        <button id="libraryViewButton" class="view-tab" type="button" aria-selected="false" title="素材库"><span class="view-tab-icon" aria-hidden="true">★</span><span class="view-tab-text">素材库</span><span id="favoriteCount">0</span></button>
+        <button id="historyViewButton" class="view-tab" type="button" aria-selected="false" title="历史"><span class="view-tab-icon" aria-hidden="true">◷</span><span class="view-tab-text">历史</span></button>
+        <button id="taskViewButton" class="view-tab" type="button" aria-selected="false" title="任务"><span class="view-tab-icon" aria-hidden="true">⇩</span><span class="view-tab-text">任务</span></button>
+        <button id="settingsViewButton" class="view-tab" type="button" aria-selected="false" title="设置"><span class="view-tab-icon" aria-hidden="true">⚙</span><span class="view-tab-text">设置</span></button>
       </nav>
 
       <div id="pageView" class="page-workspace">
@@ -153,19 +130,15 @@
 
       <section class="results-section">
         <div class="results-heading">
-          <div class="results-identity">
-            <p id="resultsEyebrow" class="eyebrow">COLLECTED IMAGES</p>
-            <div class="results-title"><h2 id="resultsTitle">图片结果</h2><label class="select-all"><input id="selectAll" type="checkbox" /><span>全选当前结果</span></label><span id="selectedSummary" class="selection-summary">已选 0</span></div>
-          </div>
+          <h2 id="resultsTitle">图片结果</h2>
           <span id="resultCount" class="result-count">0 张图片</span>
-        </div>
-        <div class="results-controls">
+          <label class="select-all"><input id="selectAll" type="checkbox" /><span>全选</span></label>
+          <span id="selectedSummary" class="selection-summary">已选 0</span>
           <label class="search-box" aria-label="搜索图片">
             <span aria-hidden="true">⌕</span>
             <input id="searchInput" type="search" placeholder="搜索文件名、域名或 URL" autocomplete="off" />
           </label>
           <label class="sort-control">
-            <span>排序</span>
             <select id="sortSelect" aria-label="图片排序方式">
               <option value="page">页面顺序</option>
               <option value="width-desc">宽度：从大到小</option>
@@ -174,15 +147,15 @@
               <option value="name-asc">文件名：A–Z</option>
             </select>
           </label>
+          <details class="selection-tools">
+            <summary><span id="selectionToolsLabel">选择工具</span><span class="details-chevron" aria-hidden="true">⌄</span></summary>
+            <div class="selection-tools-content">
+            <select id="selectionPreset" aria-label="选择预设"><option value="">选择预设</option></select>
+            <button id="saveSelectionPreset" class="subtle-button" type="button">保存选择</button>
+            <button id="invertSelection" class="subtle-button" type="button">反选</button>
+            </div>
+          </details>
         </div>
-        <details class="selection-tools">
-          <summary><span id="selectionToolsLabel">选择工具</span><span class="details-chevron" aria-hidden="true">⌄</span></summary>
-          <div class="selection-tools-content">
-          <select id="selectionPreset" aria-label="选择预设"><option value="">选择预设</option></select>
-          <button id="saveSelectionPreset" class="subtle-button" type="button">保存选择</button>
-          <button id="invertSelection" class="subtle-button" type="button">反选</button>
-          </div>
-        </details>
         <div id="imageGrid" class="image-grid"></div>
         <button id="loadMoreImages" class="load-more-button" type="button" hidden>加载更多</button>
         <div id="emptyState" class="empty-state" hidden>
@@ -261,6 +234,25 @@
           </div>
         </details>
       </section>
+
+      <details id="multiPagePanel" class="multi-page-panel">
+        <summary class="filter-summary">
+          <span class="filter-summary-copy"><span id="multiPageEyebrow" class="eyebrow">MULTI-PAGE</span><span id="multiPageTitle" class="filter-title">多页面采集</span></span>
+          <span class="filter-summary-meta"><span id="multiPageStatus" class="filter-active-count">当前标签页</span><span class="details-chevron" aria-hidden="true">⌄</span></span>
+        </summary>
+        <div class="multi-page-content">
+          <div class="multi-page-toolbar">
+            <label class="multi-page-scope"><span id="multiPageScopeLabel">采集范围</span><select id="multiPageScope" aria-label="采集范围"><option value="current">当前标签页</option><option value="selected">选中的标签页</option><option value="window">当前窗口全部标签页</option></select></label>
+            <span id="multiPageHint" class="format-hint">选择多个标签页后合并结果</span>
+          </div>
+          <div id="tabSelectionList" class="tab-selection-list" role="group" aria-label="选择标签页"></div>
+          <div class="multi-page-actions">
+            <button id="selectAllTabs" class="subtle-button" type="button">全选标签页</button>
+            <button id="clearSelectedTabs" class="subtle-button" type="button">清除选择</button>
+            <button id="scanMultiPage" class="primary-button" type="button">开始采集</button>
+          </div>
+        </div>
+      </details>
       </div>
 
       <section id="libraryView" class="library-view" hidden aria-label="本地素材库">
