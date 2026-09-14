@@ -14,6 +14,7 @@
 - [x] `3.2.1` 元数据覆盖与索引清理已发布。
 - [x] `3.2.2` 侧边栏快捷键可靠性修复已发布。
 - [x] `3.3.0` 静默截断清理、CI 与 README 中英同步已完成。
+- [ ] `3.3.1` 界面语言完整性正在进行。
 
 ## 已知缺陷（2026-09-11 真机验收发现）
 
@@ -562,3 +563,25 @@ Last updated: 2026-09-11
 - [x] Add a GitHub Actions pipeline that runs the dependency-free regression tests, the packaging validation, and the README Chinese/English sync check.
 - [x] Bring README Chinese/English structure sync under automated checking (section count, numbered steps, code fences) and fix the missing packaging instructions the check found in "Development and debugging".
 - [x] Close the README content gap: removed 31 misplaced English entries, 6 empty English stub headings, and 1 empty duplicate group from the Chinese "How to use it" section; expanded English "Features" to 68 and added the 8 missing English groups (plus the merged 1.9.0 content) so both halves carry the same 25 groups in the same order. Structural parity (sections, groups, numbered steps, code fences) and cross-language leakage are enforced by the regression suite.
+
+## 3.3.1 interface language completeness
+
+### 中文
+
+- [ ] 把全部用户可见的硬编码中文移入翻译表：重复组/相似组标题与“保留”标记、清理确认框与提示、移除标签提示、图片详情字段标签、尺寸未知占位等。
+- [ ] 把超时与失败提示文案（读取字号、缩放比例、标签页列表、扩展设置、同步设置、任务状态恢复）移入翻译表。
+- [ ] 把 popup 中 `language === 'en' ? ... : ...` 形式的内联三元改为 `t()`，注入到页面执行的收集器除外（该上下文没有 `t()`）。
+- [ ] 数据层的 IndexedDB 失败文案按语言返回，或在 UI 边界统一包装，确保英文界面不出现中文。
+- [ ] 缓存写入失败不再静默：配额或写入错误写入诊断并在界面提示。
+- [ ] 增加门禁断言：`TRANSLATIONS` 与 `WORKER_TRANSLATIONS` 区块之外不得出现中文文案字面量，并保留显式白名单（错误匹配正则、注入脚本）。
+- [ ] 在真实浏览器中以英文界面遍历主要视图与对话框，确认不出现中文文案。
+
+### English
+
+- [ ] Move every user-visible hardcoded Chinese string into the translation table: duplicate/similar group headings and the keep marker, the cleanup confirm dialog and its toast, the tag-removal prompt, details-panel field labels, and the unknown-dimensions placeholder.
+- [ ] Move the timeout and failure copy (font-size, zoom, tab list, extension settings, sync settings, task-state recovery) into the translation table.
+- [ ] Replace `language === 'en' ? ... : ...` inline ternaries in the popup with `t()` calls, except inside the injected page collector, where `t()` is unavailable.
+- [ ] Make the data layer's IndexedDB failure copy language-aware, or wrap it at the UI boundary, so the English interface never shows Chinese.
+- [ ] Stop swallowing cache write failures: report quota or write errors to the diagnostic channel and surface them in the UI.
+- [ ] Add a regression assertion: no Chinese copy literals may appear outside the `TRANSLATIONS` and `WORKER_TRANSLATIONS` blocks, with an explicit allowlist for error-matching regexes and the injected script.
+- [ ] Drive the main views and dialogs in a real browser with the English UI and confirm no Chinese copy appears.
