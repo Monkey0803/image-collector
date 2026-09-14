@@ -640,7 +640,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .topbar-identity .page-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topbar-identity .page-copy strong { color: #fff; font-size: calc(12px * var(--browser-text-scale, 1)); }
 .topbar-identity .page-copy span { color: #b6c6d1; font-size: calc(10px * var(--browser-text-scale, 1)); }
-.topbar-actions .scan-action-label { display: none; }
 .scan-stats { min-height: 0; margin: 0 0 var(--space-2); padding: 0 2px; }
 .scan-stats:empty { display: none; }
 .view-switcher { position: static; margin-bottom: var(--space-2); padding: 3px; }

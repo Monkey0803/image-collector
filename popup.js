@@ -4696,11 +4696,13 @@ function applyLanguage() {
   ['zh', 'en'].forEach((lang) => Object.entries(TRANSLATIONS[lang] || {}).forEach(([key, value]) => {
     if (typeof value === 'string' && value) labelToKey.set(value, key);
   }));
-  document.querySelectorAll('[aria-label]').forEach((node) => {
-    const key = labelToKey.get(node.getAttribute('aria-label') || '');
-    if (!key) return;
-    const translated = TRANSLATIONS[state.language]?.[key];
-    if (typeof translated === 'string' && translated) node.setAttribute('aria-label', translated);
+  document.querySelectorAll('[aria-label], [title]').forEach((node) => {
+    ['aria-label', 'title'].forEach((attribute) => {
+      const key = labelToKey.get(node.getAttribute(attribute) || '');
+      if (!key) return;
+      const translated = TRANSLATIONS[state.language]?.[key];
+      if (typeof translated === 'string' && translated) node.setAttribute(attribute, translated);
+    });
   });
   // Leaf static label spans are localised the same way, skipping the dynamic
   // content areas whose text is produced by the app itself.
