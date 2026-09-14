@@ -179,7 +179,8 @@ test('milestone checklists stay in sync across languages and ship their delivera
     ['## 3.2.1 metadata coverage and index cleanup', '## 3.2.2', true],
     ['## 3.2.2 side panel shortcut reliability', '## 3.3.0', true],
     ['## 3.3.0 silent truncation cleanup and CI', '## 3.3.1', true],
-    ['## 3.3.1 interface language completeness', null, true],
+    ['## 3.3.1 interface language completeness', '## 3.4.0', true],
+    ['## 3.4.0 primary view layout restructure', null, false],
   ];
   const tally = (text) => ({
     total: (text.match(/^- \[[ x]\]/gm) || []).length,

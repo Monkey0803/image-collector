@@ -15,6 +15,7 @@
 - [x] `3.2.2` 侧边栏快捷键可靠性修复已发布。
 - [x] `3.3.0` 静默截断清理、CI 与 README 中英同步已完成。
 - [x] `3.3.1` 界面语言完整性已完成。
+- [ ] `3.4.0` 首屏布局重构正在进行。
 
 ## 已知缺陷（2026-09-11 真机验收发现）
 
@@ -152,6 +153,7 @@ Last updated: 2026-09-11
 - [x] `3.2.2` side panel shortcut reliability is released.
 - [x] `3.3.0` silent truncation cleanup, CI, and README Chinese/English sync are complete.
 - [x] `3.3.1` interface language completeness is complete.
+- [ ] `3.4.0` primary view layout restructure is in progress.
 
 ### 1.0.1 core experience
 
@@ -586,3 +588,23 @@ Last updated: 2026-09-11
 - [x] Stop swallowing cache write failures: report quota or write errors to the diagnostic channel and surface them in the UI.
 - [x] Add a regression assertion: no Chinese copy literals may appear outside the `TRANSLATIONS` and `WORKER_TRANSLATIONS` blocks, with an explicit allowlist for error-matching regexes and the injected script.
 - [x] Drive the main views and dialogs in a real browser with the English UI and confirm no Chinese copy appears.
+
+## 3.4.0 primary view layout restructure
+
+### 中文
+
+- [ ] 重构首屏层级：顶栏只保留品牌、当前页面、扫描与语言切换，五个视图标签压缩为图标按钮并与其同行。
+- [ ] 页面摘要并入顶栏：单行显示图标、标题与结果数量，点击可展开完整地址。
+- [ ] 把多页面采集面板移出首屏主路径，改放到结果区之后。
+- [ ] 结果标题与搜索排序合并为一行，筛选状态与选择工具收纳为该行的图标入口。
+- [ ] 把首屏腾出的高度还给图片网格，并在 420 px 视口下测量网格高度提升。
+- [ ] 保持全部既有控件 id、键盘可达性与中英文案不变，全部回归断言通过。
+
+### English
+
+- [ ] Rework the first screen: the top bar keeps only the brand, current page, scan action, and language switch, with the five view tabs as icon buttons on the same row.
+- [ ] Fold the page summary into the top bar: one line with the icon, title, and result count, expandable to reveal the full URL.
+- [ ] Move the multi-page collection panel out of the primary path, below the results area.
+- [ ] Merge the results heading with search and sort into one row, collapsing filter status and selection tools into icon entries on that row.
+- [ ] Give the reclaimed height to the image grid and measure the improvement at a 420 px viewport.
+- [ ] Keep every existing control id, keyboard reachability, and bilingual copy unchanged, with all regression assertions passing.
