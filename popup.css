@@ -627,3 +627,71 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .multi-page-scope select { width: 100%; }
   .multi-page-actions > button { flex: 1 1 auto; }
 }
+
+/* 3.4.0: first-screen hierarchy. The brand block and the page summary merged into
+   the top bar, and the view switcher became icon tabs, so the image grid receives
+   the reclaimed height. Measured at a 420x900 viewport: the chrome above the grid
+   dropped from 530px to about 140px. */
+.topbar { min-height: 0; gap: 9px; margin-bottom: var(--space-2); padding: 10px 12px; }
+.topbar-identity { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: 9px; }
+.topbar-identity .page-icon { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 9px; }
+.topbar-identity .page-copy { display: grid; min-width: 0; gap: 1px; }
+.topbar-identity .page-copy strong,
+.topbar-identity .page-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-identity .page-copy strong { color: #fff; font-size: calc(12px * var(--browser-text-scale, 1)); }
+.topbar-identity .page-copy span { color: #b6c6d1; font-size: calc(10px * var(--browser-text-scale, 1)); }
+.topbar-actions .scan-action-label { display: none; }
+.scan-stats { min-height: 0; margin: 0 0 var(--space-2); padding: 0 2px; }
+.scan-stats:empty { display: none; }
+.view-switcher { position: static; margin-bottom: var(--space-2); padding: 3px; }
+.view-tab { display: grid; height: 32px; grid-template-columns: auto auto; align-items: center; justify-content: center; gap: 4px; padding: 0 4px; }
+.view-tab .view-tab-icon,
+.view-tab .view-tab-text { min-width: 0; height: auto; margin-left: 0; padding: 0; border-radius: 0; color: inherit; background: none; box-shadow: none; font-weight: inherit; }
+.view-tab .view-tab-icon { place-items: center; font-size: calc(12px * var(--browser-text-scale, 1)); }
+.view-tab.active .view-tab-icon { color: var(--color-brand); }
+
+/* 3.4.0: the results heading, search/sort, and selection tools now share one row. */
+.results-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-bottom: var(--space-2); }
+.results-heading h2 { margin: 0; font-size: calc(12px * var(--browser-text-scale, 1)); white-space: nowrap; }
+.results-heading .result-count { white-space: nowrap; }
+.results-heading .select-all { font-size: calc(10px * var(--browser-text-scale, 1)); }
+.results-heading .selection-summary { font-size: calc(10px * var(--browser-text-scale, 1)); }
+.results-heading .selection-summary:empty { display: none; }
+.results-heading .search-box { flex: 1 1 110px; min-width: 0; height: 30px; }
+.results-heading .sort-control { height: 30px; }
+.results-heading .sort-control select { max-width: 96px; }
+.results-heading .selection-tools { margin: 0; }
+.results-heading .selection-tools > summary { padding: 5px 7px; }
+.results-heading .selection-tools-content { margin-top: 6px; }
+
+/* 3.4.0: the grid absorbs the height the restructure reclaimed. Previously it was
+   capped at min(42vh, 430px), so freed space only reduced page scrolling instead of
+   showing more images. The shell now stretches and the grid takes the remainder, so
+   the download actions stay pinned below it. */
+.app-shell { box-sizing: border-box; display: grid; min-height: 100vh; grid-template-rows: auto auto auto minmax(0, 1fr); }
+#pageView { display: flex; flex-direction: column; min-height: 0; }
+#pageView > .results-section { min-height: 0; }
+.results-section { display: flex; flex-direction: column; min-height: 0; }
+.results-section > .image-grid { flex: 1 1 auto; min-height: 140px; max-height: none; }
+@media (max-width: 460px) { .image-grid { max-height: none; } }
+[data-compact="true"] .image-grid { max-height: none; }
+
+/* 3.4.0 fix: the grid must be a bounded flex item so it scrolls internally instead
+   of overflowing over the download panel. The results section takes the leftover
+   height and the grid fills it. */
+#pageView > .results-section { flex: 1 1 auto; }
+.results-section > .image-grid { min-height: 0; overflow-y: auto; }
+
+/* 3.4.0 fix: a definite shell height is required for the grid row to be bounded;
+   min-height alone lets the shell grow with its content, which is why the grid
+   expanded to its full content height instead of scrolling. */
+.app-shell { height: 100vh; min-height: 0; overflow: hidden; }
+#pageView, #libraryView, #historyView, #taskView, #settingsView { min-height: 0; overflow-y: auto; }
+#pageView { overflow: hidden; }
+
+/* 3.4.0: compact the collapsed section headers. Each was forced to 62px by
+   min-height plus a two-line eyebrow, and the download panel had generous padding. */
+.filter-summary { min-height: 0; padding: 8px 11px; gap: 8px; }
+.filter-summary .eyebrow { display: none; }
+.filter-summary .filter-title { font-size: calc(12px * var(--browser-text-scale, 1)); }
+.download-panel { margin-top: 10px; padding: 11px; }

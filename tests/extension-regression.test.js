@@ -17,8 +17,8 @@ function pngDimensions(file) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-test('release metadata is aligned with the 3.3.1 milestone', () => {
-  assert.equal(manifest.version, '3.3.1');
+test('release metadata is aligned with the 3.4.0 milestone', () => {
+  assert.equal(manifest.version, '3.4.0');
   assert.match(todo, /## 3\.1\.0 asset management and deduplication/);
   const milestone = todo.split('## 3.1.0 asset management and deduplication')[1].split('## 3.2.0 release quality and validation')[0];
   assert.doesNotMatch(milestone, /- \[ \]/);
@@ -180,7 +180,7 @@ test('milestone checklists stay in sync across languages and ship their delivera
     ['## 3.2.2 side panel shortcut reliability', '## 3.3.0', true],
     ['## 3.3.0 silent truncation cleanup and CI', '## 3.3.1', true],
     ['## 3.3.1 interface language completeness', '## 3.4.0', true],
-    ['## 3.4.0 primary view layout restructure', null, false],
+    ['## 3.4.0 primary view layout restructure', null, true],
   ];
   const tally = (text) => ({
     total: (text.match(/^- \[[ x]\]/gm) || []).length,
@@ -412,6 +412,34 @@ test('the README project structure lists every top-level path', () => {
     return !pattern.test(treeOf(chinese)) || !pattern.test(treeOf(english));
   });
   assert.deepEqual(missing, [], 'these top-level paths are missing from a README project structure');
+});
+
+test('the first screen puts the results before secondary setup panels', () => {
+  // 3.4.0: measured at 420x900 the results used to start 530px down, behind the page
+  // summary, the multi-page panel, and the view tab row.
+  const css = read('popup.css');
+  // the identity block replaced the separate brand and page-summary blocks
+  assert.match(html, /<div class="topbar-identity" aria-label="当前页面">/);
+  assert.doesNotMatch(html, /class="page-summary"/);
+  assert.doesNotMatch(html, /class="brand-copy"/);
+  for (const id of ['pageIcon', 'pageTitle', 'pageUrl', 'scanStats']) {
+    assert.match(html, new RegExp(`id="${id}"`), `${id} must survive the restructure`);
+  }
+  // view tabs became an icon plus a label
+  assert.match(html, /id="pageViewButton"[^>]*><span class="view-tab-icon"/);
+  assert.match(html, /<span class="view-tab-text">设置<\/span>/);
+  // the multi-page panel now sits after the results and download sections
+  const pageView = html.slice(html.indexOf('id="pageView"'), html.indexOf('id="libraryView"'));
+  assert.ok(pageView.indexOf('id="multiPagePanel"') > pageView.indexOf('class="results-section"'), 'multi-page panel must follow the results');
+  assert.ok(pageView.indexOf('id="multiPagePanel"') > pageView.indexOf('class="download-panel"'), 'multi-page panel must follow the download panel');
+  // search, sort, and selection tools share the results heading row
+  const heading = html.slice(html.indexOf('class="results-heading"'), html.indexOf('id="imageGrid"'));
+  for (const id of ['resultsTitle', 'resultCount', 'searchInput', 'sortSelect', 'selectionToolsLabel']) {
+    assert.ok(heading.includes(`id="${id}"`), `${id} must live in the results heading`);
+  }
+  // the grid absorbs the leftover height instead of being capped to a viewport fraction
+  assert.match(css, /\.app-shell \{[^}]*height: 100vh/);
+  assert.match(css, /\.results-section > \.image-grid \{[^}]*max-height: none/);
 });
 
 test('text scale follows the active tab zoom without scaling the whole panel', () => {
