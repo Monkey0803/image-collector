@@ -468,6 +468,19 @@ const els = {
   retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewError: $('#previewError'), previewErrorText: $('#previewErrorText'), previewErrorDetail: $('#previewErrorDetail'), previewCopyCandidates: $('#previewCopyCandidates'), previewOpenSource: $('#previewOpenSource'), previewDownload: $('#previewDownload'), previewEditTags: $('#previewEditTags'), previewCollectionSelect: $('#previewCollectionSelect'), previewDetailsList: $('#previewDetailsList'), previewCandidates: $('#previewCandidates'), retryPreview: $('#retryPreview'), openPreviewPage: $('#openPreviewPage'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), previewPrevious: $('#previewPrevious'), previewNext: $('#previewNext'), previewPosition: $('#previewPosition'), copyFilteredUrls: $('#copyFilteredUrls'), pageFavoriteSelected: $('#pageFavoriteSelected'), pageTagSelected: $('#pageTagSelected'), pageArchiveSelected: $('#pageArchiveSelected'), batchActionModal: $('#batchActionModal'), batchActionForm: $('#batchActionForm'), batchActionClose: $('#batchActionClose'), batchActionTitle: $('#batchActionTitle'), batchActionDescription: $('#batchActionDescription'), batchActionTagField: $('#batchActionTagField'), batchActionTagLabel: $('#batchActionTagLabel'), batchActionTagInput: $('#batchActionTagInput'), batchActionCollectionField: $('#batchActionCollectionField'), batchActionCollectionLabel: $('#batchActionCollectionLabel'), batchActionCollectionSelect: $('#batchActionCollectionSelect'), batchActionError: $('#batchActionError'), batchActionCancel: $('#batchActionCancel'), batchActionConfirm: $('#batchActionConfirm'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
 };
 
+// 3.4.1: a failure raised outside init() — inside a listener or a detached promise —
+// used to leave the panel silently inert: the automatic scan never ran and the
+// preview never loaded, with nothing shown to explain why. Route the first startup
+// failure through the same visible path as an init error.
+function reportStartupFailure(error) {
+  if (interactionReady) return;
+  const normalized = error instanceof Error ? error : new Error(String(error?.message || error || 'unknown startup failure'));
+  console.error('[Image Collector] startup failure', normalized);
+  handleInitError(normalized);
+}
+window.addEventListener('error', (event) => reportStartupFailure(event.error || event.message));
+window.addEventListener('unhandledrejection', (event) => reportStartupFailure(event.reason));
+
 document.addEventListener('DOMContentLoaded', () => {
   init().catch(handleInitError);
 });

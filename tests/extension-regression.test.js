@@ -414,6 +414,15 @@ test('the README project structure lists every top-level path', () => {
   assert.deepEqual(missing, [], 'these top-level paths are missing from a README project structure');
 });
 
+test('startup failures are surfaced instead of leaving the panel inert', () => {
+  // 3.4.1: a fault raised outside init() used to leave the panel silent — no
+  // automatic scan and a preview that never loaded.
+  assert.match(popup, /function reportStartupFailure\(error\)/);
+  assert.match(popup, /window\.addEventListener\('error', \(event\) => reportStartupFailure/);
+  assert.match(popup, /window\.addEventListener\('unhandledrejection', \(event\) => reportStartupFailure/);
+  assert.match(popup, /if \(interactionReady\) return;/);
+});
+
 test('the first screen puts the results before secondary setup panels', () => {
   // 3.4.0: measured at 420x900 the results used to start 530px down, behind the page
   // summary, the multi-page panel, and the view tab row.
