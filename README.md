@@ -279,19 +279,6 @@ image_2026.08.20.zip
 - 在另一台设备或重新安装扩展后，点击“导入扫描配置”选择 JSON 文件即可恢复这些设置。导入成功后会自动重新扫描当前页面。
 - 配置迁移文件不包含图片、图片缓存、素材集合或历史记录；配置文件只保存在用户选择的本地位置。
 
-#### 2.1.0 source filters and configuration portability
-
-- The current-page filter panel can filter images by discovery source: `IMG` (page image elements), `CSS` (CSS backgrounds), `VIDEO` (video posters), `Rule` (custom scan rules), or `Other`. Each source tab shows the count after the active dimension filters.
-- Source filtering can be combined with width, height, file-size, aspect-ratio, format, original-candidate, and search filters. Clearing filters or rescanning returns to all sources.
-- Open **Settings** → **Scan configuration portability** and choose **Export scan config** to back up scan rules, site adapters, scan limits, auto-scroll, ZIP layout, filename templates, and date-folder preferences.
-- After reinstalling the extension or moving to another device, choose **Import scan config** and select the JSON file. The current page is rescanned after a successful import.
-- Configuration files do not include images, image cache, collections, or history; they are downloaded to the local location selected by the user.
-
-#### 2.2.0 preview navigation and batch URL copying
-
-- When an image preview is open, use the previous/next buttons or the left/right arrow keys to browse the current filtered results. The position indicator shows the current image and total count.
-- Preview navigation follows the active view: current-page previews browse current filtered results, while library previews browse the current library results.
-- Use **Copy result URLs** below the download actions to copy the best available URL for each current result. If any images are selected, only the selected images are copied; otherwise all current filtered results are copied, one URL per line.
 
 #### 2.2.0 预览导航与批量复制地址
 
@@ -299,12 +286,6 @@ image_2026.08.20.zip
 - 预览导航会跟随当前视图：当前页面预览浏览页面筛选结果，素材库预览浏览当前素材库结果。
 - 点击下载操作下方的“复制当前结果 URL”可以复制当前结果中每张图片的最佳可用地址；如果已经勾选图片，则只复制已选图片，否则复制当前全部筛选结果，每行一个地址。
 
-#### 2.3.0 current-page batch management
-
-- Select images in the current-page result grid, then use **Favorite selected**, **Tag selected**, or **Archive selected** below the download actions.
-- The favorite action writes selected images to the local library in one operation. The tag action adds one tag to all selected images without removing existing tags.
-- The archive action lets you choose a local collection by number and adds the selected images to that collection without removing their existing collection memberships.
-- These actions reuse the same local IndexedDB library as the Library view, so the updated favorites, tags, and collections are immediately available there.
 
 #### 2.3.0 当前页面批量管理
 
@@ -313,11 +294,6 @@ image_2026.08.20.zip
 - 批量归档会让用户按序号选择本地集合，并将选中图片加入该集合，不会删除图片已有的其它集合关系。
 - 这些操作和素材库使用同一个本地 IndexedDB，完成后可以立即在“素材库”视图中查看结果。
 
-#### 2.4.0 current-page batch action dialog
-
-- Current-page tag and collection actions use an in-extension dialog instead of the browser's native prompt.
-- The dialog shows the selected image count, validates empty input, and supports Escape, backdrop click, Cancel, and Confirm actions.
-- Collection archiving reloads the latest local collections before opening the chooser, so newly created collections are available immediately.
 
 #### 2.4.0 当前页面批量操作体验
 
@@ -325,11 +301,6 @@ image_2026.08.20.zip
 - 对话框显示已选图片数量，校验空标签，并支持按 Esc、点击遮罩、取消和确认操作。
 - 打开集合选择器前会读取最新的本地集合，新建集合后可以立即用于归档。
 
-#### 2.5.0 library selection and batch safety
-
-- In the Library view, use **Invert current results** to invert selection for the current filtered result set, or **Clear selection** to remove all library selections.
-- Library batch tags are trimmed, limited, and deduplicated; batch collection archiving adds a collection without removing existing memberships.
-- Library batch controls are locked while an operation is running and recover after success, cancellation, or failure.
 
 #### 2.5.0 素材库选择与批量安全
 
@@ -337,13 +308,6 @@ image_2026.08.20.zip
 - 素材库批量标签会自动去除首尾空格、限制长度并去重；批量归档会追加集合，不会删除已有集合关系。
 - 批量操作执行期间控件会暂时锁定，成功、取消或失败后都会恢复。
 
-#### 2.6.0 download diagnostics and recovery
-
-- Choose how Chrome handles filename conflicts: **Rename automatically**, **Overwrite existing**, or **Ask every time**. The preference is saved and included in configuration migration and optional sync.
-- The Download task center keeps per-image failure details and classifies common errors such as HTTP status failures, network failures, and missing URLs.
-- Retrying a failed task retries only the failed images, so successful downloads are not duplicated.
-- Use **Copy failed URLs** on a task or **Export error report** in the task center to continue troubleshooting outside the extension.
-- Preview failures now explain how many image addresses were attempted and point to common causes such as hotlink protection, sign-in requirements, expired links, and cross-origin policy.
 
 #### 2.6.0 下载诊断与恢复
 
@@ -378,17 +342,6 @@ image_2026.08.20.zip
 - 选择预设、ZIP 分组、文件名模板、批量操作和导出功能采用渐进式展开，降低主界面噪音。
 - 使用三级 CSS 令牌统一颜色、间距、圆角、阴影、焦点与主按钮状态，并优化窄侧栏排版。
 - 侧边栏文字会跟随当前标签页的浏览器缩放比例和浏览器默认字号变化，不缩放整个侧边栏布局。
-
-#### 3.0.0 多页面采集与图库导出
-
-- Expand **Multi-page collection** and choose **Current tab**, **Selected tabs**, or **All tabs in current window**. In selected-tab mode, check the tabs to include before clicking **Start collection**. Protected Chrome pages are skipped and reported as partial results.
-- Images from multiple pages are merged into one result while retaining page sources. ZIP downloads support **By page**, **By date**, **By site / page**, and **By site / date** layouts; unsafe page-name characters are cleaned and duplicate page names receive a numeric suffix.
-- ZIP reads are bounded per image, to 256 MB total, and to five minutes overall; items over a limit remain in the failure list so they can be retried or downloaded individually.
-- Every full scan is saved in **History**. A history entry can restore its filters, open source pages, rescan, download the result, or create a ZIP. Rescanning automatically opens missing source pages and waits for them to finish loading.
-- **Export Markdown** and **Export HTML** create local gallery files. **Export contact sheet** creates a thumbnail grid; cached data is preferred and failed images become placeholders so one failure does not block the whole export.
-- **Settings → Appearance & shortcuts** opens Chrome's shortcut configuration page. `Ctrl+Shift+J` is bound to the extension action, which is equivalent to clicking the toolbar icon and **toggles the side panel open and closed**; `Ctrl+Shift+Y` scans the current tab and `Ctrl+Shift+U` scans selected tabs. An additional "open and show the current page" command is provided unbound by default, and every shortcut can be customized on that page.
-- Right-click a webpage image and use the Image Collector menu to save it to an existing local collection. The menu refreshes after a new collection is created.
-- Site-level incremental scanning compares page signatures with the previous scan. Unchanged images with existing metadata reuse their local records, while only new or changed images are inspected again.
 
 ### 权限说明
 
@@ -509,6 +462,7 @@ zip -r image-collector-1.0.0.zip \
 
 ---
 
+
 ## English
 
 Image Collector is an open-source Chrome extension built with Chrome Manifest V3. It scans images on the current webpage, displays their dimensions and formats, and helps you find and download selected images quickly.
@@ -528,20 +482,25 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Prefer original sources from `srcset`, `picture`, lazy-loading attributes, and image links
 - Search by filename, hostname, or URL and sort by dimensions, area, or filename
 - Filter duplicates with pixel fingerprints or normalized URLs
-- Show download progress and retry failed images
-- Scan same-page iframes and discover dynamically loaded or lazy-loaded images
+- Show regular and ZIP download progress and retry failed images individually
+- Scan same-page iframes and discover dynamically loaded and lazy-loaded images
 - Detect `video poster`, `object` embeds, and more lazy-loading attributes
 - Filter to original-image candidates
 - Display image file size and MIME type asynchronously
 - Organize ZIP entries by hostname, format, or hostname and format
 - Cancel image reading, ZIP compression, and download tasks
-- Export current filtered results as JSON or CSV
-- Store local image metadata, favorites, tags, scan history, and download history in IndexedDB
-- Browse a local library with favorite filtering, search, and tag editing
+- Export the current filtered results as JSON or CSV
+- Customize filenames with template variables for names, domains, formats, dimensions, and dates
+- Create `YYYY.MM.DD` date folders for regular downloads and ZIP entries, and place ZIP archives under `image_YYYY.MM.DD/`
+- Queue multiple download requests and run them in submission order so tasks do not interfere
+- Report clearer causes for sign-in limits, hotlink protection, network errors, and server errors
+- Store local image metadata, favorites, tags, and history in IndexedDB
+- Search the library, filter by favorites, and add or remove tags
+- Record recently scanned pages and image/ZIP download activity
 - Provide context-menu actions for scanning pages, downloading images, and favoriting images
 - Open a large-image preview with zoom, original-URL copying, and new-tab opening
-- Save reusable filter presets and selection presets, and invert the current selection
-- Use a download task center to pause, resume, cancel, and retry tasks
+- Save filter presets and selection presets, and invert the current selection
+- Use a download task center to pause, resume, cancel, and retry failed tasks
 - Create custom local collections and browse images by collection
 - Switch the interface between Chinese and English
 - Import or export favorites, tags, and collection relationships as JSON
@@ -552,24 +511,32 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Use keyboard shortcuts: `Cmd/Ctrl+A` select all, `I` invert, `/` focus search, `R` rescan
 - Download selected images or create a ZIP from the current library results
 - Filter library images by minimum/maximum dimensions and file-size range
-- Create custom smart collections with dimension, format, hostname, source, file-size, aspect-ratio, and date conditions
-- Combine smart-collection conditions with AND / OR logic, preview matches, enable/disable, edit, delete, and reapply rules
-- View image-count distributions for library ranges and use file-size or aspect-ratio presets
 - Export the current library results as JSON or CSV
-- Open the collector in Chrome's right side panel and keep it visible while browsing
+- Open the collector in Chrome's right side panel beside the current page
 - Filter images by landscape, portrait, or square aspect ratio
 - Retry failed downloads once and try alternate image URLs when available
-- Customize filenames with template variables for names, domains, formats, dimensions, and dates
-- Create `YYYY.MM.DD` date folders for regular downloads and ZIP entries, and place ZIP archives under `image_YYYY.MM.DD/`
-- Queue multiple download requests and run them in submission order
-- Report clearer causes for authentication, anti-hotlinking, network, and server failures
+- Cache successfully previewed and ZIP-read images so library previews survive expired page URLs
+- Reload a failed preview or open the page-provided address in a new tab
+- Show cached image count and usage in Settings and evict cached entries by least-recent use
+- Generate smart collections that group the library by dimensions, format, website, and date
+- Filter the current page and the library with visual file-size and aspect-ratio range sliders
+- Create custom smart collections with dimension, format, hostname, source, file-size, aspect-ratio, and date conditions
+- Combine smart-collection conditions with AND / OR logic, preview matches, enable/disable, edit, delete, and reapply rules
+- Show image-count distributions on range controls and provide file-size and aspect-ratio presets
+- Render large pages in batches with a Load more action to keep the side panel responsive
+- Add custom include/exclude selectors and independent switches for CSS backgrounds, video posters, and iframes
+- Save host-based site adapters with custom image attributes and automatically archive matching results
+- Optionally sync scan rules and preferences with Chrome without syncing images, cache, or history
+- Prioritize the current page, scan state, image results, and Download ZIP in the main workspace
+- Keep detailed size, format, and source filtering collapsible while showing the active-filter count
+- Use progressive disclosure for selection presets, batch actions, and download settings
 - Collect images from the current tab, selected tabs, or all usable tabs in the current window
 - Merge multi-page results into one download task with ZIP layouts by page, date, site/page, or site/date
 - Save scan history with new/changed/removed counts and restore, reopen, rescan, download, or ZIP actions
 - Export Markdown galleries, HTML galleries, or contact sheets with failure placeholders
 - Configure shortcuts for toggling the side panel and for scanning current or selected tabs
 - Save a webpage image to an existing local collection from the context menu
-- Reuse metadata for unchanged images during incremental scans, and follow the active page's default font size and zoom
+- Support dark mode, compact mode, keyboard focus, and following the active page's default font size and zoom
 
 ### Installation
 
@@ -590,13 +557,13 @@ This project is distributed as an unpacked Chrome extension rather than through 
 
 ### How to use it
 
-#### Scan webpage images
-
 1. Open a regular webpage in Chrome.
 2. Wait for the page content to load.
 3. Click the Image Collector icon in the toolbar; the extension opens in Chrome's right side panel.
 4. The side panel scans the current page and displays the image grid while you continue browsing.
 5. If images are loaded after the side panel opens, click the refresh button to scan again.
+
+#### Scan webpage images
 
 #### Filter by dimensions
 
@@ -623,6 +590,14 @@ Use the format tabs to show:
 - Other, including GIF, SVG, and formats that cannot be identified from the URL
 
 The number on each tab reflects the images matching the current dimension filters.
+
+#### Cache and preview failure handling
+
+- Successfully previewed images and images read for ZIP creation are stored in the browser's local IndexedDB cache. A single item is limited to 20 MB and the total cache is limited to 120 MB.
+- If a page URL expires or hotlink protection blocks it, the preview automatically falls back to the cached copy when one is available.
+- The Settings view shows cached image count and cache usage. Cached entries are evicted by least-recently-used order when the limit is reached, and clearing the library also clears cached files.
+- When preview loading fails, use **Reload** to retry all candidates or **Use page URL** to open the page-provided image URL in a new tab.
+- Scanning now reports separate page-reading, image-discovery, and dimension-checking stages. A dimension-check timeout no longer leaves the loading indicator active forever.
 
 #### Search and sort
 
@@ -687,6 +662,26 @@ On a webpage, right-click to open the Image Collector menu. It provides **Scan c
 - **Export library** creates a JSON file containing favorites, tags, and collection relationships. **Import data** merges the file into another browser profile.
 - Use the `EN` / `中` button in the header to switch languages. The preference is stored locally.
 
+#### 3.1.0 asset management and deduplication
+
+- Add exact deduplication based on file-content hashes, falling back to URL deduplication when file content cannot be read.
+- Group visually similar images with perceptual hashes and an adjustable similarity threshold.
+- Show duplicate groups and automatically keep the largest-dimension, largest-file, or original-candidate version.
+- Open an image details panel with full URLs, candidate URLs, source element, iframe, MIME type, file size, cache state, and collections.
+- Copy addresses, open the source page, download, edit tags, and change collection memberships from the details panel.
+- Use safe cleanup modes for invalid, non-favorited, and duplicate images, and choose between "select all filtered results" and "select currently loaded results".
+
+#### 3.0.0 multi-page collection and gallery export
+
+- Expand **Multi-page collection** and choose **Current tab**, **Selected tabs**, or **All tabs in current window**. In selected-tab mode, check the tabs to include before clicking **Start collection**. Protected Chrome pages are skipped and reported as partial results.
+- Images from multiple pages are merged into one result while retaining page sources. ZIP downloads support **By page**, **By date**, **By site / page**, and **By site / date** layouts; unsafe page-name characters are cleaned and duplicate page names receive a numeric suffix.
+- ZIP reads are bounded per image, to 256 MB total, and to five minutes overall; items over a limit remain in the failure list so they can be retried or downloaded individually.
+- Every full scan is saved in **History**. A history entry can restore its filters, open source pages, rescan, download the result, or create a ZIP. Rescanning automatically opens missing source pages and waits for them to finish loading.
+- **Export Markdown** and **Export HTML** create local gallery files. **Export contact sheet** creates a thumbnail grid; cached data is preferred and failed images become placeholders so one failure does not block the whole export.
+- **Settings → Appearance & shortcuts** opens Chrome's shortcut configuration page. `Ctrl+Shift+J` is bound to the extension action, which is equivalent to clicking the toolbar icon and **toggles the side panel open and closed**; `Ctrl+Shift+Y` scans the current tab and `Ctrl+Shift+U` scans selected tabs. An additional "open and show the current page" command is provided unbound by default, and every shortcut can be customized on that page.
+- Right-click a webpage image and use the Image Collector menu to save it to an existing local collection. The menu refreshes after a new collection is created.
+- Site-level incremental scanning compares page signatures with the previous scan. Unchanged images with existing metadata reuse their local records, while only new or changed images are inspected again.
+
 #### 1.4.0 batch workflows
 
 - Select library cards using the checkbox in the upper-left corner, then favorite, tag, archive, or delete them in bulk.
@@ -708,33 +703,13 @@ On a webpage, right-click to open the Image Collector menu. It provides **Scan c
 - Page scanning limits CSS background candidates and pixel fingerprint work and probes original dimensions in batches, reducing stalls on large pages.
 - Library filter input coalesces rapid refreshes, image cards render in batches, and IndexedDB plus file metadata inspection reuse bulk operations and cache entries.
 
-#### 1.8.0 local cache and preview reliability
-
-- Successfully previewed images and images read for ZIP creation are stored in the browser's local IndexedDB cache. A single item is limited to 20 MB and the total cache is limited to 120 MB.
-- If a page URL expires or hotlink protection blocks it, the preview automatically falls back to the cached copy when one is available.
-- The Settings view shows cached image count and cache usage. Cached entries are evicted by least-recently-used order when the limit is reached, and clearing the library also clears cached files.
-- When preview loading fails, use **Reload** to retry all candidates or **Use page URL** to open the page-provided image URL in a new tab.
-- Scanning now reports separate page-reading, image-discovery, and dimension-checking stages. A dimension-check timeout no longer leaves the loading indicator active forever.
-
-#### 1.9.0 smart collections and large-page performance
-
-- The Library view includes Smart collections. These are generated from the current local metadata and group images by dimensions, format, hostname, or update date; they do not create duplicate files or require manual tagging.
-- The current-page filter panel includes visual range controls for file size and aspect ratio. The Library view exposes the same controls and keeps the numeric KB inputs for precise adjustment.
-- Image grids render an initial batch and reveal more cards only when requested. This keeps filtering and selection responsive when a page or library contains hundreds of images.
-- Add custom include/exclude selectors and independent switches for CSS backgrounds, video posters, and iframes.
-- Save host-based site adapters with custom image attributes and automatically archive matching results into local collections.
-- Optionally sync scan rules and preferences with Chrome without syncing images, cache, or history.
-- Prioritize the current page, scan state, image results, and Download ZIP in the main workspace.
-- Keep detailed size, format, and source filtering collapsible while showing the active-filter count.
-- Use progressive disclosure for selection presets, batch actions, and download settings.
-
-The default ZIP filename is generated in this format:
+ZIP archives use this default name:
 
 ```text
 image_2026.08.20.zip
 ```
 
-The date is generated automatically from the download date.
+The date is generated from the day of the download.
 
 #### Choose a save location
 
@@ -756,6 +731,47 @@ Version 2.0.0 adds a configurable scanning layer for websites whose image struct
 
 The scan flow is: load saved configuration → match adapters for the current host → collect default and custom sources → apply exclusions → inspect metadata → archive matching results. Invalid selectors are ignored so the normal page scan can continue.
 
+#### 2.1.0 source filters and configuration portability
+
+- The current-page filter panel can filter images by discovery source: `IMG` (page image elements), `CSS` (CSS backgrounds), `VIDEO` (video posters), `Rule` (custom scan rules), or `Other`. Each source tab shows the count after the active dimension filters.
+- Source filtering can be combined with width, height, file-size, aspect-ratio, format, original-candidate, and search filters. Clearing filters or rescanning returns to all sources.
+- Open **Settings** → **Scan configuration portability** and choose **Export scan config** to back up scan rules, site adapters, scan limits, auto-scroll, ZIP layout, filename templates, and date-folder preferences.
+- After reinstalling the extension or moving to another device, choose **Import scan config** and select the JSON file. The current page is rescanned after a successful import.
+- Configuration files do not include images, image cache, collections, or history; they are downloaded to the local location selected by the user.
+
+#### 2.2.0 preview navigation and batch URL copying
+
+- When an image preview is open, use the previous/next buttons or the left/right arrow keys to browse the current filtered results. The position indicator shows the current image and total count.
+- Preview navigation follows the active view: current-page previews browse current filtered results, while library previews browse the current library results.
+- Use **Copy result URLs** below the download actions to copy the best available URL for each current result. If any images are selected, only the selected images are copied; otherwise all current filtered results are copied, one URL per line.
+
+#### 2.3.0 current-page batch management
+
+- Select images in the current-page result grid, then use **Favorite selected**, **Tag selected**, or **Archive selected** below the download actions.
+- The favorite action writes selected images to the local library in one operation. The tag action adds one tag to all selected images without removing existing tags.
+- The archive action lets you choose a local collection by number and adds the selected images to that collection without removing their existing collection memberships.
+- These actions reuse the same local IndexedDB library as the Library view, so the updated favorites, tags, and collections are immediately available there.
+
+#### 2.4.0 current-page batch action dialog
+
+- Current-page tag and collection actions use an in-extension dialog instead of the browser's native prompt.
+- The dialog shows the selected image count, validates empty input, and supports Escape, backdrop click, Cancel, and Confirm actions.
+- Collection archiving reloads the latest local collections before opening the chooser, so newly created collections are available immediately.
+
+#### 2.5.0 library selection and batch safety
+
+- In the Library view, use **Invert current results** to invert selection for the current filtered result set, or **Clear selection** to remove all library selections.
+- Library batch tags are trimmed, limited, and deduplicated; batch collection archiving adds a collection without removing existing memberships.
+- Library batch controls are locked while an operation is running and recover after success, cancellation, or failure.
+
+#### 2.6.0 download diagnostics and recovery
+
+- Choose how Chrome handles filename conflicts: **Rename automatically**, **Overwrite existing**, or **Ask every time**. The preference is saved and included in configuration migration and optional sync.
+- The Download task center keeps per-image failure details and classifies common errors such as HTTP status failures, network failures, and missing URLs.
+- Retrying a failed task retries only the failed images, so successful downloads are not duplicated.
+- Use **Copy failed URLs** on a task or **Export error report** in the task center to continue troubleshooting outside the extension.
+- Preview failures now explain how many image addresses were attempted and point to common causes such as hotlink protection, sign-in requirements, expired links, and cross-origin policy.
+
 #### 2.7.0 stability and task reliability
 
 - Scanning clearly distinguishes page reading, image discovery, dimension probing, completed, cancelled, and failed states, so one failed stage cannot leave loading active forever.
@@ -773,6 +789,16 @@ The scan flow is: load saved configuration → match adapters for the current ho
 - Smart-collection rules are included in scan-configuration export/import and carry a validated rule version to prevent incompatible data from being silently applied.
 - File-size and aspect-ratio range controls show image-count distributions and provide presets for under 100 KB, 100 KB–1 MB, landscape, portrait, and square images.
 - The current-page and Library views share dimension, file-size, and aspect-ratio matching logic, with an action to apply current-page filters to the Library.
+
+- The Library view includes Smart collections. These are generated from the current local metadata and group images by dimensions, format, hostname, or update date; they do not create duplicate files or require manual tagging.
+- The current-page filter panel includes visual range controls for file size and aspect ratio. The Library view exposes the same controls and keeps the numeric KB inputs for precise adjustment.
+- Image grids render an initial batch and reveal more cards only when requested. This keeps filtering and selection responsive when a page or library contains hundreds of images.
+- Add custom include/exclude selectors and independent switches for CSS backgrounds, video posters, and iframes.
+- Save host-based site adapters with custom image attributes and automatically archive matching results into local collections.
+- Optionally sync scan rules and preferences with Chrome without syncing images, cache, or history.
+- Prioritize the current page, scan state, image results, and Download ZIP in the main workspace.
+- Keep detailed size, format, and source filtering collapsible while showing the active-filter count.
+- Use progressive disclosure for selection presets, batch actions, and download settings.
 
 #### 2.9.0 focused primary workspace
 
@@ -858,6 +884,14 @@ Before committing changes, run:
 node --check popup.js
 node --check service-worker.js
 ```
+
+Generate a publishable extension archive while validating the manifest, the assets, and the JavaScript syntax:
+
+```bash
+scripts/package-extension.sh
+```
+
+The archive is written to `dist/image-collector-<version>.zip` by default and contains only the files the extension needs at runtime, so it can be extracted for a load-unpacked test.
 
 ### Publish on GitHub
 
