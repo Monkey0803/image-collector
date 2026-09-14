@@ -401,7 +401,7 @@ download_image/
 ├── LICENSE             # MIT 开源许可证
 ├── QA.md               # 发布前 Chrome 验收清单
 ├── SECURITY.md         # 权限和本地数据边界说明
-├── TODO.md             # 3.2.2 已完成任务和后续路线图
+├── TODO.md             # 3.3.1 已完成任务和后续路线图
 ├── README.md           # 中文和英文项目文档
 ├── scripts/
 │   └── package-extension.sh          # 校验并打包扩展为可发布 ZIP
@@ -864,7 +864,7 @@ download_image/
 ├── LICENSE             # MIT open-source license
 ├── QA.md               # Pre-release Chrome acceptance checklist
 ├── SECURITY.md         # Permission and local-data boundary notes
-├── TODO.md             # 3.2.2 checklist and future roadmap
+├── TODO.md             # 3.3.1 checklist and future roadmap
 ├── README.md           # Chinese and English documentation
 ├── scripts/
 │   └── package-extension.sh          # Validate and package the release ZIP
