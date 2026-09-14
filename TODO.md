@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录当前 `3.2.2` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
+本文档记录当前 `3.3.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
 
 最后更新：2026-09-11
 
@@ -13,17 +13,17 @@
 - [x] `3.2.0` 发布质量与真机验收已完成；验收发现的两处缺陷在 `3.2.1` 修复。
 - [x] `3.2.1` 元数据覆盖与索引清理已发布。
 - [x] `3.2.2` 侧边栏快捷键可靠性修复已发布。
-- [ ] `3.3.0` 尚未定义范围。
+- [x] `3.3.0` 静默截断清理、CI 与 README 中英同步已完成。
 
 ## 已知缺陷（2026-09-11 真机验收发现）
 
 - [x] `library.js` 的 `listImages({ favoriteOnly: true })` 曾使用 `IDBKeyRange.only(true)`，但 `favorite` 以布尔值存储，而布尔值不是合法的 IndexedDB 键，因此调用会抛 `DataError`，导出的 `countFavorites()` 完全不可用。已改为使用既有的内存过滤，不再查询 `byFavorite` 索引，并补充回归断言；界面原本未调用该 API，故无用户可见影响。
-- [ ] `service-worker.js:317` 的 `handleContextSaveCollection` 在读取本地集合失败时 `catch { return; }` 静默返回，右键“保存到指定集合”会无提示地什么都不做。与 `3.2.2` 修复的快捷键静默失败属同一类问题，但不在该版本范围内。
+- [x] `service-worker.js` 的 `handleContextSaveCollection` 曾在读取本地集合失败时静默返回。已在 `3.3.0` 修复：读取与写入失败都会写入 `contextMenuDiagnostic`，并通知已打开的侧边栏提示用户。
 
 ## Known defects (found by the 2026-09-11 real-browser acceptance)
 
 - [x] `listImages({ favoriteOnly: true })` in `library.js` used to call `IDBKeyRange.only(true)`, but `favorite` is stored as a boolean and booleans are not valid IndexedDB keys, so the call threw `DataError` and the exported `countFavorites()` was unusable. It now uses the existing in-memory filter and no longer queries the `byFavorite` index, with a regression assertion added. The UI never called this API, so there was no user-visible impact.
-- [ ] `handleContextSaveCollection` in `service-worker.js:317` returns silently via `catch { return; }` when reading local collections fails, so the right-click "save to a specific collection" action does nothing without any notice. Same class of silent failure as the shortcut bug fixed in `3.2.2`, but out of scope for that release.
+- [x] `handleContextSaveCollection` in `service-worker.js` used to return silently when reading local collections failed. Fixed in `3.3.0`: both read and write failures are recorded to `contextMenuDiagnostic` and reported to an open side panel.
 
 ## 1.0.1
 
@@ -136,7 +136,7 @@
 
 ## English
 
-This document tracks the current `3.2.2` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
+This document tracks the current `3.3.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
 
 Last updated: 2026-09-11
 
@@ -149,7 +149,7 @@ Last updated: 2026-09-11
 - [x] `3.2.0` release quality and real-browser acceptance are complete; the two defects it found are fixed in `3.2.1`.
 - [x] `3.2.1` metadata coverage and index cleanup are released.
 - [x] `3.2.2` side panel shortcut reliability is released.
-- [ ] `3.3.0` scope is not defined yet.
+- [x] `3.3.0` silent truncation cleanup, CI, and README Chinese/English sync are complete.
 
 ### 1.0.1 core experience
 
@@ -540,3 +540,25 @@ Last updated: 2026-09-11
 - [x] Rebind `Ctrl+Shift+J` to the reserved `_execute_action` command so the side panel can be opened and closed: the side panel API has no `close()`, a custom command can only open, while Chrome's action toggles natively. `open-collector` stays available but unbound by default.
 - [x] Verify all three shortcuts (`Ctrl+Shift+J` / `Ctrl+Shift+Y` / `Ctrl+Shift+U`) with physical key presses in real Chrome.
 - [x] Add regression assertions: the panel must open before the first `await`, `_execute_action` must carry the toggle key, and the silent `catch` must not return.
+
+## 3.3.0 silent truncation cleanup and CI
+
+### 中文
+
+- [x] 重复图片组列表不再静默截断：默认显示 30 组并提供“加载更多”，被隐藏的组数可见。
+- [x] 智能集合在新建与导入时不再静默丢弃第 50 条之后的内容：新增数量守卫，并提示被截断的数量。
+- [x] 修复右键“保存到指定集合”在读取本地集合失败时的静默返回：记录诊断，并在侧边栏打开时提示用户。
+- [x] 增加回归约束：用户可见的集合上限必须使用具名常量并配有可见提示，杜绝新的静默截断。
+- [x] 增加 GitHub Actions 流水线，运行零依赖回归测试、打包校验与 README 中英同步检查。
+- [x] 把 README 中英结构同步纳入自动检查（章节数量、编号步骤、代码块一致性），并修复该检查发现的“开发和调试”缺失打包说明。
+- [x] 收敛 README 中英文内容差异：删除中文「使用方法」里 31 条错位英文、6 个空英文占位标题和 1 个空重复分组；英文「功能」补齐到 68 条，英文「使用方法」补齐 8 个缺失分组并并入 1.9.0 内容，达到与中文一一对应的 25 个分组。结构奇偶（章节、分组、编号步骤、代码块）与跨语言泄漏已纳入回归断言。
+
+### English
+
+- [x] Stop silently truncating the duplicate-group list: show 30 groups by default with a Load more action so the hidden count is visible.
+- [x] Stop silently dropping smart collections beyond 50 when creating or importing: add a count guard and report the truncated number.
+- [x] Fix the silent return when the context-menu "save to a selected collection" action cannot read local collections: record a diagnostic and surface it while the side panel is open.
+- [x] Add a regression constraint: user-visible collection caps must use a named constant and ship a matching notice, so no new silent truncation can slip in.
+- [x] Add a GitHub Actions pipeline that runs the dependency-free regression tests, the packaging validation, and the README Chinese/English sync check.
+- [x] Bring README Chinese/English structure sync under automated checking (section count, numbered steps, code fences) and fix the missing packaging instructions the check found in "Development and debugging".
+- [x] Close the README content gap: removed 31 misplaced English entries, 6 empty English stub headings, and 1 empty duplicate group from the Chinese "How to use it" section; expanded English "Features" to 68 and added the 8 missing English groups (plus the merged 1.9.0 content) so both halves carry the same 25 groups in the same order. Structural parity (sections, groups, numbered steps, code fences) and cross-language leakage are enforced by the regression suite.
