@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The extension itself has no runtime dependencies; these versions only
+        # affect the Node-based checks, so cover the oldest and a current LTS.
+        node-version: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # two commits so the whitespace check can diff against the parent
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: JavaScript syntax
+        run: |
+          node --check popup.js
+          node --check library.js
+          node --check service-worker.js
+
+      - name: Regression tests
+        run: node tests/extension-regression.test.js
+
+      - name: Smart collection tests
+        run: node --test tests/smart-collections.test.js
+
+      - name: Packaging validation
+        run: bash scripts/package-extension.sh
+
+      - name: Packaged manifest matches the source manifest
+        run: |
+          node -e '
+            const { execFileSync } = require("node:child_process");
+            const fs = require("node:fs");
+            const version = JSON.parse(fs.readFileSync("manifest.json", "utf8")).version;
+            const inside = JSON.parse(execFileSync("unzip", ["-p", `dist/image-collector-${version}.zip`, "manifest.json"], { encoding: "utf8" })).version;
+            if (inside !== version) {
+              console.error(`packaged manifest version ${inside} does not match source ${version}`);
+              process.exit(1);
+            }
+            console.log("packaged manifest version:", inside);
+          '
+
+      - name: Whitespace errors
+        run: |
+          if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+            git diff --check HEAD~1 HEAD
+          else
+            echo "no parent commit available; skipping"
+          fi
