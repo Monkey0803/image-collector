@@ -17,6 +17,7 @@ function sourceBetween(startMarker, endMarker) {
 function createLogicApi() {
   const context = {
     SMART_COLLECTIONS_VERSION: 1,
+    SMART_COLLECTION_LIMIT: 50,
     SMART_RANGE_FIELDS: ['width', 'height', 'size', 'aspect'],
     SMART_CONDITION_FIELDS: ['width', 'height', 'size', 'aspect', 'format', 'domain', 'source', 'date'],
     SMART_FORMATS: ['jpeg', 'png', 'webp', 'avif', 'other'],
@@ -50,6 +51,15 @@ test('empty smart conditions cannot become an always-true rule', () => {
   assert.equal(api.smartConditionHasValue({ field: 'domain', value: '' }), false);
   assert.equal(api.smartConditionMatches({ domain: 'example.com' }, { field: 'domain', value: '' }), false);
   assert.deepEqual(api.normalizeSmartCollections([{ name: 'Empty', conditions: [{ field: 'domain', value: '' }] }]), []);
+});
+
+test('smart collection normalisation honours the named limit', () => {
+  // 3.3.0: the import path counts entries before capping so it can report how
+  // many were dropped instead of silently discarding them.
+  const many = Array.from({ length: 60 }, (_, index) => ({ name: `rule-${index}`, conditions: [{ field: 'format', value: 'png' }] }));
+  assert.equal(api.normalizeSmartCollections(many).length, 50, 'the default limit must apply');
+  assert.equal(api.normalizeSmartCollections(many, { limit: Number.MAX_SAFE_INTEGER }).length, 60, 'the import path must be able to count before capping');
+  assert.equal(api.normalizeSmartCollections(many, { limit: 3 }).length, 3, 'an explicit limit must win');
 });
 
 test('smart collection versions are rejected consistently', () => {

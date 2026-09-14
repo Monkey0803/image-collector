@@ -16,8 +16,8 @@ function pngDimensions(file) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-test('release metadata is aligned with the 3.2.2 milestone', () => {
-  assert.equal(manifest.version, '3.2.2');
+test('release metadata is aligned with the 3.3.0 milestone', () => {
+  assert.equal(manifest.version, '3.3.0');
   assert.match(todo, /## 3\.1\.0 asset management and deduplication/);
   const milestone = todo.split('## 3.1.0 asset management and deduplication')[1].split('## 3.2.0 release quality and validation')[0];
   assert.doesNotMatch(milestone, /- \[ \]/);
@@ -168,15 +168,17 @@ test('the 3.2.0 checklist has no unfinished entries', () => {
 
 test('milestone checklists stay in sync across languages and ship their deliverables', () => {
   const milestones = [
-    ['## 3.2.0 release quality and validation', '## 3.2.1'],
-    ['## 3.2.1 metadata coverage and index cleanup', '## 3.2.2'],
-    ['## 3.2.2 side panel shortcut reliability', null],
+    // [heading, next heading, closed?] — a closed milestone must have no unfinished items
+    ['## 3.2.0 release quality and validation', '## 3.2.1', true],
+    ['## 3.2.1 metadata coverage and index cleanup', '## 3.2.2', true],
+    ['## 3.2.2 side panel shortcut reliability', '## 3.3.0', true],
+    ['## 3.3.0 silent truncation cleanup and CI', null, true],
   ];
   const tally = (text) => ({
     total: (text.match(/^- \[[ x]\]/gm) || []).length,
     unfinished: (text.match(/^- \[ \]/gm) || []).length,
   });
-  for (const [heading, next] of milestones) {
+  for (const [heading, next, closed] of milestones) {
     const tail = todo.split(heading)[1];
     assert.ok(tail, `${heading} must exist in TODO.md`);
     const section = next ? tail.split(next)[0] : tail;
@@ -184,6 +186,7 @@ test('milestone checklists stay in sync across languages and ship their delivera
     assert.ok(chinese && english, `${heading} must document both languages`);
     assert.ok(tally(chinese).total > 0, `${heading} must list tasks`);
     assert.deepEqual(tally(chinese), tally(english), `${heading} task states must match across languages`);
+    if (closed) assert.equal(tally(chinese).unfinished, 0, `${heading} is released and must stay closed`);
   }
   assert.equal(fs.existsSync('scripts/package-extension.sh'), true, 'the packaging script must exist');
   assert.match(read('README.md'), /scripts\/package-extension\.sh/);
@@ -236,6 +239,69 @@ test('the shortcut handler opens the panel before any await', () => {
   assert.match(worker, /function rememberActiveTab\(\)/);
   assert.match(worker, /chrome\.tabs\?\.onActivated\?\.addListener\(rememberActiveTab\)/);
   assert.match(worker, /shortcutDiagnostic/);
+});
+
+test('user-visible collection caps are named and surfaced', () => {
+  // 3.3.0: a cap that silently hides content is a defect. Every cap must be a named
+  // constant and must ship a visible notice instead of dropping data quietly.
+  assert.match(popup, /const DUPLICATE_GROUP_PAGE_SIZE = 30;/);
+  assert.match(popup, /const SMART_COLLECTION_LIMIT = 50;/);
+  assert.doesNotMatch(popup, /groups\.slice\(0, 30\)/, 'duplicate groups must not use a bare 30 cap');
+  assert.match(popup, /groups\.slice\(0, state\.duplicateGroupLimit\)/);
+  assert.match(popup, /state\.duplicateGroupLimit \+= DUPLICATE_GROUP_PAGE_SIZE/);
+  assert.match(popup, /duplicateGroupsHidden/, 'hidden duplicate groups must be reported');
+  assert.match(popup, /slice\(0, SMART_COLLECTION_LIMIT\)/, 'smart collections must use the named limit');
+  assert.match(popup, /smartCollectionLimit/, 'the smart collection guard must be surfaced');
+  assert.match(popup, /smartCollectionLimitTruncated/, 'import truncation must be reported');
+});
+
+test('background actions without a visible surface report failures', () => {
+  // 3.3.0: the context-menu "save to a collection" action used to return silently.
+  assert.match(worker, /function recordDiagnostic\(storageKey, stage, message/);
+  assert.match(worker, /recordContextMenuDiagnostic\('read-collections'/);
+  assert.match(worker, /recordContextMenuDiagnostic\('write-collection'/);
+  assert.doesNotMatch(
+    worker.slice(worker.indexOf('async function handleContextSaveCollection'), worker.indexOf('async function runDownloadJob')),
+    /catch \{ return; \}/,
+    'a failed collection read must not return silently'
+  );
+  assert.match(popup, /message\?\.type === 'diagnostic'/);
+  assert.match(popup, /actionDidNotComplete/);
+});
+
+test('README Chinese and English halves stay in sync', () => {
+  // 3.3.0: the two halves drifted apart repeatedly — the English side lost whole
+  // groups and the Chinese side accumulated English headings, bullets, and whole
+  // blocks. Structure and language purity are what must stay aligned; the two
+  // halves legitimately use different mixes of bullets and prose inside a group.
+  const readme = read('README.md');
+  const [chinese, english] = readme.split(/^## English$/m);
+  assert.ok(chinese && english, 'README.md must keep a top-level English half');
+  const sections = (text) => text.split(/^### /m).slice(1).map((part) => part.slice(part.indexOf('\n')));
+  const zh = sections(chinese);
+  const en = sections(english);
+  assert.ok(zh.length > 0, 'README must document its sections');
+  assert.equal(zh.length, en.length, `README section count differs: ${zh.length} vs ${en.length}`);
+  const count = (text, pattern) => (text.match(pattern) || []).length;
+  zh.forEach((body, index) => {
+    const position = index + 1;
+    assert.equal(count(body, /^#### /gm), count(en[index], /^#### /gm), `sub-section count differs in section ${position}`);
+    assert.equal(count(body, /^\d+\. /gm), count(en[index], /^\d+\. /gm), `numbered steps differ in section ${position}`);
+    assert.equal(count(body, /^```/gm), count(en[index], /^```/gm), `code fences differ in section ${position}`);
+  });
+  // A section written in the wrong half is the failure mode that started this cleanup.
+  const isChineseEntry = (line) => /[\u4e00-\u9fff]/.test(line);
+  const entries = (bodies, pattern) => bodies.flatMap((body) => body.match(pattern) || []);
+  const leakedIntoEnglish = entries(en, /^\s*(?:- .*|#### .*)$/gm)
+    .filter(isChineseEntry)
+    // the language-switch button label `中` is a literal UI string, not leaked prose
+    .filter((line) => !/`EN` \/ `中`/.test(line));
+  assert.deepEqual(leakedIntoEnglish, [], 'the English half must not contain Chinese entries');
+  const leakedIntoChinese = entries(zh, /^\s*(?:- .*|#### .*)$/gm)
+    .filter((line) => !isChineseEntry(line))
+    // format names are intentionally identical in both halves
+    .filter((line) => !/^- (JPEG|PNG|WEBP|AVIF)$/.test(line.trim()));
+  assert.deepEqual(leakedIntoChinese, [], 'the Chinese half must not contain English entries');
 });
 
 test('text scale follows the active tab zoom without scaling the whole panel', () => {

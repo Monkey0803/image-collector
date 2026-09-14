@@ -273,10 +273,26 @@ function openCollectorPanelForShortcut(tabsPromise) {
     .catch((error) => `${error?.name || 'Error'}: ${error?.message || error}`);
 }
 
+// Records a failure that has no visible surface of its own, so it is never lost.
+// The console entry aids debugging and the panel toast covers the case where the
+// user is looking at the side panel when the action fails.
+function recordDiagnostic(storageKey, stage, message, detail = {}) {
+  const diagnostic = { stage, message, at: Date.now(), ...detail };
+  console.error('[Image Collector] action did not complete', storageKey, diagnostic);
+  chrome.storage.local.set({ [storageKey]: diagnostic }).catch(() => {});
+  try {
+    Promise.resolve(chrome.runtime.sendMessage({ type: 'diagnostic', storageKey })).catch(() => {});
+  } catch {
+    // No panel is open; the stored diagnostic is still available.
+  }
+}
+
 function recordShortcutDiagnostic(command, stage, message) {
-  const diagnostic = { command, stage, message, at: Date.now() };
-  console.error('[Image Collector] shortcut did not complete', diagnostic);
-  chrome.storage.local.set({ shortcutDiagnostic: diagnostic }).catch(() => {});
+  recordDiagnostic('shortcutDiagnostic', stage, message, { command });
+}
+
+function recordContextMenuDiagnostic(stage, message) {
+  recordDiagnostic('contextMenuDiagnostic', stage, message);
 }
 
 function contextImage(info, tab) {
@@ -314,14 +330,23 @@ async function handleContextSaveCollection(info, tab, collectionId) {
   const image = contextImage(info, tab);
   if (!image || !collectionId) return;
   let collections = [];
-  try { collections = await ImageCollectorDB.listCollections(); } catch { return; }
-  if (!collections.some((collection) => collection.id === collectionId)) return;
+  try {
+    collections = await ImageCollectorDB.listCollections();
+  } catch (error) {
+    // A failed read used to return silently, so the menu item looked like a no-op.
+    recordContextMenuDiagnostic('read-collections', String(error?.message || error));
+    return;
+  }
+  if (!collections.some((collection) => collection.id === collectionId)) {
+    recordContextMenuDiagnostic('collection-missing', `collection ${collectionId} is no longer available`);
+    return;
+  }
   try {
     await ImageCollectorDB.bulkUpsertAndUpdateImages([image], (record) => ({
       collectionIds: [...new Set([...(record.collectionIds || []), collectionId])]
     }));
-  } catch {
-    // Saving from the context menu is best effort and must not interrupt the page.
+  } catch (error) {
+    recordContextMenuDiagnostic('write-collection', String(error?.message || error));
   }
 }
 

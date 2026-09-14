@@ -1,3 +1,8 @@
+// User-visible collection caps. Every cap must be paired with a visible notice so
+// that a large library never silently loses content (3.3.0 constraint).
+const DUPLICATE_GROUP_PAGE_SIZE = 30;
+const SMART_COLLECTION_LIMIT = 50;
+
 const state = {
   images: [],
   dimensionFiltered: [],
@@ -65,7 +70,7 @@ const state = {
   downloadMetrics: { startedAt: 0, total: 0 },
   librarySelected: new Set(), libraryFormat: 'all', libraryMinWidth: '', libraryMaxWidth: '', libraryMinHeight: '', libraryMaxHeight: '', libraryMinSize: '', libraryMaxSize: '', librarySort: 'updated', storageStats: null,
   libraryRefreshToken: 0,
-  libraryDuplicateScope: 'all', duplicateStrategy: 'largest-dimension', similarThreshold: 8, duplicateGroups: [], similarGroups: [],
+  libraryDuplicateScope: 'all', duplicateStrategy: 'largest-dimension', similarThreshold: 8, duplicateGroups: [], similarGroups: [], duplicateGroupLimit: DUPLICATE_GROUP_PAGE_SIZE,
   pageRenderLimit: 120,
   libraryRenderLimit: 120,
   scanRules: { includeSelectors: '', excludeSelectors: '', scanCssBackground: true, scanVideoPosters: true, includeIframes: true },
@@ -155,7 +160,8 @@ function smartCollectionsConfigSupported(version, rules) {
   return versionSupported && rulesSupported;
 }
 
-function normalizeSmartCollections(value) {
+function normalizeSmartCollections(value, options = {}) {
+  const limit = Number.isFinite(options.limit) ? options.limit : SMART_COLLECTION_LIMIT;
   return (Array.isArray(value) ? value : []).filter((item) => !item || item.version === undefined || Number(item.version) === SMART_COLLECTIONS_VERSION).map((item) => {
     const conditions = (Array.isArray(item?.conditions) ? item.conditions : [])
       .map(normalizeSmartCondition).filter(smartConditionHasValue).slice(0, 12);
@@ -169,7 +175,7 @@ function normalizeSmartCollections(value) {
       createdAt: Number(item?.createdAt) || Date.now(),
       updatedAt: Number(item?.updatedAt) || Date.now()
     };
-  }).filter((item) => item.name && item.conditions.length).slice(0, 50);
+  }).filter((item) => item.name && item.conditions.length).slice(0, limit);
 }
 
 function syncConfigurationPayload() {
@@ -506,6 +512,8 @@ async function consumePendingShortcut() {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'downloadProgress' && message.jobId === state.downloadJobId) updateDownloadProgress(message);
   if (message?.type === 'downloadProgress' && state.view === 'tasks') scheduleTaskRefresh();
+  // A background action with no visible surface failed; say so instead of staying silent.
+  if (message?.type === 'diagnostic') showToast(t('actionDidNotComplete'));
   if (message?.type === 'shortcut') {
     sendResponse({ handled: handleShortcutCommand(message.command) });
   }
@@ -1108,7 +1116,8 @@ function renderDuplicateGroups() {
   els.duplicateGroupList.replaceChildren();
   const groups = state.libraryDuplicateScope === 'similar' ? state.similarGroups : state.duplicateGroups;
   els.duplicateGroupList.hidden = !groups.length || state.libraryDuplicateScope === 'all';
-  groups.slice(0, 30).forEach((group, index) => {
+  const visibleGroups = groups.slice(0, state.duplicateGroupLimit);
+  visibleGroups.forEach((group, index) => {
     const section = document.createElement('section'); section.className = 'duplicate-group';
     const heading = document.createElement('strong'); heading.textContent = `${state.libraryDuplicateScope === 'similar' ? '相似组' : '重复组'} ${index + 1} · ${group.items.length} 张`;
     section.append(heading);
@@ -1118,6 +1127,20 @@ function renderDuplicateGroups() {
     });
     els.duplicateGroupList.append(section);
   });
+  // Never hide groups without saying so: the previous bare 30-group cap silently
+  // dropped the rest on large libraries.
+  const hiddenGroups = groups.length - visibleGroups.length;
+  if (hiddenGroups > 0) {
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'load-more-button';
+    more.textContent = `${t('loadMore', { count: Math.min(DUPLICATE_GROUP_PAGE_SIZE, hiddenGroups) })} · ${t('duplicateGroupsHidden', { count: hiddenGroups })}`;
+    more.addEventListener('click', () => {
+      state.duplicateGroupLimit += DUPLICATE_GROUP_PAGE_SIZE;
+      renderDuplicateGroups();
+    });
+    els.duplicateGroupList.append(more);
+  }
 }
 
 async function cleanupLibraryMode(mode) {
@@ -1222,6 +1245,7 @@ function applyLibraryMetricPreset(preset) {
 function scheduleLibraryRefresh() {
   clearTimeout(libraryRefreshTimer);
   state.libraryRenderLimit = 120;
+  state.duplicateGroupLimit = DUPLICATE_GROUP_PAGE_SIZE;
   libraryRefreshTimer = setTimeout(() => {
     libraryRefreshTimer = null;
     refreshLibraryData();
@@ -1319,7 +1343,10 @@ async function importScanConfiguration(event) {
     }
     state.scanRules = normalizeScanRules(settings.scanRules);
     state.siteAdapters = normalizeSiteAdapters(settings.siteAdapters);
-    state.smartCollections = normalizeSmartCollections(settings.smartCollections);
+    // Count the cap separately from invalid entries so the truncation notice is exact.
+    const incomingSmartCollections = normalizeSmartCollections(settings.smartCollections, { limit: Number.MAX_SAFE_INTEGER });
+    state.smartCollections = incomingSmartCollections.slice(0, SMART_COLLECTION_LIMIT);
+    const smartCollectionsDropped = incomingSmartCollections.length - state.smartCollections.length;
     state.scanLimit = [0, 200, 500, 1000].includes(Number(settings.scanLimit)) ? Number(settings.scanLimit) : 500;
     state.autoScroll = Boolean(settings.autoScroll);
     state.zipLayout = ['flat', 'domain', 'format', 'domain-format', 'page', 'date', 'domain-page', 'domain-date'].includes(settings.zipLayout) ? settings.zipLayout : 'flat';
@@ -1347,7 +1374,9 @@ async function importScanConfiguration(event) {
     renderSmartCollectionManager();
     renderSiteAdapters();
     if (!await saveRuleConfiguration()) throw new Error('Could not save scan configuration');
-    showToast(t('scanConfigImported'));
+    showToast(smartCollectionsDropped > 0
+      ? `${t('scanConfigImported')} · ${t('smartCollectionLimitTruncated', { count: smartCollectionsDropped })}`
+      : t('scanConfigImported'));
     await scanPage();
   } catch {
     showToast(t('scanConfigImportFailed'));
@@ -1588,6 +1617,10 @@ async function saveSmartCollection() {
   if (!draft.conditions.length) { showToast(t('smartConditionRequired')); return; }
   const now = Date.now();
   const existing = state.smartCollections.find((rule) => rule.id === state.smartCollectionEditingId);
+  if (!existing && state.smartCollections.length >= SMART_COLLECTION_LIMIT) {
+    showToast(t('smartCollectionLimit', { count: SMART_COLLECTION_LIMIT }));
+    return;
+  }
   const rule = normalizeSmartCollections([{
     ...(existing || {}), ...draft, id: existing?.id || ('smart-' + now + '-' + Math.random().toString(36).slice(2)),
     enabled: existing?.enabled !== false, version: SMART_COLLECTIONS_VERSION,
@@ -4259,10 +4292,10 @@ const TRANSLATIONS = {
 };
 
 Object.assign(TRANSLATIONS.zh, {
-  smartCollections: '智能集合', smartDimensions: '按尺寸', smartFormats: '按格式', smartSites: '按网站', smartDates: '按日期', smartLarge: '大图（≥ 1920×1080）', smartToday: '今天新增', smartWeek: '最近 7 天', smartMonth: '最近 31 天', smartOlder: '更早素材', loadMore: '加载更多（{count}）', fileSize: '文件大小', aspectRange: '宽高比范围', all: '全部', ratioLandscape: '横向', ratioPortrait: '纵向', ratioSquare: '方形', sizeMin: '最小文件大小', sizeMax: '最大文件大小'
+  smartCollections: '智能集合', smartDimensions: '按尺寸', smartFormats: '按格式', smartSites: '按网站', smartDates: '按日期', smartLarge: '大图（≥ 1920×1080）', smartToday: '今天新增', smartWeek: '最近 7 天', smartMonth: '最近 31 天', smartOlder: '更早素材', loadMore: '加载更多（{count}）', duplicateGroupsHidden: '还有 {count} 组未显示', smartCollectionLimit: '智能集合最多 {count} 条', smartCollectionLimitTruncated: '{count} 条超出上限已忽略', actionDidNotComplete: '操作未完成，可在扩展控制台查看详情', fileSize: '文件大小', aspectRange: '宽高比范围', all: '全部', ratioLandscape: '横向', ratioPortrait: '纵向', ratioSquare: '方形', sizeMin: '最小文件大小', sizeMax: '最大文件大小'
 });
 Object.assign(TRANSLATIONS.en, {
-  smartCollections: 'Smart collections', smartDimensions: 'By dimensions', smartFormats: 'By format', smartSites: 'By website', smartDates: 'By date', smartLarge: 'Large images (≥ 1920×1080)', smartToday: 'Added today', smartWeek: 'Last 7 days', smartMonth: 'Last 31 days', smartOlder: 'Older assets', loadMore: 'Load more ({count})', fileSize: 'File size', aspectRange: 'Aspect ratio range', all: 'All', ratioLandscape: 'Landscape', ratioPortrait: 'Portrait', ratioSquare: 'Square', sizeMin: 'Minimum file size', sizeMax: 'Maximum file size'
+  smartCollections: 'Smart collections', smartDimensions: 'By dimensions', smartFormats: 'By format', smartSites: 'By website', smartDates: 'By date', smartLarge: 'Large images (≥ 1920×1080)', smartToday: 'Added today', smartWeek: 'Last 7 days', smartMonth: 'Last 31 days', smartOlder: 'Older assets', loadMore: 'Load more ({count})', duplicateGroupsHidden: '{count} more groups not shown', smartCollectionLimit: 'At most {count} smart collections', smartCollectionLimitTruncated: '{count} over the limit were ignored', actionDidNotComplete: 'The action did not complete; check the extension console for details', fileSize: 'File size', aspectRange: 'Aspect ratio range', all: 'All', ratioLandscape: 'Landscape', ratioPortrait: 'Portrait', ratioSquare: 'Square', sizeMin: 'Minimum file size', sizeMax: 'Maximum file size'
 });
 Object.assign(TRANSLATIONS.zh, {
   noAutoArchive: '不自动归档', noSiteAdapters: '还没有站点规则', autoArchive: '自动归档', removeSiteAdapter: '删除站点规则', siteAdapterRemoved: '站点规则已删除', siteAdapterSaved: '站点规则已保存', siteAdapterRequired: '请填写域名和图片选择器', siteAdapterLimit: '最多保存 30 条站点规则', scanRulesSaved: '扫描规则已保存', syncEnabled: '设置同步已开启', syncDisabled: '设置同步已关闭', syncSaved: '同步设置已保存', syncSaveFailed: '同步设置保存失败', customScanRules: '自定义扫描规则', appliesToSite: '按当前网站生效', includeSelectors: '包含选择器', excludeSelectors: '排除选择器', includeSelectorsHint: '每行一个 CSS 选择器；为空时使用默认扫描器。', excludeSelectorsHint: '匹配到的元素及其子元素不会加入结果。', scanCssBackground: '扫描 CSS 背景图', scanVideoPosters: '扫描视频封面', includeIframes: '扫描 iframe', saveScanRules: '保存扫描规则', siteAdapters: '站点适配与自动归档', matchesByHost: '按域名匹配', hostPattern: '域名匹配', imageSelector: '图片选择器', extraAttributes: '额外图片属性', archiveCollection: '自动归档到集合', saveSiteAdapter: '保存站点规则', clearForm: '清空表单', syncTitle: '可选设置同步', noImageSync: '不上传图片', useChromeSync: '使用 Chrome 同步设置', syncDescription: '仅同步扫描规则、站点适配器和偏好，不同步图片、缓存或历史记录。', saveSyncSettings: '保存同步设置'
