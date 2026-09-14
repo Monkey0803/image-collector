@@ -2044,6 +2044,9 @@ async function loadStorageStats() {
     state.storageStats = await ImageCollectorDB.getStorageStats();
     const stats = state.storageStats;
     els.storageStats.textContent = String(stats.images) + ' ' + t('images') + ' · ' + String(stats.favorites) + ' ' + t('favorites') + ' · ' + String(stats.cachedImages || 0) + ' ' + t('cachedImages') + ' · ' + formatBytes(stats.cacheBytes || 0) + ' ' + t('cachedStorage') + ' · ' + String(stats.collections) + ' ' + t('collections') + ' · ' + formatBytes(stats.bytes);
+    const cacheWrite = ImageCollectorDB.getCacheWriteState?.() || { failures: 0, lastReason: '' };
+    const cacheNoticeText = cacheWriteFailureText(cacheWrite);
+    if (cacheNoticeText) els.storageStats.textContent += ' · ' + cacheNoticeText;
   } catch { els.storageStats.textContent = t('storageUnavailable'); }
 }
 
@@ -2437,7 +2440,7 @@ async function handleScanHistoryAction(event) {
       await downloadImages(images, action === 'zip');
     }
   } catch (error) {
-    showToast(error?.message || t('historyActionFailed'));
+    showToast(describeError(error, 'historyActionFailed'));
   } finally {
     button.disabled = false;
   }
@@ -3096,7 +3099,7 @@ async function scanPage(options = {}) {
       updateScanStats();
       render();
       els.error.hidden = false;
-      els.error.textContent = `${t('scanFailedPrefix')}${error.message || t('pageAccessError')}`;
+      els.error.textContent = `${t('scanFailedPrefix')}${describeError(error, 'pageAccessError')}`;
     }
     if (!quiet) els.scanStatus.textContent = t('scanFailed');
     else updateScanStatus();
@@ -4178,8 +4181,8 @@ async function downloadImages(images, asZip) {
   } catch (error) {
     if (!state.retryImages.length) state.retryImages = [...images];
     updateRetryUI();
-    updateDownloadProgress({ phase: 'failed', completed: images.length, total: images.length, failed: state.retryImages.length, percent: 100, detail: error.message || t('downloadFailed') });
-    showToast(error.message || t('downloadFailedRetry'));
+    updateDownloadProgress({ phase: 'failed', completed: images.length, total: images.length, failed: state.retryImages.length, percent: 100, detail: describeError(error, 'downloadFailed') });
+    showToast(describeError(error, 'downloadFailedRetry'));
   } finally {
     render();
   }
@@ -4435,7 +4438,7 @@ Object.assign(TRANSLATIONS.zh, {
   ariaMinSize: '最小文件大小 KB', ariaMaxSize: '最大文件大小 KB', ariaAspectFilter: '按宽高比筛选',
   ariaLibraryScope: '素材库筛选范围', ariaDedupeFilter: '去重筛选', ariaKeepStrategy: '保留策略',
   ariaPreviewCollection: '修改集合',
-  previewCopyAll: '复制所有地址', previewOpenSource: '打开来源页面', previewDownload: '下载图片', previewEditTags: '编辑标签', ariaMinAspect: '最小宽高比', ariaMaxAspect: '最大宽高比', ariaSourceFilter: '按图片来源筛选', ariaZipLayout: 'ZIP 文件夹分组方式', ariaConflictAction: '文件冲突处理方式', ariaSmartCollectionFilter: '智能集合筛选', ariaLibrarySearch: '搜索素材库', ariaSmartCollectionManager: '智能集合管理', ariaLibraryFormat: '按格式筛选', ariaLibraryMinWidth: '素材库最小宽度', ariaLibraryMaxWidth: '素材库最大宽度', ariaLibraryMinHeight: '素材库最小高度', ariaLibraryMaxHeight: '素材库最大高度', ariaLibraryMinSize: '素材库最小文件大小 KB', ariaLibraryMaxSize: '素材库最大文件大小 KB', ariaLibrarySort: '素材库排序', ariaSizeDistribution: '文件大小数量分布', ariaLibraryMinAspect: '素材库最小宽高比', ariaLibraryMaxAspect: '素材库最大宽高比', ariaAspectDistribution: '宽高比数量分布', ariaHistory: '扫描和下载历史', ariaSettings: '扩展设置', ariaScanRules: '扫描规则', ariaSiteAdapters: '站点适配规则', ariaSyncSettings: '设置同步', ariaImageDetails: '图片详情', similarThresholdLabel: '相似阈值', cleanupInvalidAction: '清理无效', cleanupUnfavoritedAction: '清理未收藏', cleanupDuplicatesAction: '清理重复'
+  previewCopyAll: '复制所有地址', previewOpenSource: '打开来源页面', previewDownload: '下载图片', previewEditTags: '编辑标签', ariaMinAspect: '最小宽高比', ariaMaxAspect: '最大宽高比', ariaSourceFilter: '按图片来源筛选', ariaZipLayout: 'ZIP 文件夹分组方式', ariaConflictAction: '文件冲突处理方式', ariaSmartCollectionFilter: '智能集合筛选', ariaLibrarySearch: '搜索素材库', ariaSmartCollectionManager: '智能集合管理', ariaLibraryFormat: '按格式筛选', ariaLibraryMinWidth: '素材库最小宽度', ariaLibraryMaxWidth: '素材库最大宽度', ariaLibraryMinHeight: '素材库最小高度', ariaLibraryMaxHeight: '素材库最大高度', ariaLibraryMinSize: '素材库最小文件大小 KB', ariaLibraryMaxSize: '素材库最大文件大小 KB', ariaLibrarySort: '素材库排序', ariaSizeDistribution: '文件大小数量分布', ariaLibraryMinAspect: '素材库最小宽高比', ariaLibraryMaxAspect: '素材库最大宽高比', ariaAspectDistribution: '宽高比数量分布', ariaHistory: '扫描和下载历史', ariaSettings: '扩展设置', ariaScanRules: '扫描规则', ariaSiteAdapters: '站点适配规则', ariaSyncSettings: '设置同步', ariaImageDetails: '图片详情', similarThresholdLabel: '相似阈值', cleanupInvalidAction: '清理无效', cleanupUnfavoritedAction: '清理未收藏', cleanupDuplicatesAction: '清理重复', dataOperationFailed: '本地数据操作失败，详情见扩展控制台', cacheWriteFailedQuota: '本地缓存已满，无法保存图片副本', cacheWriteFailedTooLarge: '图片超过单张缓存上限，未保存副本', cacheWriteFailedGeneric: '缓存写入失败 {count} 次'
 });
 Object.assign(TRANSLATIONS.en, {
   invalidReasonAllCandidatesFailed: 'None of the candidate addresses could be loaded',
@@ -4469,7 +4472,7 @@ Object.assign(TRANSLATIONS.en, {
   ariaMinSize: 'Minimum file size in KB', ariaMaxSize: 'Maximum file size in KB', ariaAspectFilter: 'Filter by aspect ratio',
   ariaLibraryScope: 'Library filter scope', ariaDedupeFilter: 'Duplicate filter', ariaKeepStrategy: 'Keep strategy',
   ariaPreviewCollection: 'Change collection',
-  previewCopyAll: 'Copy all addresses', previewOpenSource: 'Open source page', previewDownload: 'Download image', previewEditTags: 'Edit tags', ariaMinAspect: 'Minimum aspect ratio', ariaMaxAspect: 'Maximum aspect ratio', ariaSourceFilter: 'Filter by discovery source', ariaZipLayout: 'ZIP folder grouping', ariaConflictAction: 'File conflict handling', ariaSmartCollectionFilter: 'Smart collection filter', ariaLibrarySearch: 'Search the library', ariaSmartCollectionManager: 'Smart collection management', ariaLibraryFormat: 'Filter by format', ariaLibraryMinWidth: 'Library minimum width', ariaLibraryMaxWidth: 'Library maximum width', ariaLibraryMinHeight: 'Library minimum height', ariaLibraryMaxHeight: 'Library maximum height', ariaLibraryMinSize: 'Library minimum file size in KB', ariaLibraryMaxSize: 'Library maximum file size in KB', ariaLibrarySort: 'Library sort', ariaSizeDistribution: 'File size distribution', ariaLibraryMinAspect: 'Library minimum aspect ratio', ariaLibraryMaxAspect: 'Library maximum aspect ratio', ariaAspectDistribution: 'Aspect ratio distribution', ariaHistory: 'Scan and download history', ariaSettings: 'Extension settings', ariaScanRules: 'Scan rules', ariaSiteAdapters: 'Site adapter rules', ariaSyncSettings: 'Settings sync', ariaImageDetails: 'Image details', similarThresholdLabel: 'Similarity threshold', cleanupInvalidAction: 'Clear invalid', cleanupUnfavoritedAction: 'Clear non-favorited', cleanupDuplicatesAction: 'Clear duplicates'
+  previewCopyAll: 'Copy all addresses', previewOpenSource: 'Open source page', previewDownload: 'Download image', previewEditTags: 'Edit tags', ariaMinAspect: 'Minimum aspect ratio', ariaMaxAspect: 'Maximum aspect ratio', ariaSourceFilter: 'Filter by discovery source', ariaZipLayout: 'ZIP folder grouping', ariaConflictAction: 'File conflict handling', ariaSmartCollectionFilter: 'Smart collection filter', ariaLibrarySearch: 'Search the library', ariaSmartCollectionManager: 'Smart collection management', ariaLibraryFormat: 'Filter by format', ariaLibraryMinWidth: 'Library minimum width', ariaLibraryMaxWidth: 'Library maximum width', ariaLibraryMinHeight: 'Library minimum height', ariaLibraryMaxHeight: 'Library maximum height', ariaLibraryMinSize: 'Library minimum file size in KB', ariaLibraryMaxSize: 'Library maximum file size in KB', ariaLibrarySort: 'Library sort', ariaSizeDistribution: 'File size distribution', ariaLibraryMinAspect: 'Library minimum aspect ratio', ariaLibraryMaxAspect: 'Library maximum aspect ratio', ariaAspectDistribution: 'Aspect ratio distribution', ariaHistory: 'Scan and download history', ariaSettings: 'Extension settings', ariaScanRules: 'Scan rules', ariaSiteAdapters: 'Site adapter rules', ariaSyncSettings: 'Settings sync', ariaImageDetails: 'Image details', similarThresholdLabel: 'Similarity threshold', cleanupInvalidAction: 'Clear invalid', cleanupUnfavoritedAction: 'Clear non-favorited', cleanupDuplicatesAction: 'Clear duplicates', dataOperationFailed: 'Local data operation failed; see the extension console for details', cacheWriteFailedQuota: 'The local cache is full, so image copies could not be saved', cacheWriteFailedTooLarge: 'The image exceeds the per-item cache limit and was not saved', cacheWriteFailedGeneric: 'Cache writes failed {count} time(s)'
 });
 
 function t(key, values = {}) {
@@ -4477,6 +4480,23 @@ function t(key, values = {}) {
   const text = Array.isArray(raw) ? raw : String(raw);
   if (Array.isArray(text)) return text;
   return text.replace(/\{(\w+)\}/g, (_match, name) => String(values[name] ?? ''));
+}
+
+// Data-layer failures carry a code and a Chinese diagnostic; the UI shows a
+// localised message and logs the raw one instead of leaking the diagnostic.
+function describeError(error, fallbackKey) {
+  if (error?.isDataError) {
+    console.error('[Image Collector] local data operation failed', error.code, error.message);
+    return t(fallbackKey);
+  }
+  return error?.message || t(fallbackKey);
+}
+
+function cacheWriteFailureText(cacheState) {
+  if (!cacheState?.failures) return '';
+  if (cacheState.lastReason === 'quota') return t('cacheWriteFailedQuota');
+  if (cacheState.lastReason === 'too-large') return t('cacheWriteFailedTooLarge');
+  return t('cacheWriteFailedGeneric', { count: cacheState.failures });
 }
 
 function detectLanguage() {

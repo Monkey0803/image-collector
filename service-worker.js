@@ -575,8 +575,9 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
         failed.push({ url: image.url, candidateUrls: imageCandidates(image), error: workerText(language, 'zipLimit'), code: 'zip-limit', stage: 'read' });
       } else {
         const blob = new Blob([data], { type: (contentType || '').split(';')[0] || 'application/octet-stream' });
-        await ImageCollectorDB.putCachedImage(image.url, blob, { sourceUrl: fetchedUrl, mime: contentType }).catch(() => {});
-        ImageCollectorDB.analyzeImageBlob?.(image.url, blob, { mime: contentType, cacheState: 'cached' }).catch(() => {});
+        const cached = await ImageCollectorDB.putCachedImage(image.url, blob, { sourceUrl: fetchedUrl, mime: contentType }).catch(() => false);
+        if (!cached) recordDiagnostic('cacheWriteDiagnostic', 'zip-cache', image.url);
+        ImageCollectorDB.analyzeImageBlob?.(image.url, blob, { mime: contentType, cacheState: cached ? 'cached' : 'uncached' }).catch(() => {});
         const filename = normalizeName(image, contentType, { ...settings, dateFolder: false });
         const name = uniqueName(zipPath(image, filename, settings.zipLayout || 'flat', settings, contentType), usedNames);
         entries.push({ name, data });

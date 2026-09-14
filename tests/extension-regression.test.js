@@ -16,8 +16,8 @@ function pngDimensions(file) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-test('release metadata is aligned with the 3.3.0 milestone', () => {
-  assert.equal(manifest.version, '3.3.0');
+test('release metadata is aligned with the 3.3.1 milestone', () => {
+  assert.equal(manifest.version, '3.3.1');
   assert.match(todo, /## 3\.1\.0 asset management and deduplication/);
   const milestone = todo.split('## 3.1.0 asset management and deduplication')[1].split('## 3.2.0 release quality and validation')[0];
   assert.doesNotMatch(milestone, /- \[ \]/);
@@ -173,7 +173,7 @@ test('milestone checklists stay in sync across languages and ship their delivera
     ['## 3.2.1 metadata coverage and index cleanup', '## 3.2.2', true],
     ['## 3.2.2 side panel shortcut reliability', '## 3.3.0', true],
     ['## 3.3.0 silent truncation cleanup and CI', '## 3.3.1', true],
-    ['## 3.3.1 interface language completeness', null, false],
+    ['## 3.3.1 interface language completeness', null, true],
   ];
   const tally = (text) => ({
     total: (text.match(/^- \[[ x]\]/gm) || []).length,
@@ -346,6 +346,39 @@ test('user-visible copy outside the translation tables stays translated', () => 
     leaked.push(`L${index + 1}: ${line.trim().slice(0, 80)}`);
   });
   assert.deepEqual(leaked, [], 'Chinese copy must live in the translation tables');
+});
+
+test('data-layer failures are localised at the UI boundary', () => {
+  // 3.3.1: library.js carries Chinese developer diagnostics. They must be tagged so
+  // the UI shows a localised message instead of leaking the raw text.
+  assert.match(library, /function dataError\(code, message, cause\)/);
+  assert.match(library, /error\.isDataError = true/);
+  assert.match(library, /getCacheWriteState/);
+  const tagged = (library.match(/dataError\(/g) || []).length;
+  assert.ok(tagged >= 14, `expected every library error site to be tagged, saw ${tagged} occurrences`);
+  assert.match(popup, /function describeError\(error, fallbackKey\)/);
+  for (const call of [
+    "describeError(error, 'historyActionFailed')",
+    "describeError(error, 'downloadFailed')",
+    "describeError(error, 'downloadFailedRetry')",
+    "describeError(error, 'pageAccessError')",
+  ]) {
+    assert.ok(popup.includes(call), `${call} must be used at the UI boundary`);
+  }
+  assert.doesNotMatch(popup, /showToast\(error\??\.message \|\| t\('historyActionFailed'\)\)/);
+});
+
+test('cache write failures are recorded and surfaced', () => {
+  // 3.3.1: quota and oversized-entry failures used to look exactly like a cache miss.
+  assert.match(library, /noteCacheWriteFailure\('too-large'\)/);
+  assert.match(library, /noteCacheWriteFailure\('invalid'\)/);
+  assert.match(library, /noteCacheWriteFailure\(cacheFailureReason\(error\)\)/);
+  assert.match(popup, /function cacheWriteFailureText\(cacheState\)/);
+  assert.match(popup, /cacheWriteFailedQuota/);
+  assert.match(worker, /if \(!cached\) recordDiagnostic\('cacheWriteDiagnostic', 'zip-cache'/);
+  // the ZIP path must not claim an image is cached when the write failed
+  assert.match(worker, /cacheState: cached \? 'cached' : 'uncached'/);
+  assert.doesNotMatch(worker, /mime: contentType, cacheState: 'cached' \}\)\.catch\(\(\) => \{\}\);\n\s*const filename/);
 });
 
 test('text scale follows the active tab zoom without scaling the whole panel', () => {

@@ -8,6 +8,32 @@
   const SCAN_STORE = 'scans';
   const DOWNLOAD_STORE = 'downloads';
   const COLLECTION_STORE = 'collections';
+  // Failures from the data layer carry a code and are tagged so the UI can show a
+  // localised message instead of these Chinese developer diagnostics.
+  function dataError(code, message, cause) {
+    const error = new Error(message);
+    error.isDataError = true;
+    error.code = code;
+    if (cause) error.cause = cause;
+    return error;
+  }
+
+  const cacheWriteState = { failures: 0, lastReason: '', lastAt: 0 };
+
+  function noteCacheWriteFailure(reason) {
+    cacheWriteState.failures += 1;
+    cacheWriteState.lastReason = reason;
+    cacheWriteState.lastAt = Date.now();
+  }
+
+  function cacheFailureReason(error) {
+    const text = String(error?.name || '') + ' ' + String(error?.message || '');
+    return /quota/i.test(text) ? 'quota' : 'write-failed';
+  }
+
+  function getCacheWriteState() {
+    return { ...cacheWriteState };
+  }
   let databasePromise;
 
   function openDatabase() {
@@ -56,11 +82,11 @@
       };
       request.onerror = () => {
         databasePromise = null;
-        reject(request.error || new Error('无法打开本地素材库'));
+        reject(dataError('open', '无法打开本地素材库', request.error));
       };
       request.onblocked = () => {
         databasePromise = null;
-        reject(new Error('本地素材库正在被其他页面占用'));
+        reject(dataError('blocked', '本地素材库正在被其他页面占用'));
       };
     });
     return databasePromise;
@@ -69,15 +95,15 @@
   function requestValue(request) {
     return new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error || new Error('本地数据读取失败'));
+      request.onerror = () => reject(dataError('read', '本地数据读取失败', request.error));
     });
   }
 
   function transactionDone(transaction) {
     return new Promise((resolve, reject) => {
       transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error || new Error('本地数据写入失败'));
-      transaction.onabort = () => reject(transaction.error || new Error('本地数据事务已中止'));
+      transaction.onerror = () => reject(dataError('write', '本地数据写入失败', transaction.error));
+      transaction.onabort = () => reject(dataError('abort', '本地数据事务已中止', transaction.error));
     });
   }
 
@@ -212,7 +238,14 @@
 
   async function putCachedImage(url, blob, metadata = {}) {
     const id = imageId(url);
-    if (!id || !blob || typeof blob.size !== 'number' || blob.size <= 0 || blob.size > MAX_CACHE_ENTRY_BYTES) return false;
+    if (!id || !blob || typeof blob.size !== 'number' || blob.size <= 0) {
+      noteCacheWriteFailure('invalid');
+      return false;
+    }
+    if (blob.size > MAX_CACHE_ENTRY_BYTES) {
+      noteCacheWriteFailure('too-large');
+      return false;
+    }
     const db = await openDatabase();
     const now = Date.now();
     const transaction = db.transaction(CACHE_STORE, 'readwrite');
@@ -226,8 +259,14 @@
       createdAt: Number(metadata.createdAt) || now,
       updatedAt: now
     });
-    await transactionDone(transaction);
-    await pruneCache(id);
+    try {
+      await transactionDone(transaction);
+    } catch (error) {
+      // Quota exhaustion used to be indistinguishable from a plain cache miss.
+      noteCacheWriteFailure(cacheFailureReason(error));
+      return false;
+    }
+    await pruneCache(id).catch(() => {});
     return true;
   }
 
@@ -289,7 +328,7 @@
           reject(error);
         }
       };
-      request.onerror = () => reject(request.error || new Error('本地图片读取失败'));
+      request.onerror = () => reject(dataError('read', '本地图片读取失败', request.error));
     }));
     await Promise.all([Promise.all(requests), transactionDone(transaction)]);
     return records;
@@ -701,7 +740,7 @@
           reject(error);
         }
       };
-      request.onerror = () => reject(request.error || new Error('本地图片读取失败'));
+      request.onerror = () => reject(dataError('read', '本地图片读取失败', request.error));
     }));
     await Promise.all([Promise.all(requests), transactionDone(transaction)]);
     return updated;
@@ -751,9 +790,9 @@
         stats.bytes += Number(cursor.value.size) || cursor.value.blob?.size || 0;
         cursor.continue();
       };
-      request.onerror = () => reject(request.error || new Error('本地缓存读取失败'));
-      transaction.onerror = () => reject(transaction.error || new Error('本地缓存读取失败'));
-      transaction.onabort = () => reject(transaction.error || new Error('本地缓存事务已中止'));
+      request.onerror = () => reject(dataError('read', '本地缓存读取失败', request.error));
+      transaction.onerror = () => reject(dataError('read', '本地缓存读取失败', transaction.error));
+      transaction.onabort = () => reject(dataError('abort', '本地缓存事务已中止', transaction.error));
       transaction.oncomplete = () => resolve(stats);
     }));
   }
@@ -772,9 +811,9 @@
           stats.bytes += encoder.encode(JSON.stringify(cursor.value)).byteLength;
           cursor.continue();
         };
-        request.onerror = () => reject(request.error || new Error('本地数据读取失败'));
-        transaction.onerror = () => reject(transaction.error || new Error('本地数据读取失败'));
-        transaction.onabort = () => reject(transaction.error || new Error('本地数据事务已中止'));
+        request.onerror = () => reject(dataError('read', '本地数据读取失败', request.error));
+        transaction.onerror = () => reject(dataError('read', '本地数据读取失败', transaction.error));
+        transaction.onabort = () => reject(dataError('abort', '本地数据事务已中止', transaction.error));
         transaction.oncomplete = () => resolve(stats);
       }));
   }
@@ -832,6 +871,7 @@
     getImage,
     getCachedImage,
     putCachedImage,
+    getCacheWriteState,
     deleteCachedImage,
     upsertImages,
     bulkUpsertAndUpdateImages,
