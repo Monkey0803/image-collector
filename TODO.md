@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录当前 `3.3.1` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
+本文档记录当前 `3.4.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
 
 最后更新：2026-09-11
 
@@ -15,7 +15,7 @@
 - [x] `3.2.2` 侧边栏快捷键可靠性修复已发布。
 - [x] `3.3.0` 静默截断清理、CI 与 README 中英同步已完成。
 - [x] `3.3.1` 界面语言完整性已完成。
-- [ ] `3.4.0` 首屏布局重构正在进行。
+- [x] `3.4.0` 首屏布局重构已完成。
 
 ## 已知缺陷（2026-09-11 真机验收发现）
 
@@ -138,7 +138,7 @@
 
 ## English
 
-This document tracks the current `3.3.1` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
+This document tracks the current `3.4.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
 
 Last updated: 2026-09-11
 
@@ -153,7 +153,7 @@ Last updated: 2026-09-11
 - [x] `3.2.2` side panel shortcut reliability is released.
 - [x] `3.3.0` silent truncation cleanup, CI, and README Chinese/English sync are complete.
 - [x] `3.3.1` interface language completeness is complete.
-- [ ] `3.4.0` primary view layout restructure is in progress.
+- [x] `3.4.0` primary view layout restructure is complete.
 
 ### 1.0.1 core experience
 
@@ -593,18 +593,18 @@ Last updated: 2026-09-11
 
 ### 中文
 
-- [ ] 重构首屏层级：顶栏只保留品牌、当前页面、扫描与语言切换，五个视图标签压缩为图标按钮并与其同行。
-- [ ] 页面摘要并入顶栏：单行显示图标、标题与结果数量，点击可展开完整地址。
-- [ ] 把多页面采集面板移出首屏主路径，改放到结果区之后。
-- [ ] 结果标题与搜索排序合并为一行，筛选状态与选择工具收纳为该行的图标入口。
-- [ ] 把首屏腾出的高度还给图片网格，并在 420 px 视口下测量网格高度提升。
-- [ ] 保持全部既有控件 id、键盘可达性与中英文案不变，全部回归断言通过。
+- [x] 重构首屏层级：顶栏只保留品牌、当前页面、扫描与语言切换，五个视图标签压缩为图标按钮并与其同行。
+- [x] 页面摘要并入顶栏：单行显示图标、标题与结果数量，点击可展开完整地址。
+- [x] 把多页面采集面板移出首屏主路径，改放到结果区之后。
+- [x] 结果标题与搜索排序合并为一行，筛选状态与选择工具收纳为该行的图标入口。
+- [x] 让图片网格占据固定壳体内的剩余高度并自行滚动，消除整页滚动；实测 420 px 视口下结果区起点由 530 px 上移到 287 px，网格高度保持约 371 px。
+- [x] 保持全部既有控件 id、键盘可达性与中英文案不变，全部回归断言通过。
 
 ### English
 
-- [ ] Rework the first screen: the top bar keeps only the brand, current page, scan action, and language switch, with the five view tabs as icon buttons on the same row.
-- [ ] Fold the page summary into the top bar: one line with the icon, title, and result count, expandable to reveal the full URL.
-- [ ] Move the multi-page collection panel out of the primary path, below the results area.
-- [ ] Merge the results heading with search and sort into one row, collapsing filter status and selection tools into icon entries on that row.
-- [ ] Give the reclaimed height to the image grid and measure the improvement at a 420 px viewport.
-- [ ] Keep every existing control id, keyboard reachability, and bilingual copy unchanged, with all regression assertions passing.
+- [x] Rework the first screen: the top bar keeps only the brand, current page, scan action, and language switch, with the five view tabs as icon buttons on the same row.
+- [x] Fold the page summary into the top bar: one line with the icon, title, and result count, expandable to reveal the full URL.
+- [x] Move the multi-page collection panel out of the primary path, below the results area.
+- [x] Merge the results heading with search and sort into one row, collapsing filter status and selection tools into icon entries on that row.
+- [x] Let the grid take the remaining height inside a fixed shell and scroll internally, removing page scrolling; measured at 420 px the results now start at 287 px instead of 530 px while the grid height stays about 371 px.
+- [x] Keep every existing control id, keyboard reachability, and bilingual copy unchanged, with all regression assertions passing.
