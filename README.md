@@ -449,6 +449,15 @@ scripts/package-extension.sh
 
 3. 在 GitHub 仓库的“About”中补充项目简介和主题标签。
 4. 建议创建一个 GitHub Release，并上传一个扩展 ZIP 包，方便用户直接下载。
+5. 后续版本在独立分支上开发，完成后合并回 `main`：
+
+   ```bash
+   git checkout -b 3.4.0
+   # ... 开发与验证 ...
+   git checkout main
+   git merge --no-ff 3.4.0 -m "merge: 合并 3.4.0 到 main"
+   git push origin main
+   ```
 
 打包时需要保证 ZIP 根目录直接包含 `manifest.json`，例如：
 
@@ -915,6 +924,15 @@ The archive is written to `dist/image-collector-<version>.zip` by default and co
 
 3. Add a short description and topics in the repository's **About** section.
 4. Consider creating a GitHub Release and uploading an extension ZIP so users can download a ready-to-install package.
+5. Develop later versions on their own branch and merge back into `main` when finished:
+
+   ```bash
+   git checkout -b 3.4.0
+   # ... develop and verify ...
+   git checkout main
+   git merge --no-ff 3.4.0 -m "merge: 合并 3.4.0 到 main"
+   git push origin main
+   ```
 
 The ZIP must contain `manifest.json` at its root:
 
