@@ -398,6 +398,7 @@ download_image/
 │   ├── icon-32.png     # 工具栏图标
 │   ├── icon-48.png     # 扩展管理页图标
 │   └── icon-128.png    # 扩展详情和安装页图标
+├── .gitignore          # 忽略打包产物、签名文件和系统文件
 ├── LICENSE             # MIT 开源许可证
 ├── QA.md               # 发布前 Chrome 验收清单
 ├── SECURITY.md         # 权限和本地数据边界说明
@@ -405,10 +406,12 @@ download_image/
 ├── README.md           # 中文和英文项目文档
 ├── scripts/
 │   └── package-extension.sh          # 校验并打包扩展为可发布 ZIP
-└── tests/
-    ├── extension-regression.test.js  # 发布元数据、入口和 UI 契约回归
-    ├── smart-collections.test.js     # 智能集合规则回归
-    └── fixtures/                     # 压力页面与图片夹具
+├── tests/
+│   ├── extension-regression.test.js  # 发布元数据、入口和 UI 契约回归
+│   ├── smart-collections.test.js     # 智能集合规则回归
+│   └── fixtures/                     # 压力页面与图片夹具
+└── .github/
+    └── workflows/ci.yml              # 持续集成：回归测试、打包校验与 README 同步检查
 ```
 
 ### 开发和调试
@@ -861,6 +864,7 @@ download_image/
 │   ├── icon-32.png     # Toolbar icon
 │   ├── icon-48.png     # Extensions management icon
 │   └── icon-128.png    # Extension detail and installation icon
+├── .gitignore          # Ignore build output, signing files, and OS files
 ├── LICENSE             # MIT open-source license
 ├── QA.md               # Pre-release Chrome acceptance checklist
 ├── SECURITY.md         # Permission and local-data boundary notes
@@ -868,10 +872,12 @@ download_image/
 ├── README.md           # Chinese and English documentation
 ├── scripts/
 │   └── package-extension.sh          # Validate and package the release ZIP
-└── tests/
-    ├── extension-regression.test.js  # Release metadata, entry-point, and UI contract checks
-    ├── smart-collections.test.js     # Smart-collection rule checks
-    └── fixtures/                     # Stress page and image fixtures
+├── tests/
+│   ├── extension-regression.test.js  # Release metadata, entry-point, and UI contract checks
+│   ├── smart-collections.test.js     # Smart-collection rule checks
+│   └── fixtures/                     # Stress page and image fixtures
+└── .github/
+    └── workflows/ci.yml              # CI: regression tests, packaging validation, README sync
 ```
 
 ### Development and debugging
