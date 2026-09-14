@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 
 const read = (file) => fs.readFileSync(file, 'utf8');
@@ -23,6 +24,11 @@ test('release metadata is aligned with the 3.3.1 milestone', () => {
   assert.doesNotMatch(milestone, /- \[ \]/);
   assert.match(todo, /## 3\.0\.0 multi-page collection workflows/);
   assert.match(read('README.md'), /current webpage or multiple tabs/);
+  // The title of the acceptance log drifted to 3.2.2 while the file already carried
+  // 3.3.x records, because nothing checked it. Keep it pinned to the manifest.
+  const qaTitle = read('QA.md').split('\n')[0];
+  assert.match(qaTitle, new RegExp(`^# Image Collector ${manifest.version.replace(/\./g, '\\.')} `), `QA.md title must name ${manifest.version}, saw "${qaTitle}"`);
+  assert.match(qaTitle, /验收清单/);
 });
 
 test('3.1.0 asset management contracts are wired', () => {
@@ -379,6 +385,32 @@ test('cache write failures are recorded and surfaced', () => {
   // the ZIP path must not claim an image is cached when the write failed
   assert.match(worker, /cacheState: cached \? 'cached' : 'uncached'/);
   assert.doesNotMatch(worker, /mime: contentType, cacheState: 'cached' \}\)\.catch\(\(\) => \{\}\);\n\s*const filename/);
+});
+
+test('the README project structure lists every top-level path', () => {
+  // 3.3.1: .github/ arrived with the CI work but was never documented, and nothing
+  // compared the tree against the repository. Both halves must list the same paths.
+  const readme = read('README.md');
+  const [chinese, english] = readme.split(/^## English$/m);
+  assert.ok(chinese && english, 'README.md must keep a top-level English half');
+  const treeOf = (half) => {
+    const blocks = [...half.matchAll(/```text\n([\s\S]*?)```/g)].map((match) => match[1]);
+    return blocks.find((block) => block.includes('manifest.json')) || '';
+  };
+  assert.ok(treeOf(chinese).includes('manifest.json'), 'the Chinese structure block must exist');
+  assert.ok(treeOf(english).includes('manifest.json'), 'the English structure block must exist');
+
+  const root = path.join(__dirname, '..');
+  const entries = fs.readdirSync(root, { withFileTypes: true })
+    .map((entry) => entry.name)
+    .filter((name) => name !== 'dist' && name !== '.git');
+  assert.ok(entries.length > 5, `expected a populated repository, saw ${entries.length} entries`);
+
+  const missing = entries.filter((name) => {
+    const pattern = new RegExp(`[├└]── ${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?(\\s|$)`);
+    return !pattern.test(treeOf(chinese)) || !pattern.test(treeOf(english));
+  });
+  assert.deepEqual(missing, [], 'these top-level paths are missing from a README project structure');
 });
 
 test('text scale follows the active tab zoom without scaling the whole panel', () => {
