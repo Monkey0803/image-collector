@@ -66,7 +66,9 @@ const state = {
   taskRecords: [],
   taskRecoveryPromise: null,
   taskRefreshTimer: null,
-  scanStats: { discovered: 0, duplicates: 0, skipped: 0, dimensionsChecked: 0, dimensionsFailed: 0, metadataReused: 0, metadataTruncated: 0, partial: false },
+  scanStats: { discovered: 0, duplicates: 0, skipped: 0, dimensionsChecked: 0, dimensionsFailed: 0, dimensionsSkipped: 0, metadataReused: 0, metadataTruncated: 0, partial: false },
+  // True when some images never received a size/MIME, so the UI can offer a retry.
+  metadataIncomplete: false,
   downloadMetrics: { startedAt: 0, total: 0 },
   librarySelected: new Set(), libraryFormat: 'all', libraryMinWidth: '', libraryMaxWidth: '', libraryMinHeight: '', libraryMaxHeight: '', libraryMinSize: '', libraryMaxSize: '', librarySort: 'updated', storageStats: null,
   libraryRefreshToken: 0,
@@ -440,7 +442,7 @@ const setText = (element, value) => { if (element) element.textContent = value; 
 const els = {
   refresh: $('#refreshButton'),
   scanStatus: $('#scanStatus'),
-  pageTitle: $('#pageTitle'), pageUrl: $('#pageUrl'), pageIcon: $('#pageIcon'), scanStats: $('#scanStats'), multiPagePanel: $('#multiPagePanel'), multiPageEyebrow: $('#multiPageEyebrow'), multiPageTitle: $('#multiPageTitle'), multiPageScopeLabel: $('#multiPageScopeLabel'), multiPageScope: $('#multiPageScope'), multiPageStatus: $('#multiPageStatus'), multiPageHint: $('#multiPageHint'), tabSelectionList: $('#tabSelectionList'), selectAllTabs: $('#selectAllTabs'), clearSelectedTabs: $('#clearSelectedTabs'), scanMultiPage: $('#scanMultiPage'),
+  pageTitle: $('#pageTitle'), pageUrl: $('#pageUrl'), pageIcon: $('#pageIcon'), scanStats: $('#scanStats'), retryMetadata: $('#retryMetadata'), multiPagePanel: $('#multiPagePanel'), multiPageEyebrow: $('#multiPageEyebrow'), multiPageTitle: $('#multiPageTitle'), multiPageScopeLabel: $('#multiPageScopeLabel'), multiPageScope: $('#multiPageScope'), multiPageStatus: $('#multiPageStatus'), multiPageHint: $('#multiPageHint'), tabSelectionList: $('#tabSelectionList'), selectAllTabs: $('#selectAllTabs'), clearSelectedTabs: $('#clearSelectedTabs'), scanMultiPage: $('#scanMultiPage'),
   minWidth: $('#minWidth'), maxWidth: $('#maxWidth'), minHeight: $('#minHeight'), maxHeight: $('#maxHeight'),
   widthValue: $('#widthValue'), heightValue: $('#heightValue'), widthTrack: $('#widthTrack'), heightTrack: $('#heightTrack'),
   widthEditor: $('#widthEditor'), heightEditor: $('#heightEditor'),
@@ -840,6 +842,7 @@ function bindEvents() {
       showToast(t('historyCleared'));
     } catch { showToast(t('historyClearFailed')); }
   });
+  on(els.retryMetadata, 'click', () => retryMissingMetadata());
   on(els.refresh, 'click', scanPage);
   on(els.clearFilters, 'click', () => {
     if (els.minWidth) els.minWidth.value = 0;
@@ -3245,6 +3248,8 @@ async function loadImageMetadata(scanId, options = {}) {
   state.scanStats.metadataReused = reusableMetadata.size;
   try {
     let items = [];
+    let failedProbes = 0;
+    let skippedProbes = 0;
     if (imagesToInspect.length) {
       const response = await withTimeout(
         () => chrome.runtime.sendMessage({ type: 'inspectImages', images: imagesToInspect }),
@@ -3253,6 +3258,8 @@ async function loadImageMetadata(scanId, options = {}) {
       );
       if (scanId !== state.scanId || !Array.isArray(response?.items)) return;
       items = response.items;
+      failedProbes = Number(response.failed) || 0;
+      skippedProbes = Number(response.skipped) || 0;
     }
     const metadata = new Map(items.map((item) => [item.url, item]));
     state.scanStats.dimensionsChecked = reusableMetadata.size + items.length;
@@ -3262,7 +3269,11 @@ async function loadImageMetadata(scanId, options = {}) {
       image.size = Number(item.size) || 0;
       image.mime = item.mime || '';
     });
-    state.scanStats.dimensionsFailed = images.filter((image) => !image.size && !image.mime).length;
+    // Probed-and-failed is not the same as never-probed: only the former is a
+    // server-side refusal, while the latter is a budget limit the user can retry.
+    state.scanStats.dimensionsFailed = failedProbes;
+    state.scanStats.dimensionsSkipped = skippedProbes;
+    state.metadataIncomplete = failedProbes + skippedProbes > 0;
     updateRangeLimits();
     applyFilters();
     try {
@@ -3274,10 +3285,71 @@ async function loadImageMetadata(scanId, options = {}) {
   } catch {
     state.scanStats.dimensionsChecked = reusableMetadata.size;
     state.scanStats.dimensionsFailed = imagesToInspect.length;
+    state.scanStats.dimensionsSkipped = 0;
     state.scanStats.partial = true;
+    state.metadataIncomplete = imagesToInspect.length > 0;
     // Metadata is optional; image discovery should remain usable when HEAD is blocked.
   }
   updateScanStats();
+}
+
+// 3.5.0: metadata can be missing for two different reasons — the server refused the
+// probe, or the budget cut it off. Both used to be invisible; the retry is what makes
+// the second one recoverable without rescanning the page.
+function updateMetadataNotice() {
+  if (!els.retryMetadata) return;
+  const stats = state.scanStats || {};
+  const skipped = Number(stats.dimensionsSkipped) || 0;
+  const failed = Number(stats.dimensionsFailed) || 0;
+  const pending = skipped + failed;
+  if (!state.metadataIncomplete || !pending) {
+    els.retryMetadata.hidden = true;
+    return;
+  }
+  els.retryMetadata.hidden = false;
+  const reason = skipped && !failed ? t('metadataSkippedNotice', { count: pending }) : t('metadataFailedNotice', { count: pending });
+  els.retryMetadata.textContent = `${reason} · ${t('metadataRetryAction')}`;
+}
+
+async function retryMissingMetadata() {
+  const missing = state.images.filter((image) => !image.size && !image.mime).slice(0, MAX_METADATA_INSPECTIONS);
+  if (!missing.length) {
+    state.metadataIncomplete = false;
+    updateMetadataNotice();
+    return;
+  }
+  const button = els.retryMetadata;
+  if (button) button.disabled = true;
+  try {
+    const response = await withTimeout(
+      () => chrome.runtime.sendMessage({ type: 'inspectImages', images: missing }),
+      30000,
+      t('metadataTimeout')
+    );
+    const items = Array.isArray(response?.items) ? response.items : [];
+    const metadata = new Map(items.map((item) => [item.url, item]));
+    state.images.forEach((image) => {
+      const item = metadata.get(image.url);
+      if (!item) return;
+      image.size = Number(item.size) || 0;
+      image.mime = item.mime || '';
+    });
+    const stillFailed = Number(response?.failed) || 0;
+    const stillSkipped = Number(response?.skipped) || 0;
+    state.scanStats.dimensionsChecked = (Number(state.scanStats.dimensionsChecked) || 0) + items.length;
+    state.scanStats.dimensionsFailed = stillFailed;
+    state.scanStats.dimensionsSkipped = stillSkipped;
+    state.metadataIncomplete = stillFailed + stillSkipped > 0;
+    updateRangeLimits();
+    applyFilters();
+    updateScanStats();
+    updateMetadataNotice();
+    showToast(t(items.length ? 'metadataRetryDone' : 'metadataRetryFailed', { count: items.length }));
+  } catch {
+    showToast(t('metadataRetryFailed', { count: 0 }));
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 async function collectPageImages(options = {}) {
@@ -4095,6 +4167,7 @@ function displayLimit(axis, value, side) {
 function capitalize(value) { return value[0].toUpperCase() + value.slice(1); }
 
 function render() {
+  updateMetadataNotice();
   els.grid.replaceChildren();
   els.resultCount.textContent = t('imageCount', { count: state.filtered.length });
   els.empty.hidden = state.filtered.length !== 0 || !els.loading.hidden;
@@ -4395,7 +4468,8 @@ Object.assign(TRANSLATIONS.en, {
 });
 
 Object.assign(TRANSLATIONS.zh, {
-  scanStats: '发现 {discovered} · 跳过 {skipped} · 已探测 {dimensions} · 复用 {reused} · 失败 {failed}{truncated}{partial}',
+  scanMetadataSkipped: '未探测 {count}', metadataSkippedNotice: '{count} 张图片在探测预算内未取得尺寸', metadataFailedNotice: '{count} 张图片未取得尺寸', metadataRetryAction: '点击重试', metadataRetryDone: '已补齐 {count} 张图片的尺寸', metadataRetryFailed: '仍无法取得尺寸，请稍后重试',
+  scanStats: '发现 {discovered} · 跳过 {skipped} · 已探测 {dimensions} · 复用 {reused} · 失败 {failed}{skippedMetadata}{truncated}{partial}',
   scanMetadataTruncated: ' · {count} 张未探测',
   scanPartial: '部分完成',
   requestTimeout: '请求超时，可能是网络较慢或图片服务器未响应',
@@ -4405,7 +4479,8 @@ Object.assign(TRANSLATIONS.zh, {
   largeDownloadWarning: '任务较大，已限制下载节奏；请耐心等待完成。'
 });
 Object.assign(TRANSLATIONS.en, {
-  scanStats: 'Found {discovered} · skipped {skipped} · dimensions {dimensions} · reused {reused} · failed {failed}{truncated}{partial}',
+  scanMetadataSkipped: '{count} not probed', metadataSkippedNotice: '{count} image(s) were not probed before the metadata budget ran out', metadataFailedNotice: '{count} image(s) have no size', metadataRetryAction: 'Retry', metadataRetryDone: 'Filled in metadata for {count} image(s)', metadataRetryFailed: 'Still unavailable, try again later',
+  scanStats: 'Found {discovered} · skipped {skipped} · dimensions {dimensions} · reused {reused} · failed {failed}{skippedMetadata}{truncated}{partial}',
   scanMetadataTruncated: ' · {count} not inspected',
   scanPartial: 'partial',
   requestTimeout: 'Request timed out; the network may be slow or the image server may not respond',
@@ -4836,6 +4911,7 @@ function updateScanStats() {
     dimensions: Number(stats.dimensionsChecked) || 0,
     failed: Number(stats.dimensionsFailed) || 0,
     reused: Number(stats.metadataReused) || 0,
+    skippedMetadata: Number(stats.dimensionsSkipped) > 0 ? ' · ' + t('scanMetadataSkipped', { count: stats.dimensionsSkipped }) : '',
     truncated: stats.metadataTruncated ? ' · ' + t('scanMetadataTruncated', { count: stats.metadataTruncated }) : '',
     partial: stats.partial ? ' · ' + t('scanPartial') : ''
   };

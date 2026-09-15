@@ -688,30 +688,40 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
   }
 }
 
+// Metadata inspection reports how many images were probed, how many failed, and
+// how many were never attempted because the budget ran out. The caller must be able
+// to tell those apart: collapsing them into "no metadata" is what made a slow
+// network look like a page whose images simply carry no size (3.5.0).
 async function inspectImages(images) {
   const source = [...new Map(images.slice(0, MAX_METADATA_INSPECTIONS).filter((image) => image?.url).map((image) => [image.url, image])).values()];
   const deadline = Date.now() + METADATA_INSPECT_BUDGET_MS;
+  const items = [];
+  let failed = 0;
+  let skipped = 0;
   const inspectOne = async (image) => {
-    if (Date.now() >= deadline) return { url: image.url, size: 0, mime: '' };
+    if (Date.now() >= deadline) { skipped += 1; return; }
     const cached = metadataCache.get(image.url);
-    if (cached && Date.now() - cached.timestamp < METADATA_CACHE_TTL) return cached.item;
+    if (cached?.ok && Date.now() - cached.timestamp < METADATA_CACHE_TTL) { items.push(cached.item); return; }
     try {
       await prepareImageRequest(image);
       const response = await fetchWithTimeout(image.url, { method: 'HEAD', credentials: 'omit', redirect: 'follow' }, Math.min(METADATA_REQUEST_TIMEOUT_MS, Math.max(1000, deadline - Date.now())));
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const contentLength = Number(response.headers.get('content-length')) || 0;
       const item = { url: image.url, size: contentLength, mime: (response.headers.get('content-type') || '').split(';')[0] };
-      metadataCache.set(image.url, { item, timestamp: Date.now() });
-      return item;
+      metadataCache.set(image.url, { item, timestamp: Date.now(), ok: true });
+      items.push(item);
     } catch {
-      const item = { url: image.url, size: 0, mime: '' };
-      metadataCache.set(image.url, { item, timestamp: Date.now() });
-      return item;
+      // A transient timeout, 403, or rate limit has to stay retryable. Caching an
+      // empty result here used to suppress every retry for the whole TTL.
+      failed += 1;
     }
   };
-  const items = [];
-  for (let index = 0; index < source.length && Date.now() < deadline; index += 8) items.push(...await Promise.all(source.slice(index, index + 8).map(inspectOne)));
-  return { ok: true, items };
+  let index = 0;
+  for (; index < source.length && Date.now() < deadline; index += 8) await Promise.all(source.slice(index, index + 8).map(inspectOne));
+  // Images the loop never dispatched are the bulk of a budget cutoff: counting them
+  // only inside inspectOne missed every batch the deadline skipped entirely.
+  skipped += Math.max(0, source.length - index);
+  return { ok: true, items, failed, skipped };
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
