@@ -17,8 +17,8 @@ function pngDimensions(file) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-test('release metadata is aligned with the 3.4.0 milestone', () => {
-  assert.equal(manifest.version, '3.4.0');
+test('release metadata is aligned with the 3.4.1 milestone', () => {
+  assert.equal(manifest.version, '3.4.1');
   assert.match(todo, /## 3\.1\.0 asset management and deduplication/);
   const milestone = todo.split('## 3.1.0 asset management and deduplication')[1].split('## 3.2.0 release quality and validation')[0];
   assert.doesNotMatch(milestone, /- \[ \]/);
@@ -180,7 +180,8 @@ test('milestone checklists stay in sync across languages and ship their delivera
     ['## 3.2.2 side panel shortcut reliability', '## 3.3.0', true],
     ['## 3.3.0 silent truncation cleanup and CI', '## 3.3.1', true],
     ['## 3.3.1 interface language completeness', '## 3.4.0', true],
-    ['## 3.4.0 primary view layout restructure', null, true],
+    ['## 3.4.0 primary view layout restructure', '## 3.4.1', true],
+    ['## 3.4.1 auto-collect scope, preview referrer, and startup visibility', null, true],
   ];
   const tally = (text) => ({
     total: (text.match(/^- \[[ x]\]/gm) || []).length,

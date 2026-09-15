@@ -1,4 +1,4 @@
-# Image Collector 3.4.0 验收清单
+# Image Collector 3.4.1 验收清单
 
 ## 验收环境
 
@@ -242,6 +242,52 @@ README 中英两半的项目结构必须列出仓库全部顶层条目。两条�
 说明：本次没有提升网格本身的高度（378 → 371 px）。回收的 243 px 用于消除整页滚动、
 让网格成为有界弹性项，以及容纳移到下方的多页面面板；真正的收益是结果区上移 243 px、
 下载操作始终可达。如需继续增大网格，应从下方回收（下载面板 151 px、多页面面板 39 px）。
+
+## 3.4.1 变更验证（2026-09-14）
+
+### 自动采集失效
+
+现象：打开网页后面板不自动采集，首次打开与切换标签都不扫描，必须手动点按钮。
+
+定位：`init()` 里 `state.tabScope` 直接取设置值。若设置残留上次多标签采集的 `selected` 或
+`window`，自动采集的守卫 `state.tabScope === 'current'` 永不成立，`onActivated` 与 `onUpdated`
+两个监听器都不会触发扫描。夹具此前一直用 `tabScope: current`，因此未能复现。
+
+修复：打开收集器时固定 `state.tabScope = 'current'`；快捷键仍可显式选择其它作用域。
+
+- [x] 注入 `tabScope: 'selected'` 与 `selectedTabIds: [999999]` 后打开面板，实测 `tabScope=current`、自动采集 12 张，无需点击。
+
+### 预览不可用
+
+现象：所有图片预览都显示「预览不可用」。
+
+定位：预览逐个尝试候选地址，全部失败才报错；站点防盗链会因为缺少来源页 Referer 拒绝图片请求。
+
+修复：新增 DNR 会话规则，为扩展自身发起的图片与 XHR 请求补上来源页 Referer。
+
+- [x] 实测会话规则已安装：`referer=http://127.0.0.1:8811/`、`initiator=[扩展 id]`、`types=[image,xmlhttprequest]`、`methods=[get,head]`。
+- [x] 预览加载成功：`naturalWidth x naturalHeight = 80x60`，`previewError` 保持隐藏。
+- [x] 规则上限 1000 条并按 `regexFilter` 复用 id，`initiatorDomains` 限定为扩展自身，不作用于其它扩展或页面。
+
+### 顺带修复的 3.4.0 回归
+
+- [x] 扫描按钮文字在 3.4.0 被无条件隐藏，恢复为仅在 390 px 以下隐藏。
+- [x] 视图标签的中文 `title` 未本地化，通用本地化由仅覆盖 `aria-label` 扩展为同时覆盖 `title`。
+- [x] 3.4.0 的弹性网格把卡片拉成空白长条，改为按内容高度排布。
+- [x] 预览失败不再把记录标记为无效，避免临时性 403、离线或超时让图片进入可破坏的清理集合。
+- [x] 启动失败不再静默：`init()` 之外的异常走可见上报，构造故障实测显示「扫描失败：…」。
+
+### 权限与文档
+
+- [x] README 中英权限表与 SECURITY.md 补充 `declarativeNetRequestWithHostAccess` 及其作用域限定。
+
+### 回归
+
+- [x] `tests/extension-regression.test.js` 31/31、`tests/smart-collections.test.js` 5/5 通过。
+- [x] 全量真机回归 16/16 通过。
+
+说明：以上验证均在夹具环境完成（将 `popup.html` 作为普通标签页加载）。真实侧边栏不暴露为可
+自动化的页面目标，因此防盗链修复与自动采集仍需在真实侧边栏复验。
 
 ## 待验证
 
