@@ -2,7 +2,7 @@
 
 ## 权限用途
 
-`activeTab` 用于用户主动打开扩展后的当前页面扫描；`tabs` 用于读取当前窗口的标签页列表并支持多页面采集；`scripting` 用于向用户选择的页面注入扫描函数；`downloads` 用于提交普通图片和 ZIP 下载；`storage`、IndexedDB 和 `contextMenus` 分别用于保存设置、素材库数据和右键操作；`sidePanel` 用于侧边栏界面。
+`activeTab` 用于用户主动打开扩展后的当前页面扫描；`tabs` 用于读取当前窗口的标签页列表并支持多页面采集；`scripting` 用于向用户选择的页面注入扫描函数；`downloads` 用于提交普通图片和 ZIP 下载；`storage`、IndexedDB 和 `contextMenus` 分别用于保存设置、素材库数据和右键操作；`sidePanel` 用于侧边栏界面；`declarativeNetRequestWithHostAccess` 用于给扩展自身发起的图片请求补上来源页 Referer，以绕过防盗链。该能力只修改扩展自身请求的 `referer` 请求头，条件限定为 `initiatorDomains` 为扩展自身、资源类型为 `image` 与 `xmlhttprequest`、方法为 `GET` 与 `HEAD`，并通过会话规则实现，浏览器重启后自动失效。
 
 ## 权限范围结论（2026-09-11 真机验收）
 

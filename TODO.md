@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录当前 `3.4.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
+本文档记录当前 `3.4.1` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
 
 最后更新：2026-09-11
 
@@ -16,6 +16,7 @@
 - [x] `3.3.0` 静默截断清理、CI 与 README 中英同步已完成。
 - [x] `3.3.1` 界面语言完整性已完成。
 - [x] `3.4.0` 首屏布局重构已完成。
+- [x] `3.4.1` 自动采集作用域、预览防盗链与启动可见性已完成。
 
 ## 已知缺陷（2026-09-11 真机验收发现）
 
@@ -138,7 +139,7 @@
 
 ## English
 
-This document tracks the current `3.4.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
+This document tracks the current `3.4.1` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
 
 Last updated: 2026-09-11
 
@@ -154,6 +155,7 @@ Last updated: 2026-09-11
 - [x] `3.3.0` silent truncation cleanup, CI, and README Chinese/English sync are complete.
 - [x] `3.3.1` interface language completeness is complete.
 - [x] `3.4.0` primary view layout restructure is complete.
+- [x] `3.4.1` auto-collect scope, preview referrer, and startup visibility are complete.
 
 ### 1.0.1 core experience
 
@@ -608,3 +610,29 @@ Last updated: 2026-09-11
 - [x] Merge the results heading with search and sort into one row, collapsing filter status and selection tools into icon entries on that row.
 - [x] Let the grid take the remaining height inside a fixed shell and scroll internally, removing page scrolling; measured at 420 px the results now start at 287 px instead of 530 px while the grid height stays about 371 px.
 - [x] Keep every existing control id, keyboard reachability, and bilingual copy unchanged, with all regression assertions passing.
+
+## 3.4.1 auto-collect scope, preview referrer, and startup visibility
+
+### 中文
+
+- [x] 修复打开收集器后不自动采集：设置里的 `tabScope` 若残留上次多标签采集的 `selected` 或 `window`，自动采集的守卫条件 `state.tabScope === 'current'` 永不成立，首次打开与切换标签都不会扫描，只能手动点按钮。现在打开时固定为当前页面。
+- [x] 修复防盗链导致的「预览不可用」：新增图片请求的会话规则，为扩展自身发起的图片与 XHR 请求补上来源页 `Referer`。规则限定 `initiatorDomains` 为扩展自身、资源类型为 `image` 与 `xmlhttprequest`、方法为 `GET` 与 `HEAD`，上限 1000 条并按 `regexFilter` 复用规则 id。
+- [x] 预览失败不再把记录标记为无效，避免临时性的 403、离线或超时让图片进入「清理无效」的可破坏集合。
+- [x] 缩略图失败时释放 object URL，并提供可点击的重试入口，而不是只显示不可用的长条。
+- [x] 修复 3.4.0 的弹性网格把图片卡片拉成空白长条的副作用，网格改为按内容高度排布。
+- [x] 修复 3.4.0 无条件隐藏扫描按钮文字的问题，恢复其仅在 390 px 以下隐藏的原有行为。
+- [x] 通用本地化由仅覆盖 `aria-label` 扩展为同时覆盖 `title`，修复视图标签的中文提示在英文界面残留。
+- [x] 启动失败不再静默：`init()` 之外的异常（监听器或游离 Promise 抛出）走与初始化失败相同的可见路径，面板失效时界面直接显示原因。
+- [x] README 中英权限表与 SECURITY.md 补充新增的 `declarativeNetRequestWithHostAccess`，说明其只修改扩展自身请求的 `referer` 头并通过会话规则实现。
+
+### English
+
+- [x] Fix the collector not scanning on open: when the stored `tabScope` still held `selected` or `window` from an earlier multi-tab run, the automatic scan guard `state.tabScope === 'current'` never held, so neither opening the panel nor switching tabs scanned and the button had to be clicked. The scope is now pinned to the current page on open.
+- [x] Fix "preview unavailable" caused by hotlink protection: a session rule now attaches the source page as `Referer` to the extension's own image and XHR requests. It is limited to `initiatorDomains` of the extension itself, `image` and `xmlhttprequest` resource types, `GET` and `HEAD` methods, capped at 1000 rules, and reuses rule ids per `regexFilter`.
+- [x] A failed preview no longer marks the record invalid, so a temporary 403, offline state, or timeout cannot push images into the destructive "clear invalid" set.
+- [x] Thumbnail failures release the object URL and expose a clickable retry instead of only showing an unavailable placeholder.
+- [x] Fix the 3.4.0 flexible grid stretching cards into tall blank columns; the grid now sizes rows to their content.
+- [x] Fix the 3.4.0 rule that hid the scan button label at every width; it hides only below 390 px again.
+- [x] The generic localisation now covers `title` as well as `aria-label`, fixing Chinese view-tab tooltips leaking into the English interface.
+- [x] Startup failures are no longer silent: faults outside `init()` (from a listener or a detached promise) take the same visible path as an init error and state the cause in the panel.
+- [x] The Chinese and English README permission tables and SECURITY.md document the new `declarativeNetRequestWithHostAccess`, noting that it only sets the `referer` header on the extension's own requests via session rules.

@@ -20,6 +20,11 @@ const MAX_METADATA_INSPECTIONS = 1000;
 const METADATA_INSPECT_BUDGET_MS = 25000;
 const MAX_ZIP_BYTES = 256 * 1024 * 1024;
 const MAX_ZIP_DURATION_MS = 5 * 60 * 1000;
+// Session rules apply only to this extension's image/HEAD/fetch requests.
+const MAX_IMAGE_REFERRER_RULES = 1000;
+const IMAGE_REFERRER_RULE_ID_BASE = 20000;
+let imageReferrerRules = null;
+let imageReferrerQueue = Promise.resolve();
 
 const WORKER_TRANSLATIONS = {
   zh: {
@@ -58,6 +63,11 @@ async function getLanguage() {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === 'prepareImageRequest') {
+    if (_sender.id !== chrome.runtime.id || !_sender.url?.startsWith(chrome.runtime.getURL(''))) return false;
+    prepareImageRequest(message.image || {}).then((ok) => sendResponse({ ok }));
+    return true;
+  }
   if (message.type === 'downloadImages') {
     const jobId = message.jobId || createJobId();
     const images = Array.isArray(message.images) ? message.images : [];
@@ -390,9 +400,70 @@ async function saveDownloadRecord(kind, images, result, jobId = '', language = '
 }
 
 function imageCandidates(image) {
-  return [...new Set([image?.url, image?.originalUrl, image?.displayUrl, image?.sourceUrl]
+  return [...new Set([image?.url, image?.originalUrl, image?.displayUrl, image?.sourceUrl, ...(Array.isArray(image?.candidateUrls) ? image.candidateUrls : [])]
     .map((url) => String(url || '').trim())
     .filter(Boolean))];
+}
+
+function imageReferrerRule(image, id) {
+  let source;
+  for (const value of [image?.frameUrl, image?.pageUrl]) {
+    try {
+      const parsed = new URL(value);
+      if (/^https?:$/.test(parsed.protocol)) { source = parsed; break; }
+    } catch { /* Older records may not carry a source page. */ }
+  }
+  if (!source) return null;
+  const urls = imageCandidates(image).slice(0, 16).flatMap((value) => {
+    try {
+      const url = new URL(value);
+      if (!/^https?:$/.test(url.protocol) || url.username || url.password) return [];
+      if (source.protocol === 'https:' && url.protocol === 'http:') return [];
+      url.hash = '';
+      return [url.href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')];
+    } catch { return []; }
+  });
+  if (!urls.length) return null;
+  const regexFilter = `^(${[...new Set(urls)].join('|')})$`;
+  if (regexFilter.length > 2000) return null;
+  return {
+    id, priority: 1,
+    action: { type: 'modifyHeaders', requestHeaders: [{ header: 'referer', operation: 'set', value: `${source.origin}/` }] },
+    condition: { regexFilter, isUrlFilterCaseSensitive: true, initiatorDomains: [chrome.runtime.id], resourceTypes: ['image', 'xmlhttprequest'], requestMethods: ['get', 'head'] }
+  };
+}
+
+function prepareImageRequest(image) {
+  const rule = imageReferrerRule(image, IMAGE_REFERRER_RULE_ID_BASE);
+  if (!rule || !chrome.declarativeNetRequest?.updateSessionRules) return Promise.resolve(false);
+  const pending = imageReferrerQueue.then(async () => {
+    if (!imageReferrerRules) {
+      const existing = await chrome.declarativeNetRequest.getSessionRules();
+      imageReferrerRules = new Map(existing
+        .filter((item) => item.id >= IMAGE_REFERRER_RULE_ID_BASE && item.id < IMAGE_REFERRER_RULE_ID_BASE + MAX_IMAGE_REFERRER_RULES)
+        .map((item) => [item.condition.regexFilter, item]));
+    }
+    const key = rule.condition.regexFilter;
+    const previous = imageReferrerRules.get(key);
+    if (previous?.action.requestHeaders[0].value === rule.action.requestHeaders[0].value) {
+      imageReferrerRules.delete(key);
+      imageReferrerRules.set(key, previous);
+      return true;
+    }
+    const evicted = !previous && imageReferrerRules.size >= MAX_IMAGE_REFERRER_RULES ? imageReferrerRules.values().next().value : null;
+    const replaced = previous || evicted;
+    const usedIds = new Set([...imageReferrerRules.values()].map((item) => item.id));
+    rule.id = replaced?.id ?? IMAGE_REFERRER_RULE_ID_BASE;
+    while (!replaced && usedIds.has(rule.id)) rule.id += 1;
+    await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: replaced ? [replaced.id] : [], addRules: [rule] });
+    if (evicted) imageReferrerRules.delete(evicted.condition.regexFilter);
+    imageReferrerRules.delete(key);
+    imageReferrerRules.set(key, rule);
+    return true;
+  });
+  // A missing permission or unsupported URL must leave ordinary loading usable.
+  imageReferrerQueue = pending.catch(() => false);
+  return imageReferrerQueue;
 }
 
 async function downloadFileWithFallback(image, saveAs, settings) {
@@ -417,6 +488,7 @@ async function downloadFileWithFallback(image, saveAs, settings) {
 }
 
 async function readImageWithFallback(image, job, maxBytes = Infinity) {
+  await prepareImageRequest(image);
   let lastError = null;
   for (const url of imageCandidates(image)) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -624,6 +696,7 @@ async function inspectImages(images) {
     const cached = metadataCache.get(image.url);
     if (cached && Date.now() - cached.timestamp < METADATA_CACHE_TTL) return cached.item;
     try {
+      await prepareImageRequest(image);
       const response = await fetchWithTimeout(image.url, { method: 'HEAD', credentials: 'omit', redirect: 'follow' }, Math.min(METADATA_REQUEST_TIMEOUT_MS, Math.max(1000, deadline - Date.now())));
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const contentLength = Number(response.headers.get('content-length')) || 0;

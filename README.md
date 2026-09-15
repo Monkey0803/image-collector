@@ -356,6 +356,7 @@ image_2026.08.20.zip
 | `storage` | 保存筛选条件和保存位置设置 |
 | `contextMenus` | 提供网页和图片右键菜单操作 |
 | `sidePanel` | 在 Chrome 右侧打开扩展侧边栏 |
+| `declarativeNetRequestWithHostAccess` | 为扩展自身发起的图片请求补上来源页 Referer，绕过防盗链 |
 | `<all_urls>` | 支持扫描不同网站中的网页图片及图片地址 |
 
 所有图片筛选和列表处理都在浏览器本地完成。项目没有内置服务器，也不会主动上传网页内容或图片；只有在用户主动开启 Chrome 同步时，扫描规则和相关偏好才会交给 Chrome 的同步存储。
@@ -402,7 +403,7 @@ download_image/
 ├── LICENSE             # MIT 开源许可证
 ├── QA.md               # 发布前 Chrome 验收清单
 ├── SECURITY.md         # 权限和本地数据边界说明
-├── TODO.md             # 3.4.0 已完成任务和后续路线图
+├── TODO.md             # 3.4.1 已完成任务和后续路线图
 ├── README.md           # 中文和英文项目文档
 ├── scripts/
 │   └── package-extension.sh          # 校验并打包扩展为可发布 ZIP
@@ -831,6 +832,7 @@ The scan flow is: load saved configuration → match adapters for the current ho
 | `storage` | Store filter and save-location preferences |
 | `contextMenus` | Provide page and image context-menu actions |
 | `sidePanel` | Open the extension in Chrome's right side panel |
+| `declarativeNetRequestWithHostAccess` | Attach the source page as Referer to the extension's own image requests so hotlink protection does not block them |
 | `<all_urls>` | Support image scanning across different websites and image hosts |
 
 Image filtering and list processing happen locally in the browser. The project has no backend server and does not upload webpage content or images; only when the user explicitly enables Chrome Sync are scan rules and related preferences stored in Chrome's sync storage.
@@ -877,7 +879,7 @@ download_image/
 ├── LICENSE             # MIT open-source license
 ├── QA.md               # Pre-release Chrome acceptance checklist
 ├── SECURITY.md         # Permission and local-data boundary notes
-├── TODO.md             # 3.4.0 checklist and future roadmap
+├── TODO.md             # 3.4.1 checklist and future roadmap
 ├── README.md           # Chinese and English documentation
 ├── scripts/
 │   └── package-extension.sh          # Validate and package the release ZIP
