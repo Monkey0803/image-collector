@@ -19,7 +19,7 @@
 - [x] `3.4.1` 自动采集作用域、预览防盗链与启动可见性已完成。
 - [x] `3.5.0` 元数据探测完整性已完成。
 - [x] `3.6.0` 图片来源保真度已完成。
-- [ ] `3.6.1` 多页面采集入口位置正在进行。
+- [x] `3.6.1` 多页面采集入口位置已完成。
 
 ## 已知缺陷（2026-09-11 真机验收发现）
 
@@ -161,7 +161,7 @@ Last updated: 2026-09-11
 - [x] `3.4.1` auto-collect scope, preview referrer, and startup visibility are complete.
 - [x] `3.5.0` metadata probing completeness is complete.
 - [x] `3.6.0` image metadata source fidelity is complete.
-- [ ] `3.6.1` multi-page entry placement is in progress.
+- [x] `3.6.1` multi-page entry placement is complete.
 
 ### 1.0.1 core experience
 
@@ -693,18 +693,18 @@ Last updated: 2026-09-11
 
 ### 中文
 
-- [ ] 把多页面采集面板移回结果区之前（视图切换之后），恢复「选择扫描范围 → 筛选 → 结果 → 下载」的顺序；3.4.0 把它放到下载之后，使决定扫描范围的输入控件排在产出之后。
-- [ ] 实测确认这次移动不增加首屏占用：面板高度不变，图片网格作为弹性项吸收剩余高度，因此网格高度与结果区起点应当保持不变。
-- [ ] 面板在首屏内无需滚动即可看到并展开。移动前它位于 843 px 处，虽在 900 px 视口内，但排在下载操作之后。
-- [ ] 当扫描范围不是「当前标签页」时，在顶栏显示当前范围，避免用户误以为顶栏的重新扫描会覆盖已选择的多标签范围。
-- [ ] 更新 3.4.0 写入的断言：由「面板必须在结果区之后」改为「面板必须在结果区之前」，并在断言注释中说明这是对 3.4.0 决策的修正。
-- [ ] 真机验证：面板位置与新顺序、首屏可见性、以及多页面采集的端到端流程（选择范围、勾选标签页、开始采集、结果合并）。
+- [x] 把多页面采集面板移回结果区之前（视图切换之后），恢复「选择扫描范围 → 筛选 → 结果 → 下载」的顺序；3.4.0 把它放到下载之后，使决定扫描范围的输入控件排在产出之后。
+- [x] 实测确认这次移动不增加首屏占用：结果区起点保持 287 px 不变；移动后图片网格由 371 px 增至 424 px，因为面板原先占用的底部空间现在由网格吸收。
+- [x] 面板在首屏内无需滚动即可看到并展开。移动前它位于 843 px 处，虽在 900 px 视口内，但排在下载操作之后。
+- [x] 当扫描范围不是「当前标签页」时，在顶栏显示当前范围，避免用户误以为顶栏的重新扫描会覆盖已选择的多标签范围。
+- [x] 更新 3.4.0 写入的断言：由「面板必须在结果区之后」改为「面板必须在结果区之前」，并在断言注释中说明这是对 3.4.0 决策的修正。
+- [x] 真机验证：面板位置与新顺序、首屏可见性、以及多页面采集的端到端流程（选择范围、勾选标签页、开始采集、结果合并）。
 
 ### English
 
-- [ ] Move the multi-page collection panel back above the results area, right after the view switcher, restoring the order "choose the scan scope → filter → results → download"; 3.4.0 placed it after the download actions, which puts the input that decides the scan scope after the output.
-- [ ] Confirm by measurement that this move costs no first-screen space: the panel keeps its height and the image grid absorbs the remainder, so the grid height and the results position must stay the same.
-- [ ] Keep the panel visible and expandable within the first screen without scrolling. Before the move it sat at 843 px, inside a 900 px viewport but after the download actions.
-- [ ] Show the active scan scope in the top bar whenever it is not "current tab", so the rescan action is not mistaken for one that covers an already-selected multi-tab scope.
-- [ ] Update the assertion written for 3.4.0 from "the panel must follow the results" to "the panel must precede the results", noting in the assertion that this corrects the 3.4.0 decision.
-- [ ] Verify on a real browser: the panel position and order, its first-screen visibility, and the end-to-end multi-page flow of choosing a scope, ticking tabs, starting the scan, and merging results.
+- [x] Move the multi-page collection panel back above the results area, right after the view switcher, restoring the order "choose the scan scope → filter → results → download"; 3.4.0 placed it after the download actions, which puts the input that decides the scan scope after the output.
+- [x] Confirm by measurement that this move costs no first-screen space: the results still start at 287 px, and the image grid grew from 371 px to 424 px because the grid now absorbs the space the panel used to occupy at the bottom.
+- [x] Keep the panel visible and expandable within the first screen without scrolling. Before the move it sat at 843 px, inside a 900 px viewport but after the download actions.
+- [x] Show the active scan scope in the top bar whenever it is not "current tab", so the rescan action is not mistaken for one that covers an already-selected multi-tab scope.
+- [x] Update the assertion written for 3.4.0 from "the panel must follow the results" to "the panel must precede the results", noting in the assertion that this corrects the 3.4.0 decision.
+- [x] Verify on a real browser: the panel position and order, its first-screen visibility, and the end-to-end multi-page flow of choosing a scope, ticking tabs, starting the scan, and merging results.

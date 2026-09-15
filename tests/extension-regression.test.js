@@ -17,8 +17,8 @@ function pngDimensions(file) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-test('release metadata is aligned with the 3.6.0 milestone', () => {
-  assert.equal(manifest.version, '3.6.0');
+test('release metadata is aligned with the 3.6.1 milestone', () => {
+  assert.equal(manifest.version, '3.6.1');
   assert.match(todo, /## 3\.1\.0 asset management and deduplication/);
   const milestone = todo.split('## 3.1.0 asset management and deduplication')[1].split('## 3.2.0 release quality and validation')[0];
   assert.doesNotMatch(milestone, /- \[ \]/);
@@ -184,7 +184,7 @@ test('milestone checklists stay in sync across languages and ship their delivera
     ['## 3.4.1 auto-collect scope, preview referrer, and startup visibility', '## 3.5.0', true],
     ['## 3.5.0 metadata probing completeness', '## 3.6.0', true],
     ['## 3.6.0 image metadata source fidelity', '## 3.6.1', true],
-    ['## 3.6.1 multi-page entry placement', null, false],
+    ['## 3.6.1 multi-page entry placement', null, true],
   ];
   const tally = (text) => ({
     total: (text.match(/^- \[[ x]\]/gm) || []).length,
@@ -502,6 +502,19 @@ test('incomplete metadata is visible and retryable', () => {
   assert.match(popup, /metadataRetryAction/);
 });
 
+test('the active multi-tab scope is visible in the top bar', () => {
+  // 3.6.1: the top-bar scan action only covers the current page, so a remembered
+  // multi-tab scope must not live solely inside the collapsed panel.
+  assert.match(html, /<button id="scopeIndicator" class="scope-indicator" type="button" hidden>/);
+  assert.match(popup, /function updateScopeIndicator\(\)/);
+  assert.match(popup, /els\.scopeIndicator\.hidden = !multiTab/);
+  assert.match(popup, /on\(els\.scopeIndicator, 'click'/);
+  assert.match(popup, /function render\(\) \{\n  updateMetadataNotice\(\);\n  updateScopeIndicator\(\);/);
+  assert.match(popup, /scopeSelectedShort/);
+  assert.match(popup, /scopeWindowShort/);
+  assert.match(read('popup.css'), /\.scope-indicator\[hidden\] \{ display: none; \}/);
+});
+
 test('the first screen puts the results before secondary setup panels', () => {
   // 3.4.0: measured at 420x900 the results used to start 530px down, behind the page
   // summary, the multi-page panel, and the view tab row.
@@ -516,10 +529,12 @@ test('the first screen puts the results before secondary setup panels', () => {
   // view tabs became an icon plus a label
   assert.match(html, /id="pageViewButton"[^>]*><span class="view-tab-icon"/);
   assert.match(html, /<span class="view-tab-text">设置<\/span>/);
-  // the multi-page panel now sits after the results and download sections
-  const pageView = html.slice(html.indexOf('id="pageView"'), html.indexOf('id="libraryView"'));
-  assert.ok(pageView.indexOf('id="multiPagePanel"') > pageView.indexOf('class="results-section"'), 'multi-page panel must follow the results');
-  assert.ok(pageView.indexOf('id="multiPagePanel"') > pageView.indexOf('class="download-panel"'), 'multi-page panel must follow the download panel');
+  // 3.6.1 reverses the 3.4.0 decision: the panel decides what gets scanned, so it must
+  // precede the results instead of sitting after the download actions. The move costs
+  // no first-screen space because the grid absorbs the remainder either way.
+  assert.ok(html.indexOf('id="multiPagePanel"') > html.indexOf('</nav>'), 'multi-page panel must follow the view switcher');
+  assert.ok(html.indexOf('id="multiPagePanel"') < html.indexOf('class="results-section"'), 'multi-page panel must precede the results');
+  assert.ok(html.indexOf('id="multiPagePanel"') < html.indexOf('class="download-panel"'), 'multi-page panel must precede the download panel');
   // search, sort, and selection tools share the results heading row
   const heading = html.slice(html.indexOf('class="results-heading"'), html.indexOf('id="imageGrid"'));
   for (const id of ['resultsTitle', 'resultCount', 'searchInput', 'sortSelect', 'selectionToolsLabel']) {

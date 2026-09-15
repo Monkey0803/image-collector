@@ -213,7 +213,7 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 
 #### 3.0.0 多页面采集与图库导出
 
-- 展开“多页面采集”，选择“当前标签页”“选中的标签页”或“当前窗口全部标签页”。选择标签页模式时，先勾选需要采集的标签页，再点击“开始采集”。Chrome 内部页、商店页等受保护页面会被跳过并显示为部分结果。
+- 展开“多页面采集”，选择“当前标签页”“选中的标签页”或“当前窗口全部标签页”。选择标签页模式时，先勾选需要采集的标签页，再点击“开始采集”。选中的范围不是“当前标签页”时，顶栏会显示当前范围，点击即可回到该面板。Chrome 内部页、商店页等受保护页面会被跳过并显示为部分结果。
 - 多个页面的图片会合并到当前结果中，卡片仍保留页面来源。下载选中图片或 ZIP 时，可以使用“按页面”“按日期”“按网站 / 页面”和“按网站 / 日期”分组；页面名称会清理非法字符，同名页面会自动追加序号。
 - ZIP 读取受单张图片、总大小（256 MB）和总处理时间（5 分钟）限制；超过限制的项目会保留在失败列表中，便于重试或改用普通下载。
 - 每次完整扫描都会写入“历史”。历史条目可以恢复当时的筛选条件、打开来源页、重新扫描，或直接下载当次结果。重新扫描历史记录会自动打开缺失的来源页，并等待页面加载完成。
@@ -403,7 +403,7 @@ download_image/
 ├── LICENSE             # MIT 开源许可证
 ├── QA.md               # 发布前 Chrome 验收清单
 ├── SECURITY.md         # 权限和本地数据边界说明
-├── TODO.md             # 3.6.0 已完成任务和后续路线图
+├── TODO.md             # 3.6.1 已完成任务和后续路线图
 ├── README.md           # 中文和英文项目文档
 ├── scripts/
 │   └── package-extension.sh          # 校验并打包扩展为可发布 ZIP
@@ -686,7 +686,7 @@ On a webpage, right-click to open the Image Collector menu. It provides **Scan c
 
 #### 3.0.0 multi-page collection and gallery export
 
-- Expand **Multi-page collection** and choose **Current tab**, **Selected tabs**, or **All tabs in current window**. In selected-tab mode, check the tabs to include before clicking **Start collection**. Protected Chrome pages are skipped and reported as partial results.
+- Expand **Multi-page collection** and choose **Current tab**, **Selected tabs**, or **All tabs in current window**. In selected-tab mode, check the tabs to include before clicking **Start collection**. When the scope is not **Current tab**, the top bar shows the active scope and opens this panel when clicked. Protected Chrome pages are skipped and reported as partial results.
 - Images from multiple pages are merged into one result while retaining page sources. ZIP downloads support **By page**, **By date**, **By site / page**, and **By site / date** layouts; unsafe page-name characters are cleaned and duplicate page names receive a numeric suffix.
 - ZIP reads are bounded per image, to 256 MB total, and to five minutes overall; items over a limit remain in the failure list so they can be retried or downloaded individually.
 - Every full scan is saved in **History**. A history entry can restore its filters, open source pages, rescan, download the result, or create a ZIP. Rescanning automatically opens missing source pages and waits for them to finish loading.
@@ -879,7 +879,7 @@ download_image/
 ├── LICENSE             # MIT open-source license
 ├── QA.md               # Pre-release Chrome acceptance checklist
 ├── SECURITY.md         # Permission and local-data boundary notes
-├── TODO.md             # 3.6.0 checklist and future roadmap
+├── TODO.md             # 3.6.1 checklist and future roadmap
 ├── README.md           # Chinese and English documentation
 ├── scripts/
 │   └── package-extension.sh          # Validate and package the release ZIP

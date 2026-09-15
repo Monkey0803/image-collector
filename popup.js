@@ -442,7 +442,7 @@ const setText = (element, value) => { if (element) element.textContent = value; 
 const els = {
   refresh: $('#refreshButton'),
   scanStatus: $('#scanStatus'),
-  pageTitle: $('#pageTitle'), pageUrl: $('#pageUrl'), pageIcon: $('#pageIcon'), scanStats: $('#scanStats'), retryMetadata: $('#retryMetadata'), multiPagePanel: $('#multiPagePanel'), multiPageEyebrow: $('#multiPageEyebrow'), multiPageTitle: $('#multiPageTitle'), multiPageScopeLabel: $('#multiPageScopeLabel'), multiPageScope: $('#multiPageScope'), multiPageStatus: $('#multiPageStatus'), multiPageHint: $('#multiPageHint'), tabSelectionList: $('#tabSelectionList'), selectAllTabs: $('#selectAllTabs'), clearSelectedTabs: $('#clearSelectedTabs'), scanMultiPage: $('#scanMultiPage'),
+  pageTitle: $('#pageTitle'), pageUrl: $('#pageUrl'), pageIcon: $('#pageIcon'), scanStats: $('#scanStats'), retryMetadata: $('#retryMetadata'), scopeIndicator: $('#scopeIndicator'), multiPagePanel: $('#multiPagePanel'), multiPageEyebrow: $('#multiPageEyebrow'), multiPageTitle: $('#multiPageTitle'), multiPageScopeLabel: $('#multiPageScopeLabel'), multiPageScope: $('#multiPageScope'), multiPageStatus: $('#multiPageStatus'), multiPageHint: $('#multiPageHint'), tabSelectionList: $('#tabSelectionList'), selectAllTabs: $('#selectAllTabs'), clearSelectedTabs: $('#clearSelectedTabs'), scanMultiPage: $('#scanMultiPage'),
   minWidth: $('#minWidth'), maxWidth: $('#maxWidth'), minHeight: $('#minHeight'), maxHeight: $('#maxHeight'),
   widthValue: $('#widthValue'), heightValue: $('#heightValue'), widthTrack: $('#widthTrack'), heightTrack: $('#heightTrack'),
   widthEditor: $('#widthEditor'), heightEditor: $('#heightEditor'),
@@ -843,6 +843,11 @@ function bindEvents() {
     } catch { showToast(t('historyClearFailed')); }
   });
   on(els.retryMetadata, 'click', () => retryMissingMetadata());
+  on(els.scopeIndicator, 'click', () => {
+    if (!els.multiPagePanel) return;
+    els.multiPagePanel.open = true;
+    els.multiPagePanel.scrollIntoView({ block: 'nearest' });
+  });
   on(els.refresh, 'click', scanPage);
   on(els.clearFilters, 'click', () => {
     if (els.minWidth) els.minWidth.value = 0;
@@ -4216,8 +4221,20 @@ function displayLimit(axis, value, side) {
 
 function capitalize(value) { return value[0].toUpperCase() + value.slice(1); }
 
+// 3.6.1: the top bar always rescans the current page, so a remembered multi-tab
+// scope must be visible there instead of only inside the collapsed panel.
+function updateScopeIndicator() {
+  if (!els.scopeIndicator) return;
+  const multiTab = state.tabScope !== 'current';
+  els.scopeIndicator.hidden = !multiTab;
+  if (!multiTab) return;
+  els.scopeIndicator.textContent = state.tabScope === 'selected' ? t('scopeSelectedShort') : t('scopeWindowShort');
+  els.scopeIndicator.title = t('scopeIndicatorHint');
+}
+
 function render() {
   updateMetadataNotice();
+  updateScopeIndicator();
   els.grid.replaceChildren();
   els.resultCount.textContent = t('imageCount', { count: state.filtered.length });
   els.empty.hidden = state.filtered.length !== 0 || !els.loading.hidden;
@@ -4519,6 +4536,7 @@ Object.assign(TRANSLATIONS.en, {
 
 Object.assign(TRANSLATIONS.zh, {
   scanMetadataSkipped: '未探测 {count}', metadataSkippedNotice: '{count} 张图片在探测预算内未取得尺寸', metadataFailedNotice: '{count} 张图片未取得尺寸', metadataRetryAction: '点击重试', metadataRetryDone: '已补齐 {count} 张图片的尺寸', metadataRetryFailed: '仍无法取得尺寸，请稍后重试',
+  scopeSelectedShort: '多个标签页', scopeWindowShort: '整个窗口', scopeIndicatorHint: '本次扫描覆盖多个标签页，点击展开采集范围',
   scanStats: '发现 {discovered} · 跳过 {skipped} · 已探测 {dimensions} · 复用 {reused} · 失败 {failed}{skippedMetadata}{truncated}{partial}',
   scanMetadataTruncated: ' · {count} 张未探测',
   scanPartial: '部分完成',
@@ -4530,6 +4548,7 @@ Object.assign(TRANSLATIONS.zh, {
 });
 Object.assign(TRANSLATIONS.en, {
   scanMetadataSkipped: '{count} not probed', metadataSkippedNotice: '{count} image(s) were not probed before the metadata budget ran out', metadataFailedNotice: '{count} image(s) have no size', metadataRetryAction: 'Retry', metadataRetryDone: 'Filled in metadata for {count} image(s)', metadataRetryFailed: 'Still unavailable, try again later',
+  scopeSelectedShort: 'Multiple tabs', scopeWindowShort: 'Whole window', scopeIndicatorHint: 'This scan covers multiple tabs; click to open the scope settings',
   scanStats: 'Found {discovered} · skipped {skipped} · dimensions {dimensions} · reused {reused} · failed {failed}{skippedMetadata}{truncated}{partial}',
   scanMetadataTruncated: ' · {count} not inspected',
   scanPartial: 'partial',
