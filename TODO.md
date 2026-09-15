@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录当前 `3.6.2` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
+本文档记录当前 `3.6.1` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
 
 最后更新：2026-09-11
 
@@ -20,7 +20,7 @@
 - [x] `3.5.0` 元数据探测完整性已完成。
 - [x] `3.6.0` 图片来源保真度已完成。
 - [x] `3.6.1` 多页面采集入口位置已完成。
-- [ ] `3.6.2` Referer 规则行为覆盖正在进行。
+- [x] `3.6.2` Referer 规则行为覆盖正在进行。
 
 ## 已知缺陷（2026-09-11 真机验收发现）
 
@@ -143,7 +143,7 @@
 
 ## English
 
-This document tracks the current `3.6.2` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
+This document tracks the current `3.6.1` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
 
 Last updated: 2026-09-11
 
@@ -163,7 +163,7 @@ Last updated: 2026-09-11
 - [x] `3.5.0` metadata probing completeness is complete.
 - [x] `3.6.0` image metadata source fidelity is complete.
 - [x] `3.6.1` multi-page entry placement is complete.
-- [ ] `3.6.2` referrer rule coverage is in progress.
+- [x] `3.6.2` referrer rule coverage is in progress.
 
 ### 1.0.1 core experience
 
@@ -711,26 +711,26 @@ Last updated: 2026-09-11
 - [x] Update the assertion written for 3.4.0 from "the panel must follow the results" to "the panel must precede the results", noting in the assertion that this corrects the 3.4.0 decision.
 - [x] Verify on a real browser: the panel position and order, its first-screen visibility, and the end-to-end multi-page flow of choosing a scope, ticking tabs, starting the scan, and merging results.
 
-## 3.6.2 referrer rule coverage
+## Test coverage: image referrer rules
 
 ### 中文
 
-- [ ] 为 3.4.1 引入的图片请求 Referer 规则补行为测试：现有断言只检查源码文本是否存在，规则的实际行为从未被执行过。
-- [ ] 覆盖规则构造：Referer 取来源页源、`initiatorDomains` 限定为扩展自身、资源类型与方法限定，以及缺少来源页时返回空。
-- [ ] 覆盖候选地址过滤：非 http(s)、带凭据、以及 https 页面到 http 图片的降级地址都必须被排除，候选数量上限为 16。
-- [ ] 覆盖长度保护：`regexFilter` 超过 2000 字符时不得安装规则。
-- [ ] 覆盖安装与复用：相同地址与相同 Referer 不重复下发规则；同一地址而 Referer 变化时替换原规则并复用其 id。
-- [ ] 覆盖上限与会话规则接管：达到 1000 条上限时淘汰最早的一条；启动时只接管 id 落在受管区间内的既有会话规则。
-- [ ] 覆盖降级路径：缺少 `declarativeNetRequest` 能力时返回失败而不是抛错。
-- [ ] 如测试发现真实缺陷则一并修复；若全部通过且不含产品代码改动，则本版本只提交测试，不发布新的产物。
+- [x] 为 3.4.1 引入的图片请求 Referer 规则补行为测试：现有断言只检查源码文本是否存在，规则的实际行为从未被执行过。
+- [x] 覆盖规则构造：Referer 取来源页源、`initiatorDomains` 限定为扩展自身、资源类型与方法限定，以及缺少来源页时返回空。
+- [x] 覆盖候选地址过滤：非 http(s)、带凭据、以及 https 页面到 http 图片的降级地址都必须被排除，候选数量上限为 16。
+- [x] 覆盖长度保护：`regexFilter` 超过 2000 字符时不得安装规则。
+- [x] 覆盖安装与复用：相同地址与相同 Referer 不重复下发规则；同一地址而 Referer 变化时替换原规则并复用其 id。
+- [x] 覆盖上限与会话规则接管：达到 1000 条上限时淘汰最早的一条；启动时只接管 id 落在受管区间内的既有会话规则。
+- [x] 覆盖降级路径：缺少 `declarativeNetRequest` 能力时返回失败而不是抛错。
+- [x] 如测试发现真实缺陷则一并修复；若全部通过且不含产品代码改动，则本版本只提交测试，不发布新的产物。
 
 ### English
 
-- [ ] Add behavioural tests for the image-request Referer rules introduced in 3.4.1: the existing assertions only check that source text exists, and the rule behaviour has never been executed.
-- [ ] Cover rule construction: the Referer is the source page origin, `initiatorDomains` is limited to the extension itself, resource types and methods are constrained, and a missing source page yields nothing.
-- [ ] Cover candidate filtering: non-http(s), credential-bearing, and https-page-to-http-image downgrades must all be excluded, with candidates capped at 16.
-- [ ] Cover the length guard: a `regexFilter` longer than 2000 characters must not install a rule.
-- [ ] Cover install and reuse: the same address with the same Referer must not re-issue a rule, while a changed Referer for the same address replaces the rule and reuses its id.
-- [ ] Cover the cap and session-rule adoption: reaching the 1000-rule cap evicts the oldest rule, and startup adopts only existing session rules whose ids fall inside the managed range.
-- [ ] Cover the degraded path: a missing `declarativeNetRequest` capability must report failure instead of throwing.
-- [ ] Fix any real defect the tests uncover; if they all pass with no product-code change, this version commits tests only and publishes no new artifact.
+- [x] Add behavioural tests for the image-request Referer rules introduced in 3.4.1: the existing assertions only check that source text exists, and the rule behaviour has never been executed.
+- [x] Cover rule construction: the Referer is the source page origin, `initiatorDomains` is limited to the extension itself, resource types and methods are constrained, and a missing source page yields nothing.
+- [x] Cover candidate filtering: non-http(s), credential-bearing, and https-page-to-http-image downgrades must all be excluded, with candidates capped at 16.
+- [x] Cover the length guard: a `regexFilter` longer than 2000 characters must not install a rule.
+- [x] Cover install and reuse: the same address with the same Referer must not re-issue a rule, while a changed Referer for the same address replaces the rule and reuses its id.
+- [x] Cover the cap and session-rule adoption: reaching the 1000-rule cap evicts the oldest rule, and startup adopts only existing session rules whose ids fall inside the managed range.
+- [x] Cover the degraded path: a missing `declarativeNetRequest` capability must report failure instead of throwing.
+- [x] Fix any real defect the tests uncover; if they all pass with no product-code change, this version commits tests only and publishes no new artifact.

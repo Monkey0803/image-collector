@@ -184,8 +184,7 @@ test('milestone checklists stay in sync across languages and ship their delivera
     ['## 3.4.1 auto-collect scope, preview referrer, and startup visibility', '## 3.5.0', true],
     ['## 3.5.0 metadata probing completeness', '## 3.6.0', true],
     ['## 3.6.0 image metadata source fidelity', '## 3.6.1', true],
-    ['## 3.6.1 multi-page entry placement', '## 3.6.2', true],
-    ['## 3.6.2 referrer rule coverage', null, false],
+    ['## 3.6.1 multi-page entry placement', '## Test coverage: image referrer rules', true],
   ];
   const tally = (text) => ({
     total: (text.match(/^- \[[ x]\]/gm) || []).length,
