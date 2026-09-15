@@ -1,6 +1,6 @@
 # Image Collector TODO
 
-本文档记录当前 `3.5.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
+本文档记录当前 `3.6.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
 
 最后更新：2026-09-11
 
@@ -18,6 +18,7 @@
 - [x] `3.4.0` 首屏布局重构已完成。
 - [x] `3.4.1` 自动采集作用域、预览防盗链与启动可见性已完成。
 - [x] `3.5.0` 元数据探测完整性已完成。
+- [ ] `3.6.0` 图片来源保真度正在进行。
 
 ## 已知缺陷（2026-09-11 真机验收发现）
 
@@ -140,7 +141,7 @@
 
 ## English
 
-This document tracks the current `3.5.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
+This document tracks the current `3.6.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
 
 Last updated: 2026-09-11
 
@@ -158,6 +159,7 @@ Last updated: 2026-09-11
 - [x] `3.4.0` primary view layout restructure is complete.
 - [x] `3.4.1` auto-collect scope, preview referrer, and startup visibility are complete.
 - [x] `3.5.0` metadata probing completeness is complete.
+- [ ] `3.6.0` image metadata source fidelity is in progress.
 
 ### 1.0.1 core experience
 
@@ -660,3 +662,27 @@ Last updated: 2026-09-11
 - [x] Revisit the 25-second total budget and the 10-second per-request timeout: a large page on a slow network must not be truncated silently; continue in batches or finish later if needed.
 - [x] Add regression assertions: budget exhaustion must count separately from probe failures, failures must not enter the metadata cache, and incomplete metadata must surface a visible notice.
 - [x] Verify on a real browser: build slow-response and partial-failure fixtures and confirm the unprobed count is visible and retryable on a slow network.
+
+## 3.6.0 image metadata source fidelity
+
+### 中文
+
+- [ ] CSS 背景图改报图片本体尺寸：实测元素盒为 60x40 而图片本体为 84x63，当前记录的是元素盒尺寸，导致按尺寸筛选与详情显示对背景图不成立。只为实际采集到的背景图加载，并受预算约束。
+- [ ] 未加载图片不再记录元素盒尺寸：实测 `data-src` 懒加载图被记为 87x22 而非真实的 100x80。改为促使加载后取本体尺寸，取不到则留空，不写入错误的数值。
+- [ ] 文件大小与 MIME 不再完全依赖 HEAD：当 HEAD 被拒绝或未返回 `Content-Length` 时，回退到带 `Range: bytes=0-0` 的 GET，从 `Content-Range` 解析总大小与 `Content-Type`。
+- [ ] 回退请求有界：仅在 HEAD 未给出大小或类型时触发，受既有 25 秒预算与单请求超时约束，不重复探测已成功的图片。
+- [ ] 无 `src` 的 IntersectionObserver 懒加载图片仍依赖 `autoScroll`：这类图片在滚动前不存在可采集的地址，不得假装已解决，应在文档中如实说明其条件。
+- [ ] 更新 README 已知限制：移除已被消除的条目，保留仍然存在的并写清触发条件，中英两半同步。
+- [ ] 新增回归断言：三项改进各自的门禁，以及懒加载不得触发无限制网络请求。
+- [ ] 真机验证：夹具覆盖「元素盒与本体尺寸不一致」「HEAD 被拒但 GET 可用」「有 `data-*` 与无 `data-*` 两类懒加载」。
+
+### English
+
+- [ ] Report the image's own size for CSS background images: measured, the element box is 60x40 while the image itself is 84x63, so the recorded size is the box and size filtering plus the details panel are wrong for backgrounds. Only load backgrounds that were actually collected, within a budget.
+- [ ] Stop recording the element box as the size of an unloaded image: measured, a `data-src` lazy image was recorded as 87x22 instead of its true 100x80. Force the load and read the natural size, or leave it empty rather than writing a wrong number.
+- [ ] Stop depending entirely on HEAD for file size and MIME: when HEAD is refused or returns no `Content-Length`, fall back to a GET with `Range: bytes=0-0` and read the total size and `Content-Type` from `Content-Range`.
+- [ ] Keep the fallback bounded: trigger it only when HEAD gave no size or type, subject to the existing 25-second budget and per-request timeout, and never re-probe an image that already succeeded.
+- [ ] IntersectionObserver lazy images with no `src` still depend on `autoScroll`: no collectable address exists before scrolling, so do not pretend they are solved; state the condition honestly in the docs.
+- [ ] Update the README known limitations: remove what no longer applies, keep what still does with its trigger condition spelled out, and keep both language halves in sync.
+- [ ] Add regression assertions for each of the three improvements, plus one that lazy loading must not trigger unbounded network requests.
+- [ ] Verify on a real browser with fixtures covering a box-versus-natural size mismatch, a refused HEAD with a working GET, and both kinds of lazy image.

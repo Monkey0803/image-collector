@@ -182,7 +182,8 @@ test('milestone checklists stay in sync across languages and ship their delivera
     ['## 3.3.1 interface language completeness', '## 3.4.0', true],
     ['## 3.4.0 primary view layout restructure', '## 3.4.1', true],
     ['## 3.4.1 auto-collect scope, preview referrer, and startup visibility', '## 3.5.0', true],
-    ['## 3.5.0 metadata probing completeness', null, true],
+    ['## 3.5.0 metadata probing completeness', '## 3.6.0', true],
+    ['## 3.6.0 image metadata source fidelity', null, false],
   ];
   const tally = (text) => ({
     total: (text.match(/^- \[[ x]\]/gm) || []).length,
