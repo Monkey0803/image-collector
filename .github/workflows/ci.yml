@@ -35,6 +35,9 @@ jobs:
       - name: Smart collection tests
         run: node --test tests/smart-collections.test.js
 
+      - name: Image referrer rule tests
+        run: node --test tests/image-referrer-rules.test.js
+
       - name: Packaging validation
         run: bash scripts/package-extension.sh
 
