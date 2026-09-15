@@ -134,6 +134,7 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 .card-favorite { position: absolute; z-index: 2; top: 7px; right: 7px; width: 23px; height: 23px; padding: 0; border: 1px solid #e9edef; border-radius: 7px; color: #a8b1b7; background: rgba(255,255,255,.92); font-size: calc(14px * var(--browser-text-scale, 1)); line-height: 1; }
 .card-favorite:hover, .card-favorite.active { color: #e35c3e; background: #fff0eb; }
 .thumbnail-wrap { height: 94px; display: grid; place-items: center; overflow: hidden; border-radius: 8px; background: #f2f4f5; }
+.thumbnail-retry { color: inherit; font: inherit; background: transparent; border: 0; cursor: pointer; }
 .thumbnail { width: 100%; height: 100%; object-fit: contain; }
 .card-meta { min-width: 0; padding: 7px 3px 2px; }
 .card-size-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-width: 0; }
@@ -680,6 +681,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
    height and the grid fills it. */
 #pageView > .results-section { flex: 1 1 auto; }
 .results-section > .image-grid { min-height: 0; overflow-y: auto; }
+/* Keep cards at their content height; the results grid may fill the panel, but
+   an empty remainder must not stretch every card into a tall blank column. */
+.results-section > .image-grid { align-items: start; grid-auto-rows: max-content; }
 
 /* 3.4.0 fix: a definite shell height is required for the grid row to be bounded;
    min-height alone lets the shell grow with its content, which is why the grid

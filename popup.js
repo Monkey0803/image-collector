@@ -601,7 +601,10 @@ async function init() {
   state.conflictAction = ['uniquify', 'overwrite', 'prompt'].includes(configuration.conflictAction) ? configuration.conflictAction : 'uniquify';
   state.filenameTemplate = typeof configuration.filenameTemplate === 'string' && configuration.filenameTemplate.trim() ? configuration.filenameTemplate : '{name}';
   state.dateFolder = Boolean(configuration.dateFolder);
-  state.tabScope = ['current', 'selected', 'window'].includes(configuration.tabScope) ? configuration.tabScope : 'current';
+  // Opening the collector always starts on the active page, even when local
+  // or synced settings remember an earlier multi-tab scan. Explicit shortcuts
+  // can still select a different scope below.
+  state.tabScope = 'current';
   state.selectedTabIds = new Set((Array.isArray(saved.selectedTabIds) ? saved.selectedTabIds : []).map(Number).filter((id) => Number.isInteger(id) && id > 0));
   state.themeMode = ['auto', 'light', 'dark'].includes(configuration.themeMode) ? configuration.themeMode : 'auto';
   state.compactMode = Boolean(configuration.compactMode);
@@ -2615,19 +2618,31 @@ function previewCandidates(image, preferDisplay = false) {
   const urls = preferDisplay
     ? [image?.displayUrl, image?.url, image?.originalUrl, image?.sourceUrl]
     : [image?.url, image?.displayUrl, image?.originalUrl, image?.sourceUrl];
-  return [...new Set(urls
+  return [...new Set([...urls, ...(Array.isArray(image?.candidateUrls) ? image.candidateUrls : [])]
     .map((url) => String(url || '').trim())
     .filter(Boolean))];
 }
 
-function showPreviewUnavailable(container) {
+function showPreviewUnavailable(container, image) {
   if (!container) return;
-  container.textContent = t('previewUnavailable');
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'thumbnail-retry';
+  button.textContent = t('previewUnavailable');
+  button.title = t('previewRetry');
+  button.addEventListener('click', (event) => { event.stopPropagation(); openPreview(image); });
+  container.replaceChildren(button);
   container.style.color = '#9ba4ac';
   container.style.fontSize = 'calc(10px * var(--browser-text-scale, 1))';
 }
 
-function loadThumbnailWithFallback(image, thumbnail, wrap) {
+async function preparePreviewRequest(image) {
+  try { await chrome.runtime.sendMessage({ type: 'prepareImageRequest', image }); }
+  catch { /* Direct URLs and cached images still work if the worker is unavailable. */ }
+}
+
+async function loadThumbnailWithFallback(image, thumbnail, wrap) {
+  await preparePreviewRequest(image);
   const candidates = previewCandidates(image, true);
   let candidateIndex = 0;
   let cacheAttempted = false;
@@ -2635,15 +2650,16 @@ function loadThumbnailWithFallback(image, thumbnail, wrap) {
   const tryNext = () => {
     if (candidateIndex >= candidates.length) {
       if (cacheAttempted) {
+        if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = ''; }
         thumbnail.hidden = true;
-        showPreviewUnavailable(wrap);
+        showPreviewUnavailable(wrap, image);
         return;
       }
       cacheAttempted = true;
       ImageCollectorDB.getCachedImage(image.url).then((record) => {
         if (!record?.blob) {
           thumbnail.hidden = true;
-          showPreviewUnavailable(wrap);
+          showPreviewUnavailable(wrap, image);
           return;
         }
         objectUrl = URL.createObjectURL(record.blob);
@@ -2651,7 +2667,7 @@ function loadThumbnailWithFallback(image, thumbnail, wrap) {
         thumbnail.src = objectUrl;
       }).catch(() => {
         thumbnail.hidden = true;
-        showPreviewUnavailable(wrap);
+        showPreviewUnavailable(wrap, image);
       });
       return;
     }
@@ -2761,6 +2777,11 @@ async function loadPreviewWithFallback(image, options = {}) {
   els.previewError.hidden = true;
   if (els.previewErrorDetail) els.previewErrorDetail.textContent = '';
   els.previewImage.hidden = false;
+  els.previewImage.onerror = null;
+  els.previewImage.onload = null;
+  els.previewImage.removeAttribute('src');
+  await preparePreviewRequest(image);
+  if (token !== previewLoadToken) return;
   const handleFailure = async () => {
     if (token !== previewLoadToken) return;
     clearPreviewTimeout();
@@ -2775,12 +2796,17 @@ async function loadPreviewWithFallback(image, options = {}) {
     }
     if (!cacheTried) {
       cacheTried = true;
+      usingCachedPreview = true;
       if (await loadPreviewFromCache(image, token)) {
-        usingCachedPreview = true;
         return;
       }
+      await requestImageCache(image);
+      if (token !== previewLoadToken) return;
+      if (await loadPreviewFromCache(image, token)) return;
     }
-    if (token === previewLoadToken) { showPreviewError(t('previewFailureHint', { count: candidates.length })); ImageCollectorDB.updateImage?.(image.url, { valid: false, invalidReason: t('invalidReasonAllCandidatesFailed') }).catch(() => {}); }
+    // Display failures can be temporary (403, offline, timeout); never make
+    // these records eligible for destructive "clear invalid" cleanup.
+    if (token === previewLoadToken) showPreviewError(t('previewFailureHint', { count: candidates.length }));
   };
   els.previewImage.onerror = handleFailure;
   els.previewImage.onload = () => {
