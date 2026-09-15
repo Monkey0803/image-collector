@@ -688,6 +688,51 @@ async function downloadZip(images, saveAs, jobId, settings = {}) {
   }
 }
 
+// Some servers refuse HEAD or answer it without Content-Length, which used to leave
+// the image with no size and no MIME even though a plain GET works. A one-byte ranged
+// GET still reports the full length through Content-Range (3.6.0).
+async function probeImageMetadata(url, deadline) {
+  const budget = () => Math.min(METADATA_REQUEST_TIMEOUT_MS, Math.max(1000, deadline - Date.now()));
+  let fallback = null;
+  try {
+    const response = await fetchWithTimeout(url, { method: 'HEAD', credentials: 'omit', redirect: 'follow' }, budget());
+    if (response.ok) {
+      fallback = {
+        url,
+        size: Number(response.headers.get('content-length')) || 0,
+        mime: (response.headers.get('content-type') || '').split(';')[0]
+      };
+      if (fallback.size && fallback.mime) return fallback;
+    }
+  } catch (error) {
+    // A hanging server must not be retried: retrying doubles the stall, and since a
+    // browser allows only a handful of connections per origin, the extra hanging
+    // request starves later reads of the same host. Only a refusal is worth retrying.
+    if (error?.name === 'TimeoutError') return fallback && (fallback.size || fallback.mime) ? fallback : null;
+    // Otherwise fall through: the ranged GET below is the whole point of this helper.
+  }
+  try {
+    const response = await fetchWithTimeout(url, { method: 'GET', credentials: 'omit', redirect: 'follow', headers: { Range: 'bytes=0-0' } }, budget());
+    if (response.ok || response.status === 206) {
+      const contentRange = response.headers.get('content-range') || '';
+      const total = Number((contentRange.match(/\/(\d+)\s*$/) || [])[1]) || 0;
+      const mime = (response.headers.get('content-type') || '').split(';')[0];
+      // Never keep the body: a server that ignores Range would otherwise stream the
+      // whole image just to learn its length.
+      try { await response.body?.cancel(); } catch { /* already consumed */ }
+      const merged = {
+        url,
+        size: total || Number(response.headers.get('content-length')) || fallback?.size || 0,
+        mime: mime || fallback?.mime || ''
+      };
+      if (merged.size || merged.mime) return merged;
+    }
+  } catch {
+    // Both probes failed; the caller counts this image as a probe failure.
+  }
+  return fallback && (fallback.size || fallback.mime) ? fallback : null;
+}
+
 // Metadata inspection reports how many images were probed, how many failed, and
 // how many were never attempted because the budget ran out. The caller must be able
 // to tell those apart: collapsing them into "no metadata" is what made a slow
@@ -704,10 +749,8 @@ async function inspectImages(images) {
     if (cached?.ok && Date.now() - cached.timestamp < METADATA_CACHE_TTL) { items.push(cached.item); return; }
     try {
       await prepareImageRequest(image);
-      const response = await fetchWithTimeout(image.url, { method: 'HEAD', credentials: 'omit', redirect: 'follow' }, Math.min(METADATA_REQUEST_TIMEOUT_MS, Math.max(1000, deadline - Date.now())));
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const contentLength = Number(response.headers.get('content-length')) || 0;
-      const item = { url: image.url, size: contentLength, mime: (response.headers.get('content-type') || '').split(';')[0] };
+      const item = await probeImageMetadata(image.url, deadline);
+      if (!item) throw new Error('metadata unavailable');
       metadataCache.set(image.url, { item, timestamp: Date.now(), ok: true });
       items.push(item);
     } catch {

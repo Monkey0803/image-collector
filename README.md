@@ -368,10 +368,10 @@ image_2026.08.20.zip
 - 某些网页需要先允许扩展访问网站内容，或者需要在扩展详情中开启“允许访问文件网址”。
 - 图片服务器的防盗链、登录限制、跨域策略或临时 URL 可能导致 ZIP 无法读取某些图片。
 - 普通 URL 下载由 Chrome 直接处理，通常比 ZIP 下载兼容性更好。
-- CSS `background-image` 可能只能显示元素渲染尺寸，无法确定图片的原始尺寸。
-- 文件大小和 MIME 类型依赖图片服务器提供 `HEAD` 响应及相关响应头，未提供时不会显示。
+- 背景图与尚未加载的图片，尺寸按图片本体解析；无法加载时显示为「尺寸未知」，不会以元素盒尺寸代替。
+- 文件大小和 MIME 先读取 `HEAD` 响应；服务器拒绝 `HEAD` 或未返回 `Content-Length` 时，改用一字节的范围 GET 读取 `Content-Range`；两者都失败时显示为未知。
 - 每页最多探测 1000 张图片的文件大小和 MIME；超出部分不显示文件大小，也不会参与按文件大小筛选和排序。
-- 页面中的懒加载图片只有在实际加载或出现在 DOM 中后，才可能被扫描到。
+- 带 `data-src` 等惰性属性的图片可以直接采集，尺寸按图片本体解析；只有在滚动前不存在任何地址（例如由 IntersectionObserver 赋值）的图片，需要开启「自动滚动」才能采集到。
 - iframe 扫描依赖当前扩展对对应 frame 来源拥有访问权限；受保护或沙盒 frame 可能无法注入。
 
 ### 从 GitHub 获取和更新
@@ -403,7 +403,7 @@ download_image/
 ├── LICENSE             # MIT 开源许可证
 ├── QA.md               # 发布前 Chrome 验收清单
 ├── SECURITY.md         # 权限和本地数据边界说明
-├── TODO.md             # 3.5.0 已完成任务和后续路线图
+├── TODO.md             # 3.6.0 已完成任务和后续路线图
 ├── README.md           # 中文和英文项目文档
 ├── scripts/
 │   └── package-extension.sh          # 校验并打包扩展为可发布 ZIP
@@ -844,10 +844,10 @@ Image filtering and list processing happen locally in the browser. The project h
 - Some pages require access to be granted in the extension details page; local files may also require enabling access to file URLs.
 - Anti-hotlinking, authentication requirements, cross-origin policies, or expiring URLs may prevent some images from being read into a ZIP archive.
 - Regular URL downloads are handled directly by Chrome and are generally more compatible than ZIP downloads.
-- CSS `background-image` entries may expose only the rendered element size rather than the original image size.
-- File size and MIME type depend on the image server exposing `HEAD` metadata and may remain unavailable.
+- Background images and images that have not loaded yet are sized from the image itself; when the image cannot be loaded the size stays unknown rather than falling back to the element box.
+- File size and MIME are read from `HEAD` first; when a server refuses `HEAD` or omits `Content-Length`, a one-byte ranged GET reads them from `Content-Range`, and failing both leaves them unknown.
 - File size and MIME are inspected for at most 1,000 images per page; images beyond that show no file size and are excluded from file-size filtering and sorting.
-- Lazy-loaded images may not be detected until they have been inserted into the DOM or loaded by the page.
+- Images carrying lazy attributes such as `data-src` are collected directly and sized from the image itself; images with no address at all before scrolling (for example those assigned by an IntersectionObserver) require **Auto scroll** to be enabled.
 - Iframe scanning depends on access to the frame's origin; protected or sandboxed frames may reject injection.
 
 ### Getting and updating from GitHub
@@ -879,7 +879,7 @@ download_image/
 ├── LICENSE             # MIT open-source license
 ├── QA.md               # Pre-release Chrome acceptance checklist
 ├── SECURITY.md         # Permission and local-data boundary notes
-├── TODO.md             # 3.5.0 checklist and future roadmap
+├── TODO.md             # 3.6.0 checklist and future roadmap
 ├── README.md           # Chinese and English documentation
 ├── scripts/
 │   └── package-extension.sh          # Validate and package the release ZIP

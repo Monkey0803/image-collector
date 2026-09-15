@@ -17,8 +17,8 @@ function pngDimensions(file) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-test('release metadata is aligned with the 3.5.0 milestone', () => {
-  assert.equal(manifest.version, '3.5.0');
+test('release metadata is aligned with the 3.6.0 milestone', () => {
+  assert.equal(manifest.version, '3.6.0');
   assert.match(todo, /## 3\.1\.0 asset management and deduplication/);
   const milestone = todo.split('## 3.1.0 asset management and deduplication')[1].split('## 3.2.0 release quality and validation')[0];
   assert.doesNotMatch(milestone, /- \[ \]/);
@@ -183,7 +183,7 @@ test('milestone checklists stay in sync across languages and ship their delivera
     ['## 3.4.0 primary view layout restructure', '## 3.4.1', true],
     ['## 3.4.1 auto-collect scope, preview referrer, and startup visibility', '## 3.5.0', true],
     ['## 3.5.0 metadata probing completeness', '## 3.6.0', true],
-    ['## 3.6.0 image metadata source fidelity', null, false],
+    ['## 3.6.0 image metadata source fidelity', null, true],
   ];
   const tally = (text) => ({
     total: (text.match(/^- \[[ x]\]/gm) || []).length,
@@ -424,6 +424,43 @@ test('startup failures are surfaced instead of leaving the panel inert', () => {
   assert.match(popup, /window\.addEventListener\('error', \(event\) => reportStartupFailure/);
   assert.match(popup, /window\.addEventListener\('unhandledrejection', \(event\) => reportStartupFailure/);
   assert.match(popup, /if \(interactionReady\) return;/);
+});
+
+test('a refused HEAD falls back to a ranged GET', () => {
+  // A hanging server must not be retried: the extra connection starves the origin.
+  assert.match(worker, /if \(error\?\.name === 'TimeoutError'\) return fallback/);
+});
+
+test('a hanging server is not retried with a second request', () => {
+  // 3.6.0: HEAD 403 used to leave the image with no size even though GET worked.
+  assert.match(worker, /async function probeImageMetadata\(url, deadline\)/);
+  assert.match(worker, /headers: \{ Range: 'bytes=0-0' \}/);
+  assert.match(worker, /contentRange\.match\(\/\\\/\(\\d\+\)/);
+  // the body must be dropped so a Range-ignoring server cannot stream the whole image
+  assert.match(worker, /await response\.body\?\.cancel\(\)/);
+  assert.match(worker, /const item = await probeImageMetadata\(image\.url, deadline\)/);
+});
+
+test('dimensions come from the image rather than the element box', () => {
+  // 3.6.0: measured, a CSS background reported 60x40 while the image was 84x63, and a
+  // data-src image reported 87x22 while its own size differed.
+  assert.match(popup, /dimensionsResolved: !options\.sizeFromElement/);
+  assert.match(popup, /async function resolveUnresolvedDimensions\(scanId\)/);
+  assert.match(popup, /image\.dimensionsResolved === false/);
+  assert.match(popup, /probe\.onload = \(\) => finish\(\{ width: probe\.naturalWidth/);
+  // the box-position call sites must declare that their size is not the image size
+  assert.match(popup, /match\[1\], rect\?\.width, rect\?\.height, 'CSS'[^;]*sizeFromElement: true/);
+  assert.match(popup, /rect\.width, rect\.height, 'OBJECT'[^;]*sizeFromElement: true/);
+  // an unmeasurable image keeps an empty size instead of a wrong one
+  assert.match(popup, /image\.width = measured \? measured\.width : 0/);
+});
+
+test('natural-size resolution stays inside a budget', () => {
+  // 3.6.0: resolving every background would otherwise fetch a page's worth of images.
+  assert.match(popup, /const DIMENSION_RESOLVE_BUDGET_MS = 15000/);
+  assert.match(popup, /const DIMENSION_REQUEST_TIMEOUT_MS = 8000/);
+  assert.match(popup, /for \(; index < pending\.length && Date\.now\(\) < deadline; index \+= 6\)/);
+  assert.match(popup, /const pending = state\.images\.filter\(\(image\) => image\.dimensionsResolved === false\)\.slice\(0, MAX_METADATA_INSPECTIONS\)/);
 });
 
 test('metadata probing separates budget cutoffs from probe failures', () => {
