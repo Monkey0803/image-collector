@@ -17,7 +17,7 @@
 - [x] `3.3.1` 界面语言完整性已完成。
 - [x] `3.4.0` 首屏布局重构已完成。
 - [x] `3.4.1` 自动采集作用域、预览防盗链与启动可见性已完成。
-- [ ] `3.5.0` 元数据探测完整性正在进行。
+- [x] `3.5.0` 元数据探测完整性已完成。
 
 ## 已知缺陷（2026-09-11 真机验收发现）
 
@@ -157,7 +157,7 @@ Last updated: 2026-09-11
 - [x] `3.3.1` interface language completeness is complete.
 - [x] `3.4.0` primary view layout restructure is complete.
 - [x] `3.4.1` auto-collect scope, preview referrer, and startup visibility are complete.
-- [ ] `3.5.0` metadata probing completeness is in progress.
+- [x] `3.5.0` metadata probing completeness is complete.
 
 ### 1.0.1 core experience
 
@@ -643,20 +643,20 @@ Last updated: 2026-09-11
 
 ### 中文
 
-- [ ] 区分「预算耗尽未探测」与「已探测但失败」：`inspectImages` 返回 `{ items, skipped, failed }`，未探测的图片不再与探测失败的图片混为一谈。
-- [ ] 探测失败不再写入元数据缓存：临时的超时、403 或限流不应在 TTL 内屏蔽后续重试。
-- [ ] 界面可见：元数据不完整时在结果区显示未获取尺寸的图片数量与重试入口，而不是只留在统计行里。
-- [ ] 提供只重试缺失元数据图片的路径：不清空已有结果，也不重复探测已经成功的图片。
-- [ ] 复核 25 秒总预算与 10 秒单请求超时：大页面在慢网络上不应静默截断，必要时分批续跑或延后补齐。
-- [ ] 新增回归断言：预算耗尽必须与探测失败分开计数、失败不得进入元数据缓存、元数据不完整时必须出现可见提示。
-- [ ] 真机验证：构造慢响应与部分失败的夹具，确认慢网络下未探测数量可见且可重试。
+- [x] 区分「预算耗尽未探测」与「已探测但失败」：`inspectImages` 返回 `{ items, skipped, failed }`，未探测的图片不再与探测失败的图片混为一谈。
+- [x] 探测失败不再写入元数据缓存：临时的超时、403 或限流不应在 TTL 内屏蔽后续重试。
+- [x] 界面可见：元数据不完整时在结果区显示未获取尺寸的图片数量与重试入口，而不是只留在统计行里。
+- [x] 提供只重试缺失元数据图片的路径：不清空已有结果，也不重复探测已经成功的图片。
+- [x] 复核 25 秒总预算与 10 秒单请求超时：大页面在慢网络上不应静默截断，必要时分批续跑或延后补齐。
+- [x] 新增回归断言：预算耗尽必须与探测失败分开计数、失败不得进入元数据缓存、元数据不完整时必须出现可见提示。
+- [x] 真机验证：构造慢响应与部分失败的夹具，确认慢网络下未探测数量可见且可重试。
 
 ### English
 
-- [ ] Separate "not probed because the budget ran out" from "probed and failed": `inspectImages` returns `{ items, skipped, failed }` so unprobed images stop being conflated with failed ones.
-- [ ] Do not cache a probe failure: a transient timeout, 403, or rate limit must not suppress a retry for the rest of the TTL.
-- [ ] Make it visible: when metadata is incomplete, show the number of images without a size and a retry entry point in the results area instead of only in the stats line.
-- [ ] Provide a retry path for only the images missing metadata, without discarding existing results or re-probing images that already succeeded.
-- [ ] Revisit the 25-second total budget and the 10-second per-request timeout: a large page on a slow network must not be truncated silently; continue in batches or finish later if needed.
-- [ ] Add regression assertions: budget exhaustion must count separately from probe failures, failures must not enter the metadata cache, and incomplete metadata must surface a visible notice.
-- [ ] Verify on a real browser: build slow-response and partial-failure fixtures and confirm the unprobed count is visible and retryable on a slow network.
+- [x] Separate "not probed because the budget ran out" from "probed and failed": `inspectImages` returns `{ items, skipped, failed }` so unprobed images stop being conflated with failed ones.
+- [x] Do not cache a probe failure: a transient timeout, 403, or rate limit must not suppress a retry for the rest of the TTL.
+- [x] Make it visible: when metadata is incomplete, show the number of images without a size and a retry entry point in the results area instead of only in the stats line.
+- [x] Provide a retry path for only the images missing metadata, without discarding existing results or re-probing images that already succeeded.
+- [x] Revisit the 25-second total budget and the 10-second per-request timeout: a large page on a slow network must not be truncated silently; continue in batches or finish later if needed.
+- [x] Add regression assertions: budget exhaustion must count separately from probe failures, failures must not enter the metadata cache, and incomplete metadata must surface a visible notice.
+- [x] Verify on a real browser: build slow-response and partial-failure fixtures and confirm the unprobed count is visible and retryable on a slow network.
