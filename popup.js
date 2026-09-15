@@ -3128,6 +3128,10 @@ async function scanPage(options = {}) {
     applyFilters();
     if (!quiet) setScanPhase('readingDimensions');
     await loadImageMetadata(scanId, { previousScan, reusableUrls });
+    // 3.6.0: box and attribute dimensions are replaced by the image's own size so
+    // size filters and the details panel do not report a value never measured.
+    await resolveUnresolvedDimensions(scanId);
+    if (scanId !== state.scanId) return;
     if (!quiet) await persistScanRecord(scanId, { tabs, delta, previousScan, reusableUrls });
     if (newImageCount > 0) showToast(t('newImagesFound', { count: newImageCount }));
   } catch (error) {
@@ -3218,6 +3222,10 @@ async function archiveImagesBySiteAdapters(images, pageUrl) {
 // The cap must cover every scan-limit choice (200 / 500 / 1000) instead of
 // silently stopping at 300; keep it in sync with service-worker.js.
 const MAX_METADATA_INSPECTIONS = 1000;
+// Loading an image to read its natural size costs one request per unresolved entry.
+// Bounded like the metadata probe so a page full of backgrounds cannot run away.
+const DIMENSION_RESOLVE_BUDGET_MS = 15000;
+const DIMENSION_REQUEST_TIMEOUT_MS = 8000;
 
 async function loadImageMetadata(scanId, options = {}) {
   const images = state.images.slice(0, MAX_METADATA_INSPECTIONS);
@@ -3352,6 +3360,45 @@ async function retryMissingMetadata() {
   }
 }
 
+// 3.6.0: replace box/attribute dimensions with the image's own size. Entries whose
+// image cannot be loaded keep an empty size rather than a wrong one, so size filters
+// and the details panel never report a value that was never measured.
+async function resolveUnresolvedDimensions(scanId) {
+  const pending = state.images.filter((image) => image.dimensionsResolved === false).slice(0, MAX_METADATA_INSPECTIONS);
+  if (!pending.length) return;
+  const deadline = Date.now() + DIMENSION_RESOLVE_BUDGET_MS;
+  const measure = (url) => new Promise((resolve) => {
+    if (Date.now() >= deadline) { resolve(null); return; }
+    const probe = new Image();
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      probe.onload = null;
+      probe.onerror = null;
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), DIMENSION_REQUEST_TIMEOUT_MS);
+    probe.onload = () => finish({ width: probe.naturalWidth, height: probe.naturalHeight });
+    probe.onerror = () => finish(null);
+    probe.src = url;
+  });
+  let index = 0;
+  for (; index < pending.length && Date.now() < deadline; index += 6) {
+    await Promise.all(pending.slice(index, index + 6).map(async (image) => {
+      const measured = await measure(image.url);
+      if (scanId !== state.scanId) return;
+      image.width = measured ? measured.width : 0;
+      image.height = measured ? measured.height : 0;
+      image.dimensionsResolved = Boolean(measured);
+    }));
+  }
+  if (scanId !== state.scanId) return;
+  applyFilters();
+  updateRangeLimits();
+}
+
 async function collectPageImages(options = {}) {
   const found = [];
   const seenUrls = new Map();
@@ -3483,6 +3530,9 @@ async function collectPageImages(options = {}) {
       cacheState: 'unknown',
       format: formatFromUrl(url),
       original: Boolean(options.original),
+      // False when width/height came from the element box or an attribute rather
+      // than the loaded image, so the popup can replace them with the real size.
+      dimensionsResolved: !options.sizeFromElement,
       quality: Number(options.quality || 0),
       widthHint: Number(options.widthHint || 0),
       adapterIds: [...new Set(Array.isArray(options.adapterIds) ? options.adapterIds : [])],
@@ -3592,7 +3642,7 @@ async function collectPageImages(options = {}) {
         parseSrcset(value).forEach((candidate) => add(candidate.rawUrl, element.naturalWidth || element.width, element.naturalHeight || element.height, source, element.alt || '', { widthHint: candidate.widthHint, adapterIds: adapterIdsFor(element), element }));
       } else if (imageLikeUrl(normalizeUrl(value)) || attributes.includes(attribute) || tagName === 'img' || tagName === 'video') {
         if (tagName === 'video' && attribute === 'poster' && !scanRules.scanVideoPosters) return;
-        add(value, element.naturalWidth || element.width, element.naturalHeight || element.height, source, element.alt || '', { adapterIds: adapterIdsFor(element), element });
+        add(value, element.naturalWidth || element.width, element.naturalHeight || element.height, source, element.alt || '', { adapterIds: adapterIdsFor(element), element, sizeFromElement: !element.naturalWidth });
       }
     });
   };
@@ -3607,7 +3657,7 @@ async function collectPageImages(options = {}) {
     const chosen = chooseImageSource(image);
     if (!chosen) continue;
     const displayUrl = normalizeUrl(image.currentSrc || image.src || image.getAttribute('data-src')) || chosen.url;
-    add(chosen.url, image.naturalWidth || image.width, image.naturalHeight || image.height, 'IMG', image.alt || '', {
+    add(chosen.url, image.naturalWidth || image.width, image.naturalHeight || image.height, 'IMG', image.alt || '', { sizeFromElement: !image.naturalWidth,
       displayUrl,
       candidateUrls: imageCandidates(image), sourceElement: elementSummary(image),
       original: chosen.original || chosen.url !== displayUrl,
@@ -3621,7 +3671,7 @@ async function collectPageImages(options = {}) {
     if (expired()) break;
     if (excluded(video) || (includeSelectors.length && !matchesAny(video, includeSelectors))) continue;
     const rect = video.getBoundingClientRect();
-    add(video.getAttribute('poster'), video.videoWidth || rect.width, video.videoHeight || rect.height, 'VIDEO', options.language === 'en' ? 'Video poster' : '视频封面', { quality: 5500, adapterIds: adapterIdsFor(video) });
+    add(video.getAttribute('poster'), video.videoWidth || rect.width, video.videoHeight || rect.height, 'VIDEO', options.language === 'en' ? 'Video poster' : '视频封面', { quality: 5500, adapterIds: adapterIdsFor(video), sizeFromElement: true });
   }
   for (const object of document.querySelectorAll('object[data]')) {
     if (expired()) break;
@@ -3629,7 +3679,7 @@ async function collectPageImages(options = {}) {
     const url = normalizeUrl(object.getAttribute('data'));
     if (!url || !imageLikeUrl(url)) continue;
     const rect = object.getBoundingClientRect();
-    add(url, rect.width, rect.height, 'OBJECT', options.language === 'en' ? 'Embedded image' : '嵌入图片', { quality: 4000, adapterIds: adapterIdsFor(object) });
+    add(url, rect.width, rect.height, 'OBJECT', options.language === 'en' ? 'Embedded image' : '嵌入图片', { quality: 4000, adapterIds: adapterIdsFor(object), sizeFromElement: true });
   }
   if (scanRules.scanCssBackground) {
     const allElements = [...document.querySelectorAll('*')];
@@ -3645,7 +3695,7 @@ async function collectPageImages(options = {}) {
       const rect = element.getBoundingClientRect();
       for (const match of matches) {
         if (expired()) break;
-        add(match[1], rect?.width, rect?.height, 'CSS', options.language === 'en' ? 'Background image' : '背景图片', { quality: 2000, adapterIds: adapterIdsFor(element) });
+        add(match[1], rect?.width, rect?.height, 'CSS', options.language === 'en' ? 'Background image' : '背景图片', { quality: 2000, adapterIds: adapterIdsFor(element), sizeFromElement: true });
       }
     }
   }
