@@ -698,3 +698,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .filter-summary .eyebrow { display: none; }
 .filter-summary .filter-title { font-size: calc(12px * var(--browser-text-scale, 1)); }
 .download-panel { margin-top: 10px; padding: 11px; }
+
+/* 3.5.0: metadata that could not be probed used to be invisible. The notice states
+   how many images are affected and retries only those, without rescanning. */
+.metadata-notice { display: block; width: 100%; margin: 0 0 var(--space-2); padding: 6px 9px; border: 1px solid rgba(227, 92, 62, .3); border-radius: 9px; color: #a8402a; background: rgba(255, 240, 235, .92); font-size: calc(10px * var(--browser-text-scale, 1)); font-weight: 700; text-align: left; cursor: pointer; }
+.metadata-notice[hidden] { display: none; }
+.metadata-notice:disabled { opacity: .6; cursor: default; }

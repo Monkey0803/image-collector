@@ -17,8 +17,8 @@ function pngDimensions(file) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-test('release metadata is aligned with the 3.4.1 milestone', () => {
-  assert.equal(manifest.version, '3.4.1');
+test('release metadata is aligned with the 3.5.0 milestone', () => {
+  assert.equal(manifest.version, '3.5.0');
   assert.match(todo, /## 3\.1\.0 asset management and deduplication/);
   const milestone = todo.split('## 3.1.0 asset management and deduplication')[1].split('## 3.2.0 release quality and validation')[0];
   assert.doesNotMatch(milestone, /- \[ \]/);
@@ -182,7 +182,7 @@ test('milestone checklists stay in sync across languages and ship their delivera
     ['## 3.3.1 interface language completeness', '## 3.4.0', true],
     ['## 3.4.0 primary view layout restructure', '## 3.4.1', true],
     ['## 3.4.1 auto-collect scope, preview referrer, and startup visibility', '## 3.5.0', true],
-    ['## 3.5.0 metadata probing completeness', null, false],
+    ['## 3.5.0 metadata probing completeness', null, true],
   ];
   const tally = (text) => ({
     total: (text.match(/^- \[[ x]\]/gm) || []).length,
@@ -423,6 +423,44 @@ test('startup failures are surfaced instead of leaving the panel inert', () => {
   assert.match(popup, /window\.addEventListener\('error', \(event\) => reportStartupFailure/);
   assert.match(popup, /window\.addEventListener\('unhandledrejection', \(event\) => reportStartupFailure/);
   assert.match(popup, /if \(interactionReady\) return;/);
+});
+
+test('metadata probing separates budget cutoffs from probe failures', () => {
+  // 3.5.0: unprobed images used to be indistinguishable from refused ones, so a slow
+  // network looked like a page whose images carry no size.
+  assert.match(worker, /let skipped = 0;/);
+  assert.match(worker, /if \(Date\.now\(\) >= deadline\) \{ skipped \+= 1; return; \}/);
+  assert.match(worker, /return \{ ok: true, items, failed, skipped \}/);
+  assert.match(popup, /state\.scanStats\.dimensionsSkipped = skippedProbes;/);
+  assert.match(popup, /state\.scanStats\.dimensionsFailed = failedProbes;/);
+});
+
+test('a failed probe stays retryable instead of being cached', () => {
+  // 3.5.0: caching an empty result suppressed every retry for the whole TTL.
+  assert.match(worker, /metadataCache\.set\(image\.url, \{ item, timestamp: Date\.now\(\), ok: true \}\)/);
+  assert.match(worker, /if \(cached\?\.ok && Date\.now\(\) - cached\.timestamp < METADATA_CACHE_TTL\)/);
+  const catchBlock = worker.slice(worker.indexOf('} catch {\n      // A transient timeout'));
+  assert.ok(!catchBlock.slice(0, 400).includes('metadataCache.set'), 'a failure must not be written to the metadata cache');
+});
+
+test('images the budget never dispatched are still counted', () => {
+  // 3.5.0: counting only inside inspectOne missed every batch the deadline skipped
+  // entirely, so 65 of 80 images were accounted for nowhere.
+  assert.match(worker, /skipped \+= Math\.max\(0, source\.length - index\)/);
+  assert.match(worker, /for \(; index < source\.length && Date\.now\(\) < deadline; index \+= 8\)/);
+  assert.match(worker, /^\s*let index = 0;/m);
+});
+
+test('incomplete metadata is visible and retryable', () => {
+  // 3.5.0: the count used to live only in the stats line, with no way to recover.
+  assert.match(html, /<button id="retryMetadata" class="metadata-notice" type="button" hidden>/);
+  assert.match(popup, /function updateMetadataNotice\(\)/);
+  assert.match(popup, /async function retryMissingMetadata\(\)/);
+  assert.match(popup, /on\(els\.retryMetadata, 'click', \(\) => retryMissingMetadata\(\)\)/);
+  assert.match(popup, /function render\(\) \{\n  updateMetadataNotice\(\);/);
+  assert.match(popup, /const missing = state\.images\.filter\(\(image\) => !image\.size && !image\.mime\)/);
+  assert.match(popup, /scanMetadataSkipped/);
+  assert.match(popup, /metadataRetryAction/);
 });
 
 test('the first screen puts the results before secondary setup panels', () => {
