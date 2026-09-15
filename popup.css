@@ -704,3 +704,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .metadata-notice { display: block; width: 100%; margin: 0 0 var(--space-2); padding: 6px 9px; border: 1px solid rgba(227, 92, 62, .3); border-radius: 9px; color: #a8402a; background: rgba(255, 240, 235, .92); font-size: calc(10px * var(--browser-text-scale, 1)); font-weight: 700; text-align: left; cursor: pointer; }
 .metadata-notice[hidden] { display: none; }
 .metadata-notice:disabled { opacity: .6; cursor: default; }
+
+/* 3.6.1: the scan button only covers the current page, so a multi-tab scope has to be
+   visible in the top bar rather than buried in the collapsed panel. */
+.scope-indicator { max-width: 96px; overflow: hidden; padding: 5px 8px; border: 1px solid rgba(255, 255, 255, .28); border-radius: 99px; color: #ffd9c2; background: rgba(244, 118, 85, .18); font-size: calc(9px * var(--browser-text-scale, 1)); font-weight: 700; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.scope-indicator[hidden] { display: none; }
