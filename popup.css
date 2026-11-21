@@ -728,3 +728,61 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
    visible in the top bar rather than buried in the collapsed panel. */
 .scope-indicator { max-width: 96px; overflow: hidden; padding: 5px 8px; border: 1px solid rgba(255, 255, 255, .28); border-radius: 99px; color: #ffd9c2; background: rgba(244, 118, 85, .18); font-size: calc(10.5px * var(--browser-text-scale, 1)); font-weight: 700; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .scope-indicator[hidden] { display: none; }
+
+/* 3.8.0 — narrow-viewport refinements -------------------------------------
+   These rules deliberately live at the end of the file: the 3.4.0 global rules
+   (line 651+) come after the older 390px media query (line 544) and override it,
+   so the fixes must be applied in a final layer to take effect. */
+
+/* Results heading: on narrow panels the sort control was pushed to row 2 on its
+   own, leaving a large gap and making the row look like two unrelated fragments.
+   A zero-height flex break splits the row into a title group and a controls group
+   so search / sort / selection tools always line up together. */
+/* Grouping is needed up to 600px: at 540px the selection tools were stranded on
+   a second row by themselves while the rest of the controls stayed on row one. */
+@media (max-width: 600px) {
+  .results-heading { gap: 6px 7px; }
+  .results-heading::before { content: ""; flex: 0 0 100%; height: 0; order: 5; }
+  .results-heading > .search-box { order: 6; flex: 1 1 140px; }
+  .results-heading > .sort-control { order: 7; flex: 0 0 auto; }
+  .results-heading > .selection-tools { order: 8; flex: 0 0 auto; margin-left: auto; }
+}
+
+@media (max-width: 440px) {
+  /* The button label used to wrap into two vertical glyphs at this width. */
+  .scan-action-label { display: none; }
+  .scan-action { width: 30px; justify-content: center; padding: 0; }
+}
+
+@media (max-width: 390px) {
+  /* Five equal tabs made "当前页面" wrap into two lines and misalign with the icon.
+     At this width the icon plus the existing title tooltip is sufficient. */
+  .view-tab { grid-template-columns: auto; gap: 0; }
+  .view-tab .view-tab-text { display: none; }
+
+  /* The scan status was hidden outright, so users got no scanning feedback. Keep a
+     compact state dot instead: amber while active, green on completion, red on
+     failure. The text stays in the DOM for screen readers but is visually hidden. */
+  .scan-status {
+    display: block;
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    min-width: 9px;
+    max-width: 9px;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: 50%;
+    background: var(--color-brand);
+    color: transparent;
+    font-size: 0;
+    text-indent: -9999px;
+  }
+  .scan-status[data-scan-state="complete"] { background: #2e9e63; }
+  .scan-status[data-scan-state="failed"] { background: #d64545; }
+
+  /* Three columns at 360px keep cards compact instead of two oversized tiles. */
+  .image-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .thumbnail-wrap { height: 86px; }
+}

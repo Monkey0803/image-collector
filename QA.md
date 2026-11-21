@@ -425,10 +425,24 @@ README 中英两半的项目结构必须列出仓库全部顶层条目。两条�
 
 ### 回归与工程化
 
-- [x] 四套测试全绿：`extension-regression` 43/43、`smart-collections` 5/5、`image-referrer-rules` 17/17、`feature-3.7-behavior` 6/6，合计 **71/71**。
+- [x] 四套测试全绿：`extension-regression` 44/44、`smart-collections` 5/5、`image-referrer-rules` 17/17、`feature-3.7-behavior` 6/6，合计 **72/72**。
 - [x] JavaScript 语法检查（`popup.js` / `library.js` / `service-worker.js`）通过。
 - [x] `.gitignore` 补充 `dist/`、`node_modules/`、`.workbuddy/`，构建产物与本地数据不再进入版本库。
 - [x] CI 覆盖全部四套测试；whitespace 检查改为覆盖完整 push/PR 范围，不再只看最近一次提交。
+
+## 窄屏布局优化验证（2026-11-21）
+
+本节为**真实浏览器渲染实测**：用 Chrome CDP 的 `Emulation.setDeviceMetricsOverride` 在 360 / 420 / 540px 三档精确视口加载注入模拟数据的 `popup.html`，逐项测量元素位置与计算样式，并截图人工复核。三档 `document.documentElement.scrollWidth` 均等于视口宽度，**无横向溢出**。
+
+- [x] **结果标题行**：360 / 420px 下标题/计数/全选位于第一行（y≈198–209），搜索框/排序/选择工具同处第二行（y=237 / 243），排序不再孤立换行。实测另发现 540px 下选择工具被孤立在第二行，故将分组规则扩展到 ≤600px，使 540px 也保持整齐的两行控件组。
+- [x] **视图标签**：360px 下 `.view-tab-text` 计算样式为 `display: none`，仅剩图标，原有的 `title` 属性保留文字提示；420px 起文字正常显示。
+- [x] **扫描状态反馈**：360px 下状态改为 9×9 圆点，完成态背景 `rgb(46,158,99)`（绿）；中/英文文本仍在 DOM 中供屏幕阅读器读取。`setScanStatusText()` 统一同步 `data-scan-state`，覆盖扫描中/完成/失败全部路径。
+- [x] **搜索框占位符**：窄屏（≤390px）改用短文案 `searchPageShort`（中/英分别为“搜索图片” / “Search images”），并在面板尺寸变化（resize）时更新。
+- [x] **图片网格**：360px 固定 3 列（每列 106px），缩略图高 86px，不再是 2 列 163px 的稀疏大卡片。
+- [x] **重新扫描按钮**：≤440px 时标签隐藏、按钮宽 30px，只剩刷新图标，不再竖排两行文字。
+- [x] 新增回归测试锁定上述 CSS 层级顺序与 JS 状态同步逻辑；`extension-regression` 由 43/43 增至 44/44。
+
+> 注：本节验证的是布局与状态呈现逻辑；Chrome 真实 Side Panel 中的最终视觉与交互仍列入下方「待验证」。
 
 ## 待验证
 

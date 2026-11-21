@@ -583,7 +583,7 @@ function handleInitError(error) {
       els.error.hidden = false;
       els.error.textContent = `${t('scanFailedPrefix')}${error?.message || t('pageAccessError')}`;
     }
-    setText(els.scanStatus, t('scanFailed'));
+    setScanStatusText(t('scanFailed'), 'failed');
   } catch {
     // There is no safe UI fallback if the DOM itself is unavailable.
   }
@@ -594,6 +594,7 @@ async function init() {
   // controls are bound immediately so the popup never presents dead controls.
   bindEvents();
   applyLanguage();
+  window.addEventListener('resize', () => { updateSearchPlaceholder(); });
   syncBrowserTextScale().catch(() => {});
 
   const defaults = { filters: {}, saveAs: false, searchQuery: '', sort: 'page', originalOnly: false, aspectRatio: 'all', zipLayout: 'flat', conflictAction: 'uniquify', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false, tabScope: 'current', selectedTabIds: [], themeMode: 'auto', compactMode: false, scanRules: normalizeScanRules(), siteAdapters: [], smartCollectionsVersion: SMART_COLLECTIONS_VERSION, smartCollections: [], syncSettings: false };
@@ -3031,7 +3032,7 @@ async function scanPage(options = {}) {
   const scanId = ++state.scanId;
   if (!quiet) setLoading(true, 'readingPage');
   els.refresh.disabled = true;
-  els.scanStatus.textContent = quiet ? t('updating') : t('scanningStatus');
+  setScanStatusText(quiet ? t('updating') : t('scanningStatus'), 'active');
   els.error.hidden = true;
   const previousSelectedUrls = new Set(selectedImages().map((image) => image.url));
   const previousImageUrls = new Set(state.images.map((image) => image.url));
@@ -3074,7 +3075,7 @@ async function scanPage(options = {}) {
         pageResults.push({ tabId: tab.id, pageUrl: tab.url || '', pageTitle: tab.title || '', images: [], error: t('protectedPage') });
         continue;
       }
-      els.scanStatus.textContent = tabs.length > 1 ? t('scanningTab', { current: index + 1, total: tabs.length }) : (quiet ? t('updating') : t('scanningStatus'));
+      setScanStatusText(tabs.length > 1 ? t('scanningTab', { current: index + 1, total: tabs.length }) : (quiet ? t('updating') : t('scanningStatus')), 'active');
       if (!quiet) setScanPhase('discoveringImages');
       try {
         const result = await scanOneTab(tab, scanId, quiet, index);
@@ -3154,7 +3155,7 @@ async function scanPage(options = {}) {
       els.error.hidden = false;
       els.error.textContent = `${t('scanFailedPrefix')}${describeError(error, 'pageAccessError')}`;
     }
-    if (!quiet) els.scanStatus.textContent = t('scanFailed');
+    if (!quiet) setScanStatusText(t('scanFailed'), 'failed');
     else updateScanStatus();
   } finally {
     if (scanId === state.scanId) {
@@ -4705,14 +4706,14 @@ Object.assign(TRANSLATIONS.zh, {
   multiPageEyebrow: '多页面采集', multiPageTitle: '多页面采集', currentTabScope: '当前标签页', selectedTabsScope: '已选 {count} 个标签页', windowTabsScope: '当前窗口 {count} 个标签页', multiPageScope: '采集范围', multiPageCurrentHint: '采集当前激活的标签页', multiPageSelectHint: '将选中的标签页合并为一个结果', selectAllTabs: '全选标签页', clearSelectedTabs: '清除选择', scanMultiPage: '开始采集', noTabs: '当前窗口没有可用标签页', selectTabsFirst: '请先选择至少一个标签页', protectedPage: '此页面不允许扩展访问', activeTab: '当前', multiPageResultTitle: '已采集 {count} 个页面', scanningTab: '正在采集第 {current}/{total} 个页面',
   byPage: '按页面', byDate: '按日期', bySitePage: '按网站 / 页面', bySiteDate: '按网站 / 日期', exportMarkdown: '导出 Markdown', exportHtml: '导出 HTML', exportContactSheet: '导出联系表', exportLibraryMarkdown: '导出 Markdown', exportLibraryHtml: '导出 HTML', exportLibraryContactSheet: '导出联系表',
   scanRestoreFilters: '恢复筛选', scanOpenPages: '打开来源页', scanRerun: '重新扫描', scanDownload: '下载结果', scanPages: '{count} 个页面', scanDelta: '新增 {newCount} · 变化 {changedCount} · 移除 {removedCount}', scanActionFailed: '扫描历史操作失败', scanRerunStarted: '已重新开始扫描', scanPagesOpened: '已打开 {count} 个来源页面',
-  appearanceTitle: '外观与快捷键', localSettings: '本地设置', themeMode: '主题', themeAuto: '跟随系统', themeLight: '浅色', themeDark: '深色', compactMode: '紧凑模式', compactModeHint: '减少间距，在窄侧栏显示更多图片。', openShortcuts: '配置快捷键', shortcutPageHint: '可在 Chrome 扩展快捷键页面自定义', shortcutPageFailed: '无法打开快捷键设置',
+  appearanceTitle: '外观与快捷键', localSettings: '本地设置', themeMode: '主题', themeAuto: '跟随系统', themeLight: '浅色', themeDark: '深色', compactMode: '紧凑模式', compactModeHint: '减少间距，在窄侧栏显示更多图片。', openShortcuts: '配置快捷键', shortcutPageHint: '可在 Chrome 扩展快捷键页面自定义', shortcutPageFailed: '无法打开快捷键设置', searchPageShort: '搜索图片',
   markdownExport: 'Markdown 图库', htmlExport: 'HTML 图库', contactSheetExport: '图片联系表', galleryEmpty: '没有可导出的图片', galleryExported: '{type} 已开始下载', galleryPartial: '联系表已导出，成功加载 {loaded}/{total} 张图片', galleryFailed: '图库导出失败'
 });
 Object.assign(TRANSLATIONS.en, {
   multiPageEyebrow: 'MULTI-PAGE', multiPageTitle: 'Multi-page collection', currentTabScope: 'Current tab', selectedTabsScope: '{count} selected tabs', windowTabsScope: '{count} tabs in window', multiPageScope: 'Collection scope', multiPageCurrentHint: 'Collect from the active tab', multiPageSelectHint: 'Merge selected tabs into one result', selectAllTabs: 'Select all tabs', clearSelectedTabs: 'Clear selection', scanMultiPage: 'Start collection', noTabs: 'No usable tabs in this window', selectTabsFirst: 'Select at least one tab first', protectedPage: 'This page cannot be accessed by the extension', activeTab: 'Active', multiPageResultTitle: '{count} pages collected', scanningTab: 'Collecting page {current}/{total}',
   byPage: 'By page', byDate: 'By date', bySitePage: 'By site / page', bySiteDate: 'By site / date', exportMarkdown: 'Export Markdown', exportHtml: 'Export HTML', exportContactSheet: 'Export contact sheet', exportLibraryMarkdown: 'Export Markdown', exportLibraryHtml: 'Export HTML', exportLibraryContactSheet: 'Export contact sheet',
   scanRestoreFilters: 'Restore filters', scanOpenPages: 'Open source pages', scanRerun: 'Rescan', scanDownload: 'Download results', scanPages: '{count} pages', scanDelta: '{newCount} new · {changedCount} changed · {removedCount} removed', scanActionFailed: 'Scan history action failed', scanRerunStarted: 'Rescan started', scanPagesOpened: 'Opened {count} source page(s)',
-  appearanceTitle: 'Appearance & shortcuts', localSettings: 'Local settings', themeMode: 'Theme', themeAuto: 'System', themeLight: 'Light', themeDark: 'Dark', compactMode: 'Compact mode', compactModeHint: 'Reduce spacing to show more images in a narrow panel.', openShortcuts: 'Configure shortcuts', shortcutPageHint: 'Customize them on Chrome\'s extension shortcuts page', shortcutPageFailed: 'Could not open shortcut settings',
+  appearanceTitle: 'Appearance & shortcuts', localSettings: 'Local settings', themeMode: 'Theme', themeAuto: 'System', themeLight: 'Light', themeDark: 'Dark', compactMode: 'Compact mode', compactModeHint: 'Reduce spacing to show more images in a narrow panel.', openShortcuts: 'Configure shortcuts', shortcutPageHint: 'Customize them on Chrome\'s extension shortcuts page', shortcutPageFailed: 'Could not open shortcut settings', searchPageShort: 'Search images',
   markdownExport: 'Markdown gallery', htmlExport: 'HTML gallery', contactSheetExport: 'Contact sheet', galleryEmpty: 'There are no images to export', galleryExported: '{type} download started', galleryPartial: 'Contact sheet exported; loaded {loaded}/{total} image(s)', galleryFailed: 'Gallery export failed'
 });
 
@@ -4815,6 +4816,13 @@ function detectLanguage() {
   return String(navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 
+// A 360px panel leaves the search input too narrow for the full bilingual hint,
+// so use the compact placeholder there and the descriptive one everywhere else.
+function updateSearchPlaceholder() {
+  const search = document.querySelector('#searchInput');
+  if (search) search.placeholder = window.innerWidth <= 390 ? t('searchPageShort') : t('searchPage');
+}
+
 function applyLanguage() {
   document.documentElement.lang = state.language === 'en' ? 'en' : 'zh-CN';
   setText(els.initGateLabel, t('initializing'));
@@ -4850,7 +4858,7 @@ function applyLanguage() {
   if (els.previewImage) els.previewImage.alt = t('imagePreview');
   if (!state.tabId) setText(els.pageTitle, t('readingPage'));
   if (state.images.length && els.loading?.hidden) updateScanStatus();
-  else if (!state.images.length && els.loading?.hidden) setText(els.scanStatus, t('scanningStatus'));
+  else if (!state.images.length && els.loading?.hidden) setScanStatusText(t('scanningStatus'), 'active');
   setText(els.pageViewButton, t('page'));
   const favoriteCount = els.favoriteCount?.textContent || '0';
   if (els.libraryViewButton) {
@@ -4901,7 +4909,7 @@ function applyLanguage() {
   const aspectLabel = document.querySelector('.aspect-filter > span'); if (aspectLabel) aspectLabel.textContent = t('aspectRatio');
   const aspectOptions = [t('allRatios'), t('landscape'), t('portrait'), t('square')]; [...(els.aspectRatio?.options || [])].forEach((option, index) => { if (aspectOptions[index]) option.textContent = aspectOptions[index]; });
   const selectAllLabel = document.querySelector('.select-all span'); if (selectAllLabel) selectAllLabel.textContent = t('selectAll');
-  const search = document.querySelector('#searchInput'); if (search) search.placeholder = t('searchPage');
+  updateSearchPlaceholder();
   const sortLabel = document.querySelector('.sort-control > span'); if (sortLabel) sortLabel.textContent = t('sort');
   const sortOptions = [t('pageOrder'), t('widthDesc'), t('heightDesc'), t('areaDesc'), t('nameAsc')]; [...(els.sortSelect?.options || [])].forEach((option, index) => { if (sortOptions[index]) option.textContent = sortOptions[index]; });
   [...els.formatTabs].forEach((tab) => { const format = tab.dataset.format; const labels = { all: t('all'), jpeg: 'JPEG', png: 'PNG', webp: 'WEBP', avif: 'AVIF', animated: t('animated'), other: t('other') }; const count = tab.querySelector('[data-count]')?.textContent || '0'; tab.innerHTML = `${labels[format] || format} <strong data-count>${count}</strong>`; });
@@ -5085,11 +5093,18 @@ function applyLanguage() {
   els.heightValue?.setAttribute('title', `${t('heightMin')} / ${t('heightMax')}`);
 }
 
+// The narrow-panel status dot is coloured purely from this attribute, so every
+// textual status update must keep it in sync (amber active / green complete / red failed).
+function setScanStatusText(text, scanState = 'active') {
+  setText(els.scanStatus, text);
+  if (els.scanStatus) els.scanStatus.dataset.scanState = scanState;
+}
+
 function setScanPhase(phase) {
   state.scanPhase = phase;
   const text = t(phase);
   if (text) {
-    setText(els.scanStatus, text);
+    setScanStatusText(text, phase === 'complete' ? 'complete' : (phase === 'failed' || phase === 'cancelled') ? 'failed' : 'active');
     setText(els.loadingLabel, text);
   }
 }
@@ -5121,7 +5136,7 @@ function updateScanStats() {
 }
 
 function updateScanStatus() {
-  els.scanStatus.textContent = `${t('imageCount', { count: state.images.length })}${state.duplicateCount ? ` · ${t('duplicates', { count: state.duplicateCount })}` : ''}`;
+  setScanStatusText(`${t('imageCount', { count: state.images.length })}${state.duplicateCount ? ` · ${t('duplicates', { count: state.duplicateCount })}` : ''}`, 'complete');
 }
 function fileName(url) { try { return decodeURIComponent(new URL(url).pathname.split('/').pop() || 'image'); } catch { return 'image'; } }
 function getDomainLetter(url) { try { return new URL(url).hostname.replace(/^www\./, '').slice(0, 1).toUpperCase() || '◎'; } catch { return '◎'; } }

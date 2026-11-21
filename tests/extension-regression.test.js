@@ -654,3 +654,38 @@ test('text scale follows the active tab zoom without scaling the whole panel', (
   assert.match(read('popup.css'), /font-size: calc\(10px \* var\(--browser-text-scale, 1\)\)/);
   assert.doesNotMatch(read('popup.css'), /body \{[^}]*zoom:/s);
 });
+
+test('narrow viewports keep heading controls grouped and status feedback visible', () => {
+  const css = read('popup.css');
+
+  // The 3.4.0 global rules sit after the original 390px media query, so the
+  // narrow-viewport fixes must be the final layer or they get overridden.
+  assert.ok(css.indexOf('narrow-viewport refinements') > css.indexOf('.app-shell { box-sizing: border-box'),
+    'narrow-viewport block must come after the 3.4.0 global rules');
+
+  // A zero-height flex break splits the heading into a title group and a
+  // controls group, so search/sort/selection tools stay together on one row.
+  assert.match(css, /@media \(max-width: 600px\) \{\s*\.results-heading \{/);
+  assert.match(css, /\.results-heading::before \{[^}]*flex: 0 0 100%[^}]*order: 5/s);
+  assert.match(css, /\.results-heading > \.search-box \{[^}]*order: 6/s);
+  assert.match(css, /\.results-heading > \.sort-control \{[^}]*order: 7/s);
+  assert.match(css, /\.results-heading > \.selection-tools \{[^}]*order: 8/s);
+
+  // Icon-only tabs, a three-column grid, and a state-coloured status dot.
+  assert.match(css, /\.view-tab \.view-tab-text \{ display: none; \}/);
+  assert.match(css, /\.image-grid \{ grid-template-columns: repeat\(3, minmax\(0, 1fr\)\); \}/);
+  assert.match(css, /\.scan-status\[data-scan-state="complete"\] \{ background: #2e9e63; \}/);
+  assert.match(css, /\.scan-status\[data-scan-state="failed"\] \{ background: #d64545; \}/);
+
+  // The rescan button collapses to its icon instead of stacking two glyphs.
+  assert.match(css, /\.scan-action-label \{ display: none; \}/);
+
+  // Every status update keeps the dot's state attribute in sync, and the
+  // search hint shortens on narrow panels (including after a panel resize).
+  assert.match(popup, /function setScanStatusText/);
+  assert.match(popup, /els\.scanStatus\.dataset\.scanState = scanState/);
+  assert.doesNotMatch(popup, /els\.scanStatus\.textContent =/);
+  assert.match(popup, /function updateSearchPlaceholder/);
+  assert.match(popup, /window\.innerWidth <= 390 \? t\('searchPageShort'\) : t\('searchPage'\)/);
+  assert.match(popup, /window\.addEventListener\('resize', \(\) => \{ updateSearchPlaceholder\(\); \}\)/);
+});
