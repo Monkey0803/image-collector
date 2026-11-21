@@ -18,7 +18,7 @@ const state = {
   pageRecords: [],
   lastScan: null,
   historyScans: new Map(),
-  saveAs: true,
+  saveAs: false,
   scanId: 0,
   scanPhase: 'idle',
   searchQuery: '',
@@ -88,7 +88,7 @@ const state = {
 const SMART_COLLECTIONS_VERSION = 1;
 const SMART_RANGE_FIELDS = ['width', 'height', 'size', 'aspect'];
 const SMART_CONDITION_FIELDS = ['width', 'height', 'size', 'aspect', 'format', 'domain', 'source', 'date'];
-const SMART_FORMATS = ['jpeg', 'png', 'webp', 'avif', 'other'];
+const SMART_FORMATS = ['jpeg', 'png', 'webp', 'avif', 'animated', 'other'];
 const SMART_DATE_PRESETS = ['today', 'week', 'month', 'older'];
 const SYNC_SETTING_KEYS = ['scanRules', 'siteAdapters', 'smartCollectionsVersion', 'smartCollections', 'scanLimit', 'autoScroll', 'zipLayout', 'conflictAction', 'filenameTemplate', 'dateFolder', 'tabScope', 'themeMode', 'compactMode'];
 
@@ -256,16 +256,35 @@ async function readBrowserDefaultTextScale(tabId = null) {
   return readExtensionDefaultTextScale();
 }
 
+let lastInitNotice = 0;
 function blockInteractionDuringInit(event) {
   if (interactionReady || !event.target.closest?.('button, input, select, textarea')) return;
   event.preventDefault();
   event.stopImmediatePropagation();
+  // 3.7.0：就绪前吞掉交互会让面板看起来“点不动”。给出可见提示并标注忙碌态，
+  // 把无声失败变成可解释的短暂等待；节流避免连续按键刷屏。
+  const now = Date.now();
+  if (now - lastInitNotice > 1500) {
+    lastInitNotice = now;
+    showToast(t('initInterrupted'));
+  }
 }
 
 document.addEventListener('click', blockInteractionDuringInit, true);
 document.addEventListener('change', blockInteractionDuringInit, true);
 document.addEventListener('input', blockInteractionDuringInit, true);
 document.addEventListener('keydown', blockInteractionDuringInit, true);
+
+// 3.7.0：统一释放初始化闸门——去掉 aria-busy、淡出遮罩并标记交互就绪。
+function markInteractionReady() {
+  if (interactionReady) return;
+  interactionReady = true;
+  document.body.setAttribute('aria-busy', 'false');
+  if (els.initGate) {
+    els.initGate.hidden = true;
+    setText(els.initGateLabel, '');
+  }
+}
 
 function applyBrowserTextScale(zoomFactor = 1) {
   const tabZoom = Number(zoomFactor);
@@ -440,6 +459,7 @@ const $ = (selector) => document.querySelector(selector);
 const on = (element, eventName, handler, options) => element?.addEventListener(eventName, handler, options);
 const setText = (element, value) => { if (element) element.textContent = value; };
 const els = {
+  initGate: $('#initGate'), initGateLabel: $('#initGateLabel'),
   refresh: $('#refreshButton'),
   scanStatus: $('#scanStatus'),
   pageTitle: $('#pageTitle'), pageUrl: $('#pageUrl'), pageIcon: $('#pageIcon'), scanStats: $('#scanStats'), retryMetadata: $('#retryMetadata'), scopeIndicator: $('#scopeIndicator'), multiPagePanel: $('#multiPagePanel'), multiPageEyebrow: $('#multiPageEyebrow'), multiPageTitle: $('#multiPageTitle'), multiPageScopeLabel: $('#multiPageScopeLabel'), multiPageScope: $('#multiPageScope'), multiPageStatus: $('#multiPageStatus'), multiPageHint: $('#multiPageHint'), tabSelectionList: $('#tabSelectionList'), selectAllTabs: $('#selectAllTabs'), clearSelectedTabs: $('#clearSelectedTabs'), scanMultiPage: $('#scanMultiPage'),
@@ -450,10 +470,10 @@ const els = {
   sizeValue: $('#sizeValue'), sizeTrack: $('#sizeTrack'), minSize: $('#minSize'), maxSize: $('#maxSize'), sizeEditor: $('#sizeEditor'), sizeMinValue: $('#sizeMinValue'), sizeMaxValue: $('#sizeMaxValue'),
   aspectVisualTabs: [...document.querySelectorAll('.aspect-visual-tab')], minAspect: $('#minAspect'), maxAspect: $('#maxAspect'), aspectTrack: $('#aspectTrack'), aspectRangeValue: $('#aspectRangeValue'),
   filterPanel: $('#filterPanel'), filterActiveCount: $('#filterActiveCount'), filterEyebrow: $('#filterEyebrow'), filterTitle: $('#filterTitle'), clearFilters: $('#clearFilters'), selectAll: $('#selectAll'), resultCount: $('#resultCount'), resultsTitle: $('#resultsTitle'), resultsEyebrow: $('#resultsEyebrow'), selectionToolsLabel: $('#selectionToolsLabel'), downloadOptionsLabel: $('#downloadOptionsLabel'), downloadEyebrow: $('#downloadEyebrow'), scanActionLabel: document.querySelector('.scan-action-label'),
-  selectedSummary: $('#selectedSummary'), searchInput: $('#searchInput'), sortSelect: $('#sortSelect'),
+  selectedSummary: $('#selectedSummary'), searchInput: $('#searchInput'), sortSelect: $('#sortSelect'), shortcutHint: $('#shortcutHint'),
   originalOnly: $('#originalOnly'), aspectRatio: $('#aspectRatio'), scanLimit: $('#scanLimit'), zipLayout: $('#zipLayout'), conflictAction: $('#conflictAction'), filenameTemplate: $('#filenameTemplate'), dateFolder: $('#dateFolder'), sourceTabs: [...document.querySelectorAll('[data-source]')], exportMarkdown: $('#exportMarkdown'), exportHtml: $('#exportHtml'), exportContactSheet: $('#exportContactSheet'),
   pageView: $('#pageView'), pageViewButton: $('#pageViewButton'), libraryViewButton: $('#libraryViewButton'), historyViewButton: $('#historyViewButton'), taskViewButton: $('#taskViewButton'), settingsViewButton: $('#settingsViewButton'),
-  libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryScope: $('#libraryScope'), libraryDuplicateScope: $('#libraryDuplicateScope'), duplicateStrategy: $('#duplicateStrategy'), similarThreshold: $('#similarThreshold'), duplicateGroupList: $('#duplicateGroupList'), cleanupInvalid: $('#cleanupInvalid'), cleanupUnfavorited: $('#cleanupUnfavorited'), cleanupDuplicates: $('#cleanupDuplicates'), librarySmartCollection: $('#librarySmartCollection'), syncPageFilters: $('#syncPageFilters'), reapplySmartCollections: $('#reapplySmartCollections'), newSmartCollection: $('#newSmartCollection'), smartCollectionTitle: $('#smartCollectionTitle'), smartCollectionHint: $('#smartCollectionHint'), smartCollectionEditor: $('#smartCollectionEditor'), smartCollectionName: $('#smartCollectionName'), smartCollectionLogic: $('#smartCollectionLogic'), smartRuleNameLabel: $('#smartRuleNameLabel'), smartRuleLogicLabel: $('#smartRuleLogicLabel'), smartConditionsLabel: $('#smartConditionsLabel'), addSmartCondition: $('#addSmartCondition'), smartConditionList: $('#smartConditionList'), smartRulePreview: $('#smartRulePreview'), cancelSmartCollection: $('#cancelSmartCollection'), saveSmartCollection: $('#saveSmartCollection'), smartCollectionList: $('#smartCollectionList'), smartCollectionEmpty: $('#smartCollectionEmpty'),
+  libraryView: $('#libraryView'), favoriteCount: $('#favoriteCount'), refreshLibrary: $('#refreshLibrary'), libraryExactLabel: $('#libraryExactLabel'), libraryExportLabel: $('#libraryExportLabel'), libraryCleanupLabel: $('#libraryCleanupLabel'), libraryScope: $('#libraryScope'), libraryDuplicateScope: $('#libraryDuplicateScope'), duplicateStrategy: $('#duplicateStrategy'), similarThreshold: $('#similarThreshold'), duplicateGroupList: $('#duplicateGroupList'), cleanupInvalid: $('#cleanupInvalid'), cleanupUnfavorited: $('#cleanupUnfavorited'), cleanupDuplicates: $('#cleanupDuplicates'), librarySmartCollection: $('#librarySmartCollection'), syncPageFilters: $('#syncPageFilters'), reapplySmartCollections: $('#reapplySmartCollections'), newSmartCollection: $('#newSmartCollection'), smartCollectionTitle: $('#smartCollectionTitle'), smartCollectionHint: $('#smartCollectionHint'), smartCollectionEditor: $('#smartCollectionEditor'), smartCollectionName: $('#smartCollectionName'), smartCollectionLogic: $('#smartCollectionLogic'), smartRuleNameLabel: $('#smartRuleNameLabel'), smartRuleLogicLabel: $('#smartRuleLogicLabel'), smartConditionsLabel: $('#smartConditionsLabel'), addSmartCondition: $('#addSmartCondition'), smartConditionList: $('#smartConditionList'), smartRulePreview: $('#smartRulePreview'), cancelSmartCollection: $('#cancelSmartCollection'), saveSmartCollection: $('#saveSmartCollection'), smartCollectionList: $('#smartCollectionList'), smartCollectionEmpty: $('#smartCollectionEmpty'),
   librarySearch: $('#librarySearch'), libraryCollection: $('#libraryCollection'), librarySummary: $('#librarySummary'), libraryGrid: $('#libraryGrid'), libraryEmpty: $('#libraryEmpty'), newCollection: $('#newCollection'), exportLibrary: $('#exportLibrary'), exportLibraryResultsJson: $('#exportLibraryResultsJson'), exportLibraryResultsCsv: $('#exportLibraryResultsCsv'), exportLibraryMarkdown: $('#exportLibraryMarkdown'), exportLibraryHtml: $('#exportLibraryHtml'), exportLibraryContactSheet: $('#exportLibraryContactSheet'), importLibrary: $('#importLibrary'), importLibraryFile: $('#importLibraryFile'), libraryBatchToolbar: $('#libraryBatchToolbar'), selectAllLibrary: $('#selectAllLibrary'), selectLoadedLibrary: $('#selectLoadedLibrary'), librarySelectedSummary: $('#librarySelectedSummary'), invertLibrarySelection: $('#invertLibrarySelection'), clearLibrarySelection: $('#clearLibrarySelection'), bulkFavorite: $('#bulkFavorite'), bulkTag: $('#bulkTag'), bulkRemoveTag: $('#bulkRemoveTag'), bulkCollection: $('#bulkCollection'), bulkDelete: $('#bulkDelete'), libraryDownloadSelected: $('#libraryDownloadSelected'), libraryZipSelected: $('#libraryZipSelected'), libraryFormat: $('#libraryFormat'), libraryMinWidth: $('#libraryMinWidth'), libraryMaxWidth: $('#libraryMaxWidth'), libraryMinHeight: $('#libraryMinHeight'), libraryMaxHeight: $('#libraryMaxHeight'), libraryMinSize: $('#libraryMinSize'), libraryMaxSize: $('#libraryMaxSize'), librarySort: $('#librarySort'),
   libraryMinSizeRange: $('#libraryMinSizeRange'), libraryMaxSizeRange: $('#libraryMaxSizeRange'), librarySizeTrack: $('#librarySizeTrack'), librarySizeRangeValue: $('#librarySizeRangeValue'), librarySizeDistribution: $('#librarySizeDistribution'), librarySizePresets: $('#librarySizePresets'), libraryMinAspectRange: $('#libraryMinAspectRange'), libraryMaxAspectRange: $('#libraryMaxAspectRange'), libraryAspectTrack: $('#libraryAspectTrack'), libraryAspectRangeValue: $('#libraryAspectRangeValue'), libraryAspectDistribution: $('#libraryAspectDistribution'), libraryAspectPresets: $('#libraryAspectPresets'),
   historyView: $('#historyView'), clearHistory: $('#clearHistory'), refreshHistory: $('#refreshHistory'), scanHistory: $('#scanHistory'),
@@ -462,7 +482,7 @@ const els = {
   exportJson: $('#exportJson'), exportCsv: $('#exportCsv'),
   includeSelectors: $('#includeSelectors'), excludeSelectors: $('#excludeSelectors'), scanCssBackground: $('#scanCssBackground'), scanVideoPosters: $('#scanVideoPosters'), includeIframes: $('#includeIframes'), saveScanRules: $('#saveScanRules'), adapterHost: $('#adapterHost'), adapterSelector: $('#adapterSelector'), adapterAttributes: $('#adapterAttributes'), adapterCollection: $('#adapterCollection'), saveSiteAdapter: $('#saveSiteAdapter'), clearSiteAdapter: $('#clearSiteAdapter'), siteAdapterList: $('#siteAdapterList'), syncSettings: $('#syncSettings'), saveSyncSettings: $('#saveSyncSettings'), exportScanConfig: $('#exportScanConfig'), importScanConfig: $('#importScanConfig'), importScanConfigFile: $('#importScanConfigFile'),
   formatTabs: [...document.querySelectorAll('[data-format]')],
-  grid: $('#imageGrid'), empty: $('#emptyState'), loading: $('#loadingState'), loadingLabel: $('#loadingLabel'), error: $('#errorState'),
+  grid: $('#imageGrid'), empty: $('#emptyState'), emptyClearFilters: $('#emptyClearFilters'), loading: $('#loadingState'), loadingLabel: $('#loadingLabel'), error: $('#errorState'),
   loadMoreImages: $('#loadMoreImages'), loadMoreLibrary: $('#loadMoreLibrary'),
   saveAs: $('#saveAs'), download: $('#downloadButton'), zip: $('#zipButton'), selectedCount: $('#selectedCount'),
   downloadProgress: $('#downloadProgress'), progressLabel: $('#progressLabel'), progressValue: $('#progressValue'),
@@ -556,7 +576,7 @@ function handleInitError(error) {
   // An unexpected startup error must never leave the default spinner running
   // forever. Keep the popup interactive and expose a useful retry path.
   try {
-    interactionReady = true;
+    markInteractionReady();
     setLoading(false);
     if (els.refresh) els.refresh.disabled = false;
     if (els.error) {
@@ -576,7 +596,7 @@ async function init() {
   applyLanguage();
   syncBrowserTextScale().catch(() => {});
 
-  const defaults = { filters: {}, saveAs: true, searchQuery: '', sort: 'page', originalOnly: false, aspectRatio: 'all', zipLayout: 'flat', conflictAction: 'uniquify', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false, tabScope: 'current', selectedTabIds: [], themeMode: 'auto', compactMode: false, scanRules: normalizeScanRules(), siteAdapters: [], smartCollectionsVersion: SMART_COLLECTIONS_VERSION, smartCollections: [], syncSettings: false };
+  const defaults = { filters: {}, saveAs: false, searchQuery: '', sort: 'page', originalOnly: false, aspectRatio: 'all', zipLayout: 'flat', conflictAction: 'uniquify', filenameTemplate: '{name}', dateFolder: false, language: null, filterPresets: [], selectionPresets: [], scanLimit: 500, autoScroll: false, tabScope: 'current', selectedTabIds: [], themeMode: 'auto', compactMode: false, scanRules: normalizeScanRules(), siteAdapters: [], smartCollectionsVersion: SMART_COLLECTIONS_VERSION, smartCollections: [], syncSettings: false };
   let saved = defaults;
   try {
     saved = (await withTimeout(() => chrome.storage.local.get(defaults), 1500, t('timeoutSettings'))) || defaults;
@@ -594,7 +614,7 @@ async function init() {
   const configuration = { ...saved, ...(synced || {}) };
   const userChangedLanguage = languageTouched;
   const savedFilters = saved.filters && typeof saved.filters === 'object' ? saved.filters : {};
-  state.saveAs = typeof saved.saveAs === 'boolean' ? saved.saveAs : true;
+  state.saveAs = typeof saved.saveAs === 'boolean' ? saved.saveAs : false;
   state.searchQuery = typeof saved.searchQuery === 'string' ? saved.searchQuery : '';
   state.sort = ['page', 'width-desc', 'height-desc', 'area-desc', 'name-asc'].includes(saved.sort) ? saved.sort : 'page';
   state.originalOnly = Boolean(saved.originalOnly);
@@ -660,7 +680,7 @@ async function init() {
   renderSmartCollectionManager();
   renderSiteAdapters();
   applyLanguage();
-  interactionReady = true;
+  markInteractionReady();
   if (state.smartCollectionConfigInvalid) showToast(t('smartRuleVersionUnsupported'));
   const pendingShortcut = await consumePendingShortcut();
   if (pendingShortcut === 'scan-current-page') {
@@ -849,34 +869,8 @@ function bindEvents() {
     els.multiPagePanel.scrollIntoView({ block: 'nearest' });
   });
   on(els.refresh, 'click', scanPage);
-  on(els.clearFilters, 'click', () => {
-    if (els.minWidth) els.minWidth.value = 0;
-    if (els.maxWidth) els.maxWidth.value = els.maxWidth.max;
-    if (els.minHeight) els.minHeight.value = 0;
-    if (els.maxHeight) els.maxHeight.value = els.maxHeight.max;
-    if (els.minSize) els.minSize.value = 0;
-    if (els.maxSize) els.maxSize.value = els.maxSize.max;
-    if (els.minAspect) els.minAspect.value = els.minAspect.min;
-    if (els.maxAspect) els.maxAspect.value = els.maxAspect.max;
-    if (els.searchInput) els.searchInput.value = '';
-    if (els.sortSelect) els.sortSelect.value = 'page';
-    if (els.originalOnly) els.originalOnly.checked = false;
-    if (els.aspectRatio) els.aspectRatio.value = 'all';
-    state.filterValues = {
-      width: { min: null, max: null },
-      height: { min: null, max: null },
-      size: { min: null, max: null }
-    };
-    state.aspectRange = { min: 0.25, max: 5 };
-    state.searchQuery = '';
-    state.sort = 'page';
-    state.originalOnly = false;
-    state.aspectRatio = 'all';
-    state.format = 'all';
-    state.source = 'all';
-    renderSourceTabs();
-    scheduleApplyFilters();
-  });
+  on(els.clearFilters, 'click', clearAllFilters);
+  on(els.emptyClearFilters, 'click', clearAllFilters);
   on(els.filterPreset, 'change', applyFilterPreset);
   on(els.saveFilterPreset, 'click', saveFilterPreset);
   on(els.deleteFilterPreset, 'click', deleteFilterPreset);
@@ -1059,6 +1053,10 @@ function bindEvents() {
     if (event.key === 'ArrowRight') { event.preventDefault(); navigatePreview(1); }
   });
   document.addEventListener('keydown', (event) => {
+    // 3.7.0：这些快捷键是“当前页面”视图专用。此前在素材库/历史/任务/设置页按
+    // ⌘A 或 / 会点到隐藏的页面控件并把用户意外切回页面视图，属于跨视图误操作。
+    if (state.view !== 'page') return;
+    if (!els.previewModal.hidden || !els.batchActionModal.hidden) return;
     if (event.target.matches('input, textarea, select')) return;
     const key = event.key.toLowerCase();
     if ((event.metaKey || event.ctrlKey) && key === 'a') { event.preventDefault(); els.selectAll.click(); return; }
@@ -2136,6 +2134,7 @@ function exportRecord(image, includeLibraryFields = false) {
     url: image?.url || '',
     displayUrl: image?.displayUrl || '',
     originalUrl: image?.originalUrl || '',
+    originalCandidates: Array.isArray(image?.originalCandidates) ? image.originalCandidates.slice(0, 12) : [],
     width: image?.width || 0,
     height: image?.height || 0,
     format: image?.format || 'other',
@@ -2359,7 +2358,7 @@ function restoreScanFilters(filters = {}) {
     max: Math.max(.25, Math.min(5, Number(source.aspectRange?.max) || 5))
   };
   if (state.aspectRange.min > state.aspectRange.max) state.aspectRange.max = state.aspectRange.min;
-  state.format = ['all', 'jpeg', 'png', 'webp', 'avif', 'other'].includes(source.format) ? source.format : 'all';
+  state.format = ['all', 'jpeg', 'png', 'webp', 'avif', 'animated', 'other'].includes(source.format) ? source.format : 'all';
   state.source = ['all', 'IMG', 'CSS', 'VIDEO', 'RULE', 'other'].includes(source.source) ? source.source : 'all';
   state.searchQuery = String(source.searchQuery || '');
   state.sort = ['page', 'width-desc', 'height-desc', 'area-desc', 'name-asc'].includes(source.sort) ? source.sort : 'page';
@@ -2623,9 +2622,12 @@ async function retryAllTasks() {
 }
 
 function previewCandidates(image, preferDisplay = false) {
+  const originals = Array.isArray(image?.originalCandidates) ? image.originalCandidates : [];
+  // 3.7.0：大图预览/原图地址优先走原图候选，缩略图仅作为最后回退。
+  // preferDisplay=true 仅用于卡片缩略图与其"使用网页地址"回退，保持原样。
   const urls = preferDisplay
     ? [image?.displayUrl, image?.url, image?.originalUrl, image?.sourceUrl]
-    : [image?.url, image?.displayUrl, image?.originalUrl, image?.sourceUrl];
+    : [image?.url, ...originals, image?.originalUrl, image?.displayUrl, image?.sourceUrl];
   return [...new Set([...urls, ...(Array.isArray(image?.candidateUrls) ? image.candidateUrls : [])]
     .map((url) => String(url || '').trim())
     .filter(Boolean))];
@@ -3501,6 +3503,9 @@ async function collectPageImages(options = {}) {
     if (extension === 'avif') return 'avif';
     if (extension === 'gif') return 'gif';
     if (extension === 'svg') return 'svg';
+    // 3.7.0：动态图（Live Photo / 短视频）用视频格式标记，归入“其它”分类，
+    // 但下载时按真实 MIME 保存为 .mov/.mp4，保证动图不被保存成静态图片。
+    if (['mp4', 'm4v', 'mov', 'webm', 'ogv'].includes(extension)) return extension;
     return 'other';
   };
 
@@ -3513,7 +3518,27 @@ async function collectPageImages(options = {}) {
     } catch { return ''; }
   };
 
-  const imageLikeUrl = (url) => /\.(?:avif|bmp|gif|jpe?g|png|svg|webp|ico)(?:$|[?#])/i.test(url) || /[?&](?:format|fm|image|img|w|width)=/i.test(url);
+  // 3.7.0：部分 CDN 用查询参数控制图片尺寸，页面 <img> 指向缩略图变体，
+  // 原图地址可通过替换参数得到（如 X/Twitter 的 name=small → name=orig）。
+  // 只处理已知平台与已知尺寸值，避免对任意 URL 做破坏性改写。
+  const platformOriginalUrl = (rawUrl) => {
+    const url = normalizeUrl(rawUrl);
+    if (!url) return '';
+    try {
+      const parsed = new URL(url);
+      const host = parsed.hostname.toLowerCase();
+      if (!/(^|\.)twimg\.com$/.test(host) && !/(^|\.)twimg\.cn$/.test(host)) return '';
+      const name = parsed.searchParams.get('name');
+      if (!name || !['small', 'medium', 'large', 'thumb'].includes(name.toLowerCase())) return '';
+      parsed.searchParams.set('name', 'orig');
+      return parsed.href;
+    } catch { return ''; }
+  };
+
+  // 3.7.0：纳入动态图来源。视频文件后缀 + 微博 Live Photo 的
+  // video.weibo.com/media/play?livephoto=<编码地址> 中转形式（该地址直接返回 MOV）。
+  const imageLikeUrl = (url) => /\.(?:avif|bmp|gif|jpe?g|png|svg|webp|ico|mp4|m4v|mov|webm|ogv)(?:$|[?#])/i.test(url)
+    || /[?&](?:format|fm|image|img|w|width|livephoto)=/i.test(url);
 
   let skippedCount = 0;
   const add = (rawUrl, width, height, source, alt = '', options = {}) => {
@@ -3530,6 +3555,7 @@ async function collectPageImages(options = {}) {
       frameUrl: location.href,
       pageUrl: location.href,
       candidateUrls: [...new Set((options.candidateUrls || [url]).map(normalizeUrl).filter(Boolean))].slice(0, 12),
+      originalCandidates: [...new Set((options.originalCandidates || [options.original ? url : null]).map(normalizeUrl).filter(Boolean))].slice(0, 12),
       sourceElement: options.sourceElement || '',
       iframe: window.self !== window.top,
       cacheState: 'unknown',
@@ -3553,7 +3579,11 @@ async function collectPageImages(options = {}) {
     found.push(entry);
   };
   const elementSummary = (element) => element ? `<${String(element.tagName || '').toLowerCase()}${element.id ? ` id="${String(element.id).slice(0,80)}"` : ''}${element.className && typeof element.className === 'string' ? ` class="${element.className.slice(0,120)}"` : ''}>` : '';
-  const imageCandidates = (image) => [image?.currentSrc, image?.src, image?.getAttribute?.('srcset'), image?.getAttribute?.('data-srcset'), image?.getAttribute?.('data-src'), image?.getAttribute?.('data-original')].flatMap((value) => String(value || '').split(',').map((part) => part.trim().split(/\s+/)[0])).map(normalizeUrl).filter(Boolean);
+  const imageCandidates = (image) => [...[
+    image?.currentSrc, image?.src, image?.getAttribute?.('srcset'), image?.getAttribute?.('data-srcset'),
+    image?.getAttribute?.('data-src'), image?.getAttribute?.('data-original')
+  ].flatMap((value) => String(value || '').split(',').map((part) => part.trim().split(/\s+/)[0])).map(normalizeUrl).filter(Boolean),
+  ...[image?.src, image?.currentSrc].map(platformOriginalUrl).filter(Boolean)];
 
   const parseSrcset = (value) => String(value || '').split(',').map((part) => {
     const pieces = part.trim().split(/\s+/);
@@ -3571,6 +3601,12 @@ async function collectPageImages(options = {}) {
       if (url) candidates.push({ url, quality, original, widthHint });
     };
     originalAttributes.forEach((attribute, index) => push(image.getAttribute(attribute), 10000 - index, true));
+    // 3.7.0：平台尺寸参数升级（X/Twitter name=small→orig）作为原图候选。
+    // 显式 data-* 原图属性优先级更高；平台升级次之，仍高于 srcset/currentSrc。
+    for (const attribute of ['src', 'currentSrc', 'data-src', 'data-original']) {
+      const upgraded = platformOriginalUrl(attribute === 'currentSrc' ? image.currentSrc : image.getAttribute(attribute));
+      if (upgraded) push(upgraded, 9850, true);
+    }
     const parentLink = image.closest('a[href]')?.getAttribute('href');
     if (parentLink && imageLikeUrl(normalizeUrl(parentLink))) push(parentLink, 9000, true);
     image.closest('picture')?.querySelectorAll('source[srcset]').forEach((source) => {
@@ -3587,7 +3623,13 @@ async function collectPageImages(options = {}) {
     const currentIsPlaceholder = !currentUrl || currentUrl.startsWith('data:') || image.naturalWidth <= 1 || image.naturalHeight <= 1;
     ['data-lazy-src', 'data-src', 'data-fallback-src'].forEach((attribute, index) => push(image.getAttribute(attribute), (currentIsPlaceholder ? 5600 : 4500) - index, currentIsPlaceholder));
     candidates.sort((left, right) => right.quality - left.quality || right.widthHint - left.widthHint);
-    return candidates[0] || null;
+    const best = candidates[0] || null;
+    if (best) {
+      // 3.7.0：保留所有原图候选。主 URL 失败时，下载/预览应先尝试其它原图地址，
+      // 而不是回退到页面当前显示的缩略图。
+      best.originalCandidates = [...new Set(candidates.filter((candidate) => candidate.original).map((candidate) => candidate.url))];
+    }
+    return best;
   };
 
   const probeDimensions = (url, fallbackWidth, fallbackHeight) => new Promise((resolve) => {
@@ -3635,7 +3677,7 @@ async function collectPageImages(options = {}) {
       const chosen = chooseImageSource(element);
       if (chosen) add(chosen.url, element.naturalWidth || element.width, element.naturalHeight || element.height, source, element.alt || '', {
         displayUrl: normalizeUrl(element.currentSrc || element.src || element.getAttribute('data-src')) || chosen.url,
-        candidateUrls: imageCandidates(element), sourceElement: elementSummary(element),
+        candidateUrls: imageCandidates(element), originalCandidates: chosen.originalCandidates, sourceElement: elementSummary(element),
         original: chosen.original, quality: chosen.quality, widthHint: chosen.widthHint, adapterIds: adapterIdsFor(element), element
       });
     }
@@ -3664,7 +3706,7 @@ async function collectPageImages(options = {}) {
     const displayUrl = normalizeUrl(image.currentSrc || image.src || image.getAttribute('data-src')) || chosen.url;
     add(chosen.url, image.naturalWidth || image.width, image.naturalHeight || image.height, 'IMG', image.alt || '', { sizeFromElement: !image.naturalWidth,
       displayUrl,
-      candidateUrls: imageCandidates(image), sourceElement: elementSummary(image),
+      candidateUrls: imageCandidates(image), originalCandidates: chosen.originalCandidates, sourceElement: elementSummary(image),
       original: chosen.original || chosen.url !== displayUrl,
       quality: chosen.quality,
       widthHint: chosen.widthHint,
@@ -3677,6 +3719,34 @@ async function collectPageImages(options = {}) {
     if (excluded(video) || (includeSelectors.length && !matchesAny(video, includeSelectors))) continue;
     const rect = video.getBoundingClientRect();
     add(video.getAttribute('poster'), video.videoWidth || rect.width, video.videoHeight || rect.height, 'VIDEO', options.language === 'en' ? 'Video poster' : '视频封面', { quality: 5500, adapterIds: adapterIdsFor(video), sizeFromElement: true });
+  }
+  // 3.7.0：采集动态图本体。微博 Live Photo 之类把“动图”渲染成 <video> 或带
+  // videoSrc 的元素，静态 jpg 只是封面；这里把视频/动图地址加入结果，
+  // 让它能被单独预览与下载（下载侧按真实 MIME 保存为 .mov/.mp4）。
+  const animatedLabel = options.language === 'en' ? 'Animated image' : '动态图';
+  for (const video of document.querySelectorAll('video')) {
+    if (expired()) break;
+    if (excluded(video) || (includeSelectors.length && !matchesAny(video, includeSelectors))) continue;
+    const rect = video.getBoundingClientRect();
+    const videoUrls = [video.currentSrc, video.getAttribute('src'),
+      ...[...video.querySelectorAll('source[src]')].map((source) => source.getAttribute('src'))];
+    for (const raw of videoUrls) {
+      const url = normalizeUrl(raw);
+      if (!url || !imageLikeUrl(url)) continue;
+      add(url, video.videoWidth || rect.width, video.videoHeight || rect.height, 'VIDEO', animatedLabel, { quality: 5500, adapterIds: adapterIdsFor(video), sizeFromElement: true });
+    }
+  }
+  for (const element of document.querySelectorAll('[videoSrc], [data-video-src], [data-video-url], [data-livephoto]')) {
+    if (expired()) break;
+    if (excluded(element) || (includeSelectors.length && !matchesAny(element, includeSelectors))) continue;
+    let raw = '';
+    for (const attribute of ['videoSrc', 'data-video-src', 'data-video-url', 'data-livephoto']) {
+      const value = element.getAttribute?.(attribute);
+      if (value && imageLikeUrl(normalizeUrl(value))) { raw = value; break; }
+    }
+    if (!raw) continue;
+    const rect = element.getBoundingClientRect?.() || { width: 0, height: 0 };
+    add(raw, element.naturalWidth || rect.width, element.naturalHeight || rect.height, 'VIDEO', animatedLabel, { quality: 5500, adapterIds: adapterIdsFor(element), sizeFromElement: true });
   }
   for (const object of document.querySelectorAll('object[data]')) {
     if (expired()) break;
@@ -3940,7 +4010,7 @@ function sortImages(images) {
 }
 
 function renderFormatTabs() {
-  const counts = { all: state.dimensionFiltered.length, jpeg: 0, png: 0, webp: 0, avif: 0, other: 0 };
+  const counts = { all: state.dimensionFiltered.length, jpeg: 0, png: 0, webp: 0, avif: 0, animated: 0, other: 0 };
   state.dimensionFiltered.forEach((image) => {
     const category = formatCategory(image.format);
     counts[category] = (counts[category] || 0) + 1;
@@ -3997,7 +4067,12 @@ function matchesAspectRange(image) {
   return value >= state.aspectRange.min && value <= state.aspectRange.max;
 }
 
-function formatCategory(format) { return ['jpeg', 'png', 'webp', 'avif'].includes(format) ? format : 'other'; }
+// 3.7.0：动态图（GIF / Live Photo / 短视频）归入独立的“动态图”分类，便于单独筛选。
+function formatCategory(format) {
+  if (['jpeg', 'png', 'webp', 'avif'].includes(format)) return format;
+  if (['gif', 'mp4', 'm4v', 'mov', 'webm', 'ogv'].includes(format)) return 'animated';
+  return 'other';
+}
 
 function updateRangeLimits() {
   const dimensions = {
@@ -4232,12 +4307,64 @@ function updateScopeIndicator() {
   els.scopeIndicator.title = t('scopeIndicatorHint');
 }
 
+function clearAllFilters() {
+  if (els.minWidth) els.minWidth.value = 0;
+  if (els.maxWidth) els.maxWidth.value = els.maxWidth.max;
+  if (els.minHeight) els.minHeight.value = 0;
+  if (els.maxHeight) els.maxHeight.value = els.maxHeight.max;
+  if (els.minSize) els.minSize.value = 0;
+  if (els.maxSize) els.maxSize.value = els.maxSize.max;
+  if (els.minAspect) els.minAspect.value = els.minAspect.min;
+  if (els.maxAspect) els.maxAspect.value = els.maxAspect.max;
+  if (els.searchInput) els.searchInput.value = '';
+  if (els.sortSelect) els.sortSelect.value = 'page';
+  if (els.originalOnly) els.originalOnly.checked = false;
+  if (els.aspectRatio) els.aspectRatio.value = 'all';
+  state.filterValues = {
+    width: { min: null, max: null },
+    height: { min: null, max: null },
+    size: { min: null, max: null }
+  };
+  state.aspectRange = { min: 0.25, max: 5 };
+  state.searchQuery = '';
+  state.sort = 'page';
+  state.originalOnly = false;
+  state.aspectRatio = 'all';
+  state.format = 'all';
+  state.source = 'all';
+  renderSourceTabs();
+  scheduleApplyFilters();
+}
+
+// 3.7.0：空状态区分“页面无图 / 被筛选过滤 / 扫描失败”，给出针对性引导，
+  // 而不是对所有情况都让用户去“放宽尺寸筛选”。
+function updateEmptyState() {
+  const title = document.querySelector('#emptyState strong');
+  const hint = document.querySelector('#emptyState span');
+  let titleKey = 'emptyNoImages';
+  let hintKey = 'emptyNoImagesHint';
+  if (state.scanPhase === 'failed') {
+    titleKey = 'scanFailedEmpty';
+    hintKey = 'scanFailedEmptyHint';
+  } else if (state.images.length > 0) {
+    titleKey = 'emptyFiltered';
+    hintKey = 'emptyFilteredHint';
+  }
+  if (title) title.textContent = t(titleKey);
+  if (hint) hint.textContent = t(hintKey);
+  if (els.emptyClearFilters) {
+    els.emptyClearFilters.textContent = t('emptyClearFilters');
+    els.emptyClearFilters.hidden = titleKey !== 'emptyFiltered';
+  }
+}
+
 function render() {
   updateMetadataNotice();
   updateScopeIndicator();
   els.grid.replaceChildren();
   els.resultCount.textContent = t('imageCount', { count: state.filtered.length });
   els.empty.hidden = state.filtered.length !== 0 || !els.loading.hidden;
+  if (!els.empty.hidden) updateEmptyState();
   els.selectAll.checked = state.filtered.length > 0 && state.filtered.every((image) => state.selected.has(image.id));
   const visibleImages = state.filtered.slice(0, state.pageRenderLimit);
   const fragment = document.createDocumentFragment();
@@ -4249,7 +4376,9 @@ function render() {
   }
   const selected = selectedImages();
   els.selectedCount.textContent = selected.length;
-  els.selectedSummary.textContent = t('selectedCount', { count: selected.length });
+  // 3.7.0：标题栏改为显示“已选/共”占比，按钮内数字保留为待下载数量。
+  // 两处从“重复的同一个数字”变为各司其职，消除选择反馈的困惑。
+  els.selectedSummary.textContent = t('selectedSummary', { count: selected.length, total: state.filtered.length });
   els.download.disabled = selected.length === 0;
   els.zip.disabled = selected.length === 0;
   if (els.pageFavoriteSelected) els.pageFavoriteSelected.disabled = selected.length === 0 || state.pageBatchBusy;
@@ -4442,7 +4571,7 @@ function dateStamp() {
 
 const TRANSLATIONS = {
   zh: {
-    page: '当前页面', library: '素材库', history: '历史', tasks: '任务', filterPreset: '筛选预设', selectionPreset: '选择预设', clear: '清除', width: '宽度', height: '高度', format: '格式', formatHint: '按文件类型查看', originalOnly: '仅显示原图候选', originalHint: '优先使用页面提供的高清地址', aspectRatio: '宽高比', allRatios: '全部比例', landscape: '横向图片', portrait: '纵向图片', square: '正方形', selectAll: '全选当前结果', sort: '排序', pageOrder: '页面顺序', widthDesc: '宽度：从大到小', heightDesc: '高度：从大到小', areaDesc: '尺寸：从大到小', nameAsc: '文件名：A–Z', searchPage: '搜索文件名、域名或 URL', noResults: '没有符合条件的图片', noResultsHint: '尝试放宽尺寸筛选，或重新扫描当前页面。', scanning: '正在扫描当前页面…', saveLocation: '下载时选择保存位置', downloadSupport: '支持普通文件与 ZIP', zipLayout: 'ZIP 分组', noGrouping: '不分组', bySite: '按网站', byFormat: '按格式', bySiteFormat: '按网站 / 格式', filenameTemplate: '文件名模板', dateFolder: '按日期建目录', json: '导出 JSON', csv: '导出 CSV', downloadSelected: '下载选中', zip: '下载 ZIP', zipNote: 'ZIP 会将当前选中的图片合并为一个文件，适合批量保存。',
+    page: '当前页面', library: '素材库', history: '历史', tasks: '任务', filterPreset: '筛选预设', selectionPreset: '选择预设', clear: '清除', width: '宽度', height: '高度', format: '格式', formatHint: '按文件类型查看', animated: '动态图', originalOnly: '仅显示原图候选', originalHint: '优先使用页面提供的高清地址', aspectRatio: '宽高比', allRatios: '全部比例', landscape: '横向图片', portrait: '纵向图片', square: '正方形', selectAll: '全选当前结果', sort: '排序', pageOrder: '页面顺序', widthDesc: '宽度：从大到小', heightDesc: '高度：从大到小', areaDesc: '尺寸：从大到小', nameAsc: '文件名：A–Z', searchPage: '搜索文件名、域名或 URL', noResults: '没有符合条件的图片', noResultsHint: '尝试放宽尺寸筛选，或重新扫描当前页面。', emptyNoImages: '这个页面没有发现图片', emptyNoImagesHint: '切换到包含图片的网页，或点击“重新扫描”再次尝试。', emptyFiltered: '图片都被筛选条件过滤了', emptyFilteredHint: '放宽尺寸、大小或格式条件，即可看到结果。', scanFailedEmpty: '扫描未完成', scanFailedEmptyHint: '当前页面可能无法访问，切换到普通网页后重试。', emptyClearFilters: '清除筛选条件', scanning: '正在扫描当前页面…', initializing: '正在准备扩展，请稍候…', initInterrupted: '正在准备扩展，请稍候再操作', shortcutHint: '快捷键：⌘/Ctrl+A 全选 · I 反选 · / 搜索 · R 重新扫描', libraryExactLabel: '精确数值', libraryExportLabel: '导出', libraryCleanupLabel: '清理', saveLocation: '下载时选择保存位置', downloadSupport: '支持普通文件与 ZIP', zipLayout: 'ZIP 分组', noGrouping: '不分组', bySite: '按网站', byFormat: '按格式', bySiteFormat: '按网站 / 格式', filenameTemplate: '文件名模板', dateFolder: '按日期建目录', json: '导出 JSON', csv: '导出 CSV', downloadSelected: '下载选中', zip: '下载 ZIP', zipNote: 'ZIP 会将当前选中的图片合并为一个文件，适合批量保存。',
     saveFilter: '保存筛选', deletePreset: '删除预设', saveSelection: '保存选择', invert: '反选', allCollections: '全部集合', uncategorized: '未分类',
     newCollection: '新建集合', exportLibrary: '导出收藏数据', importLibrary: '导入数据', taskCount: '个任务', activeTasks: '进行中', imageDownload: '图片下载', libraryTitle: '本地素材库', refresh: '刷新', allImages: '全部图片', librarySearch: '搜索图片、域名或标签', libraryMinWidth: '最小宽度', libraryMinHeight: '最小高度', libraryEmpty: '素材库还是空的', libraryEmptyHint: '在当前页面收藏图片，或从右键菜单收藏网页图片。', historyTitle: '最近活动', clearHistory: '清空历史', recentScans: '最近扫描', downloads: '下载记录', historyEmpty: '暂时没有历史记录', historyEmptyHint: '扫描网页或下载图片后，记录会显示在这里。', settings: '设置', settingsNote: '清空素材库会删除图片、缓存、收藏、标签和集合，但不会影响当前网页。', selected: '已选', images: '张图片', favorites: '收藏', collections: '个集合', cachedImages: '个缓存', cachedStorage: '缓存', storageUnavailable: '本地存储暂时不可用',
     exportFilteredJson: '导出筛选 JSON', exportFilteredCsv: '导出筛选 CSV', libraryDownloadSelected: '下载选中', libraryZipSelected: '下载 ZIP', libraryMaxWidth: '最大宽度', libraryMaxHeight: '最大高度', libraryMinSize: '最小 KB', libraryMaxSize: '最大 KB', libraryResultsEmpty: '当前筛选结果为空', libraryResultsExported: '筛选结果已导出', items: '项',
@@ -4451,13 +4580,13 @@ const TRANSLATIONS = {
     copied: '原图地址已复制', copyFailed: '复制失败，请检查浏览器权限', collectionUpdated: '集合已更新', collectionUpdateFailed: '集合更新失败', collectionCreated: '集合已创建', collectionCreateFailed: '集合创建失败',
     libraryExported: '素材库数据已导出', libraryExportFailed: '素材库导出失败', libraryImported: '素材库数据已导入', libraryImportFailed: '导入失败，请选择有效的 JSON 文件', taskActionFailed: '任务操作失败', noFailedTasks: '没有可重试的失败任务',
     filterPresetPrompt: '请输入筛选预设名称', selectionPresetPrompt: '请输入选择预设名称', newCollectionPrompt: '请输入集合名称', presetSaved: '预设已保存', presetDeleted: '预设已删除', selectBeforeSave: '请先选择图片', selectBeforeAction: '请先选择素材', bulkFavoriteDone: '已批量收藏', bulkTagPrompt: '请输入要添加的标签', bulkTagDone: '标签已批量添加', bulkCollectionPrompt: '请输入集合序号', createCollectionFirst: '请先创建集合', bulkCollectionDone: '已批量归档', bulkDeleteConfirm: '确定删除选中的素材吗？', bulkDeleteDone: '素材已删除', bulkActionFailed: '批量操作失败', clearLibraryConfirm: '确定清空整个素材库吗？此操作不可撤销。', libraryCleared: '素材库已清空', clearLibraryFailed: '素材库清理失败', resetSettingsConfirm: '确定重置所有扩展设置吗？', settingsReset: '设置已重置',
-    sizeFilterTitle: '按尺寸筛选', unlimited: '不限', imageCount: '{count} 张图片', itemCount: '{count} 项', selectedCount: '已选 {count}', duplicates: '去重 {count}', all: '全部', other: '其它', switchLanguage: '切换语言', rescan: '重新扫描', viewSwitcher: '视图切换', filterSection: '图片筛选', searchImages: '搜索图片', sortImages: '图片排序方式', saveHelp: 'ZIP 下载或单张下载时会打开 Chrome 的保存对话框', libraryScope: '素材库筛选范围', collectionFilter: '按集合筛选', waitingTask: '等待任务开始', scanLimit: '扫描上限', maxImages: '最大扫描图片数量', imageOptions: ['200 张', '500 张', '1000 张', '不限'], autoScroll: '自动滚动加载懒加载图片',
+    sizeFilterTitle: '按尺寸筛选', unlimited: '不限', imageCount: '{count} 张图片', itemCount: '{count} 项', selectedCount: '已选 {count}', selectedSummary: '已选 {count} / 共 {total}', duplicates: '去重 {count}', all: '全部', other: '其它', switchLanguage: '切换语言', rescan: '重新扫描', viewSwitcher: '视图切换', filterSection: '图片筛选', searchImages: '搜索图片', sortImages: '图片排序方式', saveHelp: 'ZIP 下载或单张下载时会打开 Chrome 的保存对话框', libraryScope: '素材库筛选范围', collectionFilter: '按集合筛选', waitingTask: '等待任务开始', scanLimit: '扫描上限', maxImages: '最大扫描图片数量', imageOptions: ['200 张', '500 张', '1000 张', '不限'], autoScroll: '自动滚动加载懒加载图片',
     widthMin: '最小宽度', widthMax: '最大宽度', heightMin: '最小高度', heightMax: '最大高度', minimum: '最小', maximum: '最大', formatFilter: '按图片格式筛选', saveLocationHint: 'ZIP 下载或单张下载时会打开 Chrome 的保存对话框', filenameTemplateHint: '支持 {name}、{filename}、{domain}、{format}、{width}、{height}、{date}',
     currentPage: '当前页面', readingPage: '正在读取当前页面', discoveringImages: '正在发现图片', readingDimensions: '正在探测图片尺寸', scanningStatus: '扫描中', updating: '更新中', newImagesFound: '发现 {count} 张新图片', scanFailed: '扫描失败', scanFailedPrefix: '扫描失败：', scanTimeout: '扫描超时，请重试', metadataTimeout: '尺寸探测超时，已保留已发现的图片', pageAccessError: '当前页面不允许扩展访问，请切换到普通网页后重试。', noActiveTab: '无法获取当前标签页。', unnamedPage: '未命名页面', unknownTime: '时间未知', webImage: '网页图片', previewUnavailable: '预览不可用', selectImage: '选择 {dimensions} 图片', selectNamedImage: '选择 {name}', favorite: '收藏', favoriteImage: '收藏图片', removeFavorite: '取消收藏', downloadImage: '下载图片', removeTag: '移除标签 {tag}', chooseCollection: '选择集合', addTag: '添加标签', favoriteAdded: '已加入收藏', favoriteRemoved: '已取消收藏', favoriteFailed: '收藏操作失败', tagUpdated: '标签已更新', tagSaveFailed: '标签保存失败',
     downloadZip: '下载 ZIP', submitted: '已提交', partialFailed: '部分失败 {count}', clearHistoryConfirm: '确定清空所有扫描和下载历史吗？', historyCleared: '历史记录已清空', historyClearFailed: '历史记录清理失败', taskCancelled: '任务已取消', cancelling: '正在取消任务…', downloadCancelled: '下载任务已取消', downloadFailed: '下载失败', downloadFailedRetry: '下载失败，请重试', prepareZip: '准备生成 ZIP…', prepareImages: '准备下载图片…', processedWithFailures: '已处理 {count} 张，失败 {failed}', downloadStartedWithFailures: '已开始下载，{count} 张图片失败，可点击重试', zipStarted: 'ZIP 已开始下载', downloadStarted: '下载已开始', compressing: '正在压缩', taskFailed: '任务失败', taskComplete: '任务完成', downloadProgress: '下载进度', processedProgress: '已处理 {completed}/{total}', noImagesToExport: '当前没有可导出的图片', exportStarted: '{type} 清单已开始下载', exportFailed: '清单导出失败', taskCenter: '下载任务中心', retryFailed: '重试失败任务', retryFailedItems: '重试失败项', taskEmpty: '暂时没有下载任务', taskEmptyHint: '发起图片或 ZIP 下载后，任务会显示在这里。', settingsTitle: '设置与存储', clearLibrary: '清空素材库', resetSettings: '重置设置', myFavorites: '我的收藏', bulkFavorite: '批量收藏', bulkTag: '添加标签', bulkCollection: '归档到集合', bulkDelete: '删除', closePreview: '关闭预览'
   },
   en: {
-    page: 'Current', library: 'Library', history: 'History', tasks: 'Tasks', filterPreset: 'Filter preset', selectionPreset: 'Selection preset', clear: 'Clear', width: 'Width', height: 'Height', format: 'Format', formatHint: 'Filter by file type', originalOnly: 'Original candidates only', originalHint: 'Prefer high-resolution addresses from the page', aspectRatio: 'Aspect ratio', allRatios: 'All ratios', landscape: 'Landscape', portrait: 'Portrait', square: 'Square', selectAll: 'Select all results', sort: 'Sort', pageOrder: 'Page order', widthDesc: 'Width: largest first', heightDesc: 'Height: largest first', areaDesc: 'Area: largest first', nameAsc: 'Filename: A–Z', searchPage: 'Search filename, hostname or URL', noResults: 'No matching images', noResultsHint: 'Try widening the size range or scan the page again.', scanning: 'Scanning current page…', saveLocation: 'Ask where to save downloads', downloadSupport: 'Files and ZIP supported', zipLayout: 'ZIP folders', noGrouping: 'No folders', bySite: 'By site', byFormat: 'By format', bySiteFormat: 'By site / format', filenameTemplate: 'Filename template', dateFolder: 'Create date folder', json: 'Export JSON', csv: 'Export CSV', downloadSelected: 'Download selected', zip: 'Download ZIP', zipNote: 'Selected images will be combined into one ZIP archive.',
+    page: 'Current', library: 'Library', history: 'History', tasks: 'Tasks', filterPreset: 'Filter preset', selectionPreset: 'Selection preset', clear: 'Clear', width: 'Width', height: 'Height', format: 'Format', formatHint: 'Filter by file type', animated: 'Animated', originalOnly: 'Original candidates only', originalHint: 'Prefer high-resolution addresses from the page', aspectRatio: 'Aspect ratio', allRatios: 'All ratios', landscape: 'Landscape', portrait: 'Portrait', square: 'Square', selectAll: 'Select all results', sort: 'Sort', pageOrder: 'Page order', widthDesc: 'Width: largest first', heightDesc: 'Height: largest first', areaDesc: 'Area: largest first', nameAsc: 'Filename: A–Z', searchPage: 'Search filename, hostname or URL', noResults: 'No matching images', noResultsHint: 'Try widening the size range or scan the page again.', emptyNoImages: 'No images found on this page', emptyNoImagesHint: 'Open a page with images, or rescan to try again.', emptyFiltered: 'All images are filtered out', emptyFilteredHint: 'Widen the size, file-size or format filters to see results.', scanFailedEmpty: 'Scan did not complete', scanFailedEmptyHint: 'This page may be restricted. Try a regular webpage.', emptyClearFilters: 'Clear filters', scanning: 'Scanning current page…', initializing: 'Preparing the collector, please wait…', initInterrupted: 'Still preparing, please try again in a moment', shortcutHint: 'Shortcuts: ⌘/Ctrl+A select all · I invert · / search · R rescan', libraryExactLabel: 'Exact values', libraryExportLabel: 'Export', libraryCleanupLabel: 'Clean up', saveLocation: 'Ask where to save downloads', downloadSupport: 'Files and ZIP supported', zipLayout: 'ZIP folders', noGrouping: 'No folders', bySite: 'By site', byFormat: 'By format', bySiteFormat: 'By site / format', filenameTemplate: 'Filename template', dateFolder: 'Create date folder', json: 'Export JSON', csv: 'Export CSV', downloadSelected: 'Download selected', zip: 'Download ZIP', zipNote: 'Selected images will be combined into one ZIP archive.',
     saveFilter: 'Save filter', deletePreset: 'Delete preset', saveSelection: 'Save selection', invert: 'Invert', allCollections: 'All collections', uncategorized: 'Uncategorized',
     newCollection: 'New collection', exportLibrary: 'Export library', importLibrary: 'Import data', taskCount: 'tasks', activeTasks: 'active', imageDownload: 'Image download', libraryTitle: 'Local library', refresh: 'Refresh', allImages: 'All images', librarySearch: 'Search images, sites or tags', libraryMinWidth: 'Min width', libraryMinHeight: 'Min height', libraryEmpty: 'Your library is empty', libraryEmptyHint: 'Favorite an image on this page or use the context menu to save one.', historyTitle: 'Recent activity', clearHistory: 'Clear history', recentScans: 'Recent scans', downloads: 'Downloads', historyEmpty: 'No activity yet', historyEmptyHint: 'Scan a page or download an image to see activity here.', settings: 'Settings', settingsNote: 'Clearing the library removes images, cached files, favorites, tags, and collections, but does not affect the current webpage.', selected: 'Selected', images: 'images', favorites: 'favorites', collections: 'collections', cachedImages: 'cached', cachedStorage: 'cache', storageUnavailable: 'Local storage is unavailable',
     exportFilteredJson: 'Export filtered JSON', exportFilteredCsv: 'Export filtered CSV', libraryDownloadSelected: 'Download selected', libraryZipSelected: 'Download ZIP', libraryMaxWidth: 'Max width', libraryMaxHeight: 'Max height', libraryMinSize: 'Min KB', libraryMaxSize: 'Max KB', libraryResultsEmpty: 'No filtered images', libraryResultsExported: 'Filtered results exported', items: 'items',
@@ -4466,7 +4595,7 @@ const TRANSLATIONS = {
     copied: 'Original URL copied', copyFailed: 'Copy failed; check browser permission', collectionUpdated: 'Collection updated', collectionUpdateFailed: 'Collection update failed', collectionCreated: 'Collection created', collectionCreateFailed: 'Collection creation failed',
     libraryExported: 'Library data exported', libraryExportFailed: 'Library export failed', libraryImported: 'Library data imported', libraryImportFailed: 'Import failed; choose a valid JSON file', taskActionFailed: 'Task action failed', noFailedTasks: 'No failed tasks to retry',
     filterPresetPrompt: 'Filter preset name', selectionPresetPrompt: 'Selection preset name', newCollectionPrompt: 'Collection name', presetSaved: 'Preset saved', presetDeleted: 'Preset deleted', selectBeforeSave: 'Select images first', selectBeforeAction: 'Select images first', bulkFavoriteDone: 'Images favorited', bulkTagPrompt: 'Tag to add', bulkTagDone: 'Tags added', bulkCollectionPrompt: 'Collection number', createCollectionFirst: 'Create a collection first', bulkCollectionDone: 'Images archived', bulkDeleteConfirm: 'Delete the selected images? This cannot be undone.', bulkDeleteDone: 'Images deleted', bulkActionFailed: 'Bulk action failed', clearLibraryConfirm: 'Clear the entire library? This cannot be undone.', libraryCleared: 'Library cleared', clearLibraryFailed: 'Could not clear library', resetSettingsConfirm: 'Reset all extension settings?', settingsReset: 'Settings reset',
-    sizeFilterTitle: 'Filter by size', unlimited: 'Any', imageCount: '{count} image(s)', itemCount: '{count} item(s)', selectedCount: 'Selected {count}', duplicates: '{count} duplicates removed', all: 'All', other: 'Other', switchLanguage: 'Switch language', rescan: 'Rescan', viewSwitcher: 'View switcher', filterSection: 'Image filters', searchImages: 'Search images', sortImages: 'Image sort', saveHelp: 'Chrome opens a save dialog for ZIP or single-image downloads', libraryScope: 'Library scope', collectionFilter: 'Filter by collection', waitingTask: 'Waiting for task', scanLimit: 'Scan limit', maxImages: 'Maximum image count', imageOptions: ['200 images', '500 images', '1000 images', 'Unlimited'], autoScroll: 'Auto-scroll for lazy images',
+    sizeFilterTitle: 'Filter by size', unlimited: 'Any', imageCount: '{count} image(s)', itemCount: '{count} item(s)', selectedCount: 'Selected {count}', selectedSummary: 'Selected {count} / {total}', duplicates: '{count} duplicates removed', all: 'All', other: 'Other', switchLanguage: 'Switch language', rescan: 'Rescan', viewSwitcher: 'View switcher', filterSection: 'Image filters', searchImages: 'Search images', sortImages: 'Image sort', saveHelp: 'Chrome opens a save dialog for ZIP or single-image downloads', libraryScope: 'Library scope', collectionFilter: 'Filter by collection', waitingTask: 'Waiting for task', scanLimit: 'Scan limit', maxImages: 'Maximum image count', imageOptions: ['200 images', '500 images', '1000 images', 'Unlimited'], autoScroll: 'Auto-scroll for lazy images',
     widthMin: 'Minimum width', widthMax: 'Maximum width', heightMin: 'Minimum height', heightMax: 'Maximum height', minimum: 'Min', maximum: 'Max', formatFilter: 'Filter by image format', saveLocationHint: 'Chrome opens a save dialog for ZIP or single-image downloads', filenameTemplateHint: 'Supports {name}, {filename}, {domain}, {format}, {width}, {height}, and {date}',
     currentPage: 'Current page', readingPage: 'Reading current page', discoveringImages: 'Finding images', readingDimensions: 'Checking image dimensions', scanningStatus: 'Scanning', updating: 'Updating', newImagesFound: '{count} new image(s) found', scanFailed: 'Scan failed', scanFailedPrefix: 'Scan failed: ', scanTimeout: 'Scan timed out; try again', metadataTimeout: 'Dimension check timed out; discovered images were kept', pageAccessError: 'The extension cannot access this page. Switch to a regular webpage and try again.', noActiveTab: 'Could not get the active tab.', unnamedPage: 'Untitled page', unknownTime: 'Unknown time', webImage: 'Web image', previewUnavailable: 'Preview unavailable', selectImage: 'Select {dimensions} image', selectNamedImage: 'Select {name}', favorite: 'Favorite', favoriteImage: 'Favorite image', removeFavorite: 'Remove favorite', downloadImage: 'Download image', removeTag: 'Remove tag {tag}', chooseCollection: 'Choose collection', addTag: 'Add tag', favoriteAdded: 'Added to favorites', favoriteRemoved: 'Removed from favorites', favoriteFailed: 'Favorite action failed', tagUpdated: 'Tag updated', tagSaveFailed: 'Could not save tag',
     downloadZip: 'Download ZIP', submitted: 'Submitted', partialFailed: 'Partial failure: {count}', clearHistoryConfirm: 'Clear all scan and download history?', historyCleared: 'History cleared', historyClearFailed: 'Could not clear history', taskCancelled: 'Task cancelled', cancelling: 'Cancelling…', downloadCancelled: 'Download task cancelled', downloadFailed: 'Download failed', downloadFailedRetry: 'Download failed; try again', prepareZip: 'Preparing ZIP…', prepareImages: 'Preparing image download…', processedWithFailures: 'Processed {count}; {failed} failed', downloadStartedWithFailures: 'Download started; {count} image(s) failed. You can retry them.', zipStarted: 'ZIP download started', downloadStarted: 'Download started', compressing: 'Compressing', taskFailed: 'Task failed', taskComplete: 'Task complete', downloadProgress: 'Download progress', processedProgress: 'Processed {completed}/{total}', noImagesToExport: 'There are no images to export', exportStarted: '{type} list download started', exportFailed: 'List export failed', taskCenter: 'Download task center', retryFailed: 'Retry failed tasks', retryFailedItems: 'Retry failed items', taskEmpty: 'No download tasks yet', taskEmptyHint: 'Start an image or ZIP download to see it here.', settingsTitle: 'Settings & storage', clearLibrary: 'Clear library', resetSettings: 'Reset settings', myFavorites: 'Favorites', bulkFavorite: 'Favorite', bulkTag: 'Add tag', bulkCollection: 'Archive', bulkDelete: 'Delete', closePreview: 'Close preview'
@@ -4576,14 +4705,14 @@ Object.assign(TRANSLATIONS.zh, {
   multiPageEyebrow: '多页面采集', multiPageTitle: '多页面采集', currentTabScope: '当前标签页', selectedTabsScope: '已选 {count} 个标签页', windowTabsScope: '当前窗口 {count} 个标签页', multiPageScope: '采集范围', multiPageCurrentHint: '采集当前激活的标签页', multiPageSelectHint: '将选中的标签页合并为一个结果', selectAllTabs: '全选标签页', clearSelectedTabs: '清除选择', scanMultiPage: '开始采集', noTabs: '当前窗口没有可用标签页', selectTabsFirst: '请先选择至少一个标签页', protectedPage: '此页面不允许扩展访问', activeTab: '当前', multiPageResultTitle: '已采集 {count} 个页面', scanningTab: '正在采集第 {current}/{total} 个页面',
   byPage: '按页面', byDate: '按日期', bySitePage: '按网站 / 页面', bySiteDate: '按网站 / 日期', exportMarkdown: '导出 Markdown', exportHtml: '导出 HTML', exportContactSheet: '导出联系表', exportLibraryMarkdown: '导出 Markdown', exportLibraryHtml: '导出 HTML', exportLibraryContactSheet: '导出联系表',
   scanRestoreFilters: '恢复筛选', scanOpenPages: '打开来源页', scanRerun: '重新扫描', scanDownload: '下载结果', scanPages: '{count} 个页面', scanDelta: '新增 {newCount} · 变化 {changedCount} · 移除 {removedCount}', scanActionFailed: '扫描历史操作失败', scanRerunStarted: '已重新开始扫描', scanPagesOpened: '已打开 {count} 个来源页面',
-  appearanceTitle: '外观与快捷键', localSettings: '本地设置', themeMode: '主题', themeAuto: '跟随系统', themeLight: '浅色', themeDark: '深色', compactMode: '紧凑模式', compactModeHint: '减少间距，在窄侧栏显示更多图片。', openShortcuts: '配置快捷键', shortcutHint: '可在 Chrome 扩展快捷键页面自定义', shortcutPageFailed: '无法打开快捷键设置',
+  appearanceTitle: '外观与快捷键', localSettings: '本地设置', themeMode: '主题', themeAuto: '跟随系统', themeLight: '浅色', themeDark: '深色', compactMode: '紧凑模式', compactModeHint: '减少间距，在窄侧栏显示更多图片。', openShortcuts: '配置快捷键', shortcutPageHint: '可在 Chrome 扩展快捷键页面自定义', shortcutPageFailed: '无法打开快捷键设置',
   markdownExport: 'Markdown 图库', htmlExport: 'HTML 图库', contactSheetExport: '图片联系表', galleryEmpty: '没有可导出的图片', galleryExported: '{type} 已开始下载', galleryPartial: '联系表已导出，成功加载 {loaded}/{total} 张图片', galleryFailed: '图库导出失败'
 });
 Object.assign(TRANSLATIONS.en, {
   multiPageEyebrow: 'MULTI-PAGE', multiPageTitle: 'Multi-page collection', currentTabScope: 'Current tab', selectedTabsScope: '{count} selected tabs', windowTabsScope: '{count} tabs in window', multiPageScope: 'Collection scope', multiPageCurrentHint: 'Collect from the active tab', multiPageSelectHint: 'Merge selected tabs into one result', selectAllTabs: 'Select all tabs', clearSelectedTabs: 'Clear selection', scanMultiPage: 'Start collection', noTabs: 'No usable tabs in this window', selectTabsFirst: 'Select at least one tab first', protectedPage: 'This page cannot be accessed by the extension', activeTab: 'Active', multiPageResultTitle: '{count} pages collected', scanningTab: 'Collecting page {current}/{total}',
   byPage: 'By page', byDate: 'By date', bySitePage: 'By site / page', bySiteDate: 'By site / date', exportMarkdown: 'Export Markdown', exportHtml: 'Export HTML', exportContactSheet: 'Export contact sheet', exportLibraryMarkdown: 'Export Markdown', exportLibraryHtml: 'Export HTML', exportLibraryContactSheet: 'Export contact sheet',
   scanRestoreFilters: 'Restore filters', scanOpenPages: 'Open source pages', scanRerun: 'Rescan', scanDownload: 'Download results', scanPages: '{count} pages', scanDelta: '{newCount} new · {changedCount} changed · {removedCount} removed', scanActionFailed: 'Scan history action failed', scanRerunStarted: 'Rescan started', scanPagesOpened: 'Opened {count} source page(s)',
-  appearanceTitle: 'Appearance & shortcuts', localSettings: 'Local settings', themeMode: 'Theme', themeAuto: 'System', themeLight: 'Light', themeDark: 'Dark', compactMode: 'Compact mode', compactModeHint: 'Reduce spacing to show more images in a narrow panel.', openShortcuts: 'Configure shortcuts', shortcutHint: 'Customize them on Chrome\'s extension shortcuts page', shortcutPageFailed: 'Could not open shortcut settings',
+  appearanceTitle: 'Appearance & shortcuts', localSettings: 'Local settings', themeMode: 'Theme', themeAuto: 'System', themeLight: 'Light', themeDark: 'Dark', compactMode: 'Compact mode', compactModeHint: 'Reduce spacing to show more images in a narrow panel.', openShortcuts: 'Configure shortcuts', shortcutPageHint: 'Customize them on Chrome\'s extension shortcuts page', shortcutPageFailed: 'Could not open shortcut settings',
   markdownExport: 'Markdown gallery', htmlExport: 'HTML gallery', contactSheetExport: 'Contact sheet', galleryEmpty: 'There are no images to export', galleryExported: '{type} download started', galleryPartial: 'Contact sheet exported; loaded {loaded}/{total} image(s)', galleryFailed: 'Gallery export failed'
 });
 
@@ -4688,6 +4817,8 @@ function detectLanguage() {
 
 function applyLanguage() {
   document.documentElement.lang = state.language === 'en' ? 'en' : 'zh-CN';
+  setText(els.initGateLabel, t('initializing'));
+  setText(els.shortcutHint, t('shortcutHint'));
   setText(els.language, state.language === 'en' ? '中' : 'EN');
   if (els.language) els.language.title = t('switchLanguage');
   if (els.refresh) {
@@ -4773,7 +4904,7 @@ function applyLanguage() {
   const search = document.querySelector('#searchInput'); if (search) search.placeholder = t('searchPage');
   const sortLabel = document.querySelector('.sort-control > span'); if (sortLabel) sortLabel.textContent = t('sort');
   const sortOptions = [t('pageOrder'), t('widthDesc'), t('heightDesc'), t('areaDesc'), t('nameAsc')]; [...(els.sortSelect?.options || [])].forEach((option, index) => { if (sortOptions[index]) option.textContent = sortOptions[index]; });
-  [...els.formatTabs].forEach((tab) => { const format = tab.dataset.format; const labels = { all: t('all'), jpeg: 'JPEG', png: 'PNG', webp: 'WEBP', avif: 'AVIF', other: t('other') }; const count = tab.querySelector('[data-count]')?.textContent || '0'; tab.innerHTML = `${labels[format] || format} <strong data-count>${count}</strong>`; });
+  [...els.formatTabs].forEach((tab) => { const format = tab.dataset.format; const labels = { all: t('all'), jpeg: 'JPEG', png: 'PNG', webp: 'WEBP', avif: 'AVIF', animated: t('animated'), other: t('other') }; const count = tab.querySelector('[data-count]')?.textContent || '0'; tab.innerHTML = `${labels[format] || format} <strong data-count>${count}</strong>`; });
   if (els.loading?.lastChild) els.loading.lastChild.textContent = ` ${t('scanning')}`;
   renderSourceTabs();
   const saveText = document.querySelector('.save-option > span'); if (saveText) saveText.textContent = t('saveLocation');
@@ -4796,6 +4927,9 @@ function applyLanguage() {
   const libraryTitle = document.querySelector('#libraryView h2'); if (libraryTitle) libraryTitle.textContent = t('libraryTitle');
   if (els.refreshLibrary) els.refreshLibrary.textContent = t('refresh');
   document.querySelector('.smart-collection-card')?.setAttribute('aria-label', t('smartCollections'));
+  setText(els.libraryExactLabel, t('libraryExactLabel'));
+  setText(els.libraryExportLabel, t('libraryExportLabel'));
+  setText(els.libraryCleanupLabel, t('libraryCleanupLabel'));
   setText(els.smartCollectionTitle, t('smartCollections')); setText(els.smartCollectionHint, t('smartCollectionHint')); setText(els.syncPageFilters, t('syncPageFilters')); setText(els.reapplySmartCollections, t('reapplySmartCollections')); setText(els.newSmartCollection, t('newSmartCollection'));
   setText(els.smartRuleNameLabel, t('smartRuleName')); setText(els.smartRuleLogicLabel, t('smartRuleLogic')); setText(els.smartConditionsLabel, t('smartConditions')); setText(els.addSmartCondition, t('addCondition')); setText(els.cancelSmartCollection, t('cancelSmartCollection')); setText(els.saveSmartCollection, t('saveSmartCollection'));
   if (els.smartCollectionName) els.smartCollectionName.placeholder = t('smartCollectionNamePlaceholder');
@@ -4809,8 +4943,7 @@ function applyLanguage() {
   if (els.libraryMaxSize) els.libraryMaxSize.placeholder = t('libraryMaxSize');
   const libraryEmptyTitle = document.querySelector('#libraryEmpty strong'); if (libraryEmptyTitle) libraryEmptyTitle.textContent = t('libraryEmpty');
   const libraryEmptyHint = document.querySelector('#libraryEmpty span'); if (libraryEmptyHint) libraryEmptyHint.textContent = t('libraryEmptyHint');
-  const emptyTitle = document.querySelector('#emptyState strong'); if (emptyTitle) emptyTitle.textContent = t('noResults');
-  const emptyHint = document.querySelector('#emptyState span'); if (emptyHint) emptyHint.textContent = t('noResultsHint');
+  updateEmptyState();
   const presetLabels = { 'size-small': t('sizePresetSmall'), 'size-medium': t('sizePresetMedium'), 'aspect-landscape': t('landscape'), 'aspect-portrait': t('portrait'), 'aspect-square': t('square') };
   document.querySelectorAll('[data-library-preset]').forEach((button) => { if (presetLabels[button.dataset.libraryPreset]) button.textContent = presetLabels[button.dataset.libraryPreset]; });
   setText(els.smartCollectionEmpty, t('smartRulesEmpty'));
@@ -4848,7 +4981,7 @@ function applyLanguage() {
   const libraryAspectLabel = document.querySelector('.library-visual-filters .mini-range-control:last-child > span'); if (libraryAspectLabel) libraryAspectLabel.textContent = t('aspectRatio');
   const scrollLabel = document.querySelector('.scan-options label:nth-child(2) > span'); if (scrollLabel) scrollLabel.textContent = t('autoScroll');
   const scanOptions = t('imageOptions'); [...(els.scanLimit?.options || [])].forEach((option, index) => { if (scanOptions[index]) option.textContent = scanOptions[index]; });
-  const libraryFormatOptions = [t('libraryFormatAll'), 'JPEG', 'PNG', 'WEBP', 'AVIF', t('libraryFormatOther')]; [...(els.libraryFormat?.options || [])].forEach((option, index) => { if (libraryFormatOptions[index]) option.textContent = libraryFormatOptions[index]; });
+  const libraryFormatOptions = [t('libraryFormatAll'), 'JPEG', 'PNG', 'WEBP', 'AVIF', t('animated'), t('libraryFormatOther')]; [...(els.libraryFormat?.options || [])].forEach((option, index) => { if (libraryFormatOptions[index]) option.textContent = libraryFormatOptions[index]; });
   const librarySortOptions = [t('librarySortUpdated'), t('librarySortWidth'), t('librarySortHeight'), t('librarySortSize')]; [...(els.librarySort?.options || [])].forEach((option, index) => { if (librarySortOptions[index]) option.textContent = librarySortOptions[index]; });
   // 3.3.1: options, aria-labels, and preview actions that were never localised.
   const libraryScopeOptions = [t('libraryScopeFavorites'), t('libraryScopeAllImages')];
@@ -4931,7 +5064,7 @@ function applyLanguage() {
   [t('customScanRules'), t('siteAdapters'), t('syncTitle'), t('appearanceTitle'), t('configMigration')].forEach((label, index) => { if (settingsCards[index]) settingsCards[index].setAttribute('aria-label', label); });
   const migrationNote = document.querySelector('.settings-migration-note'); if (migrationNote) migrationNote.textContent = t('configMigrationNote');
   setText(els.exportScanConfig, t('exportScanConfig')); setText(els.importScanConfig, t('importScanConfig'));
-  setText(els.appearanceTitle, t('appearanceTitle')); setText(els.themeModeLabel, t('themeMode')); setText(els.compactModeLabel, t('compactMode')); setText(els.compactModeHint, t('compactModeHint')); setText(els.openShortcuts, t('openShortcuts')); if (els.shortcutStatus) els.shortcutStatus.textContent = t('shortcutHint');
+  setText(els.appearanceTitle, t('appearanceTitle')); setText(els.themeModeLabel, t('themeMode')); setText(els.compactModeLabel, t('compactMode')); setText(els.compactModeHint, t('compactModeHint')); setText(els.openShortcuts, t('openShortcuts')); if (els.shortcutStatus) els.shortcutStatus.textContent = t('shortcutPageHint');
   const themeOptions = [t('themeAuto'), t('themeLight'), t('themeDark')]; [...(els.themeMode?.options || [])].forEach((option, index) => { if (themeOptions[index]) option.textContent = themeOptions[index]; });
   const fieldLabels = [...document.querySelectorAll('#settingsView .settings-field > span')];
   [t('includeSelectors'), t('excludeSelectors'), t('hostPattern'), t('imageSelector'), t('extraAttributes'), t('archiveCollection')].forEach((label, index) => { if (fieldLabels[index]) fieldLabels[index].textContent = label; });

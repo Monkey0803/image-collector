@@ -94,6 +94,20 @@ test('no usable source page yields no rule', () => {
   assert.equal(api.imageReferrerRule(image({ pageUrl: 'not a url' }), BASE_ID), null);
 });
 
+test('original candidates are tried before the display thumbnail', () => {
+  const { api } = createSandbox();
+  const full = 'https://cdn.example.com/full.png';
+  const thumb = 'https://cdn.example.com/thumb_300.jpg';
+  const candidates = api.imageCandidates(image({
+    url: 'https://cdn.example.com/a.png',
+    displayUrl: thumb,
+    originalCandidates: [full],
+    candidateUrls: [thumb, full]
+  }));
+  assert.ok(candidates.indexOf(full) < candidates.indexOf(thumb), 'the original URL must be attempted before the thumbnail');
+  assert.equal(candidates[0], 'https://cdn.example.com/a.png', 'the primary URL stays first');
+});
+
 test('candidates exclude unusable addresses', () => {
   const { api } = createSandbox();
   const rule = api.imageReferrerRule(image({

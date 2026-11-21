@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
+const vm = require('node:vm');
 
 const read = (file) => fs.readFileSync(file, 'utf8');
 const manifest = JSON.parse(read('manifest.json'));
@@ -17,8 +18,8 @@ function pngDimensions(file) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-test('release metadata is aligned with the 3.6.1 milestone', () => {
-  assert.equal(manifest.version, '3.6.1');
+test('release metadata is aligned with the 3.7.0 milestone', () => {
+  assert.equal(manifest.version, '3.7.0');
   assert.match(todo, /## 3\.1\.0 asset management and deduplication/);
   const milestone = todo.split('## 3.1.0 asset management and deduplication')[1].split('## 3.2.0 release quality and validation')[0];
   assert.doesNotMatch(milestone, /- \[ \]/);
@@ -184,7 +185,8 @@ test('milestone checklists stay in sync across languages and ship their delivera
     ['## 3.4.1 auto-collect scope, preview referrer, and startup visibility', '## 3.5.0', true],
     ['## 3.5.0 metadata probing completeness', '## 3.6.0', true],
     ['## 3.6.0 image metadata source fidelity', '## 3.6.1', true],
-    ['## 3.6.1 multi-page entry placement', '## Test coverage: image referrer rules', true],
+    ['## 3.6.1 multi-page entry placement', '## 3.7.0 usability and accessibility refinement', true],
+    ['## 3.7.0 usability and accessibility refinement', '## Test coverage: image referrer rules', true],
   ];
   const tally = (text) => ({
     total: (text.match(/^- \[[ x]\]/gm) || []).length,
@@ -408,7 +410,7 @@ test('the README project structure lists every top-level path', () => {
   const root = path.join(__dirname, '..');
   const entries = fs.readdirSync(root, { withFileTypes: true })
     .map((entry) => entry.name)
-    .filter((name) => name !== 'dist' && name !== '.git');
+    .filter((name) => name !== 'dist' && name !== '.git' && name !== '.workbuddy');
   assert.ok(entries.length > 5, `expected a populated repository, saw ${entries.length} entries`);
 
   const missing = entries.filter((name) => {
@@ -543,6 +545,101 @@ test('the first screen puts the results before secondary setup panels', () => {
   // the grid absorbs the leftover height instead of being capped to a viewport fraction
   assert.match(css, /\.app-shell \{[^}]*height: 100vh/);
   assert.match(css, /\.results-section > \.image-grid \{[^}]*max-height: none/);
+});
+
+test('platform original-URL upgrade is wired for X/Twitter size variants', () => {
+  assert.match(popup, /function collectPageImages|async function collectPageImages/);
+  assert.match(popup, /const platformOriginalUrl/);
+  assert.match(popup, /twimg/);
+  assert.match(popup, /searchParams\.set\('name', 'orig'\)/);
+  assert.match(popup, /\['small', 'medium', 'large', 'thumb'\]/);
+  // The upgrade must be injected as an original candidate, ahead of srcset/currentSrc.
+  assert.match(popup, /push\(upgraded, 9850, true\)/);
+  // Both the download-side and preview-side candidate builders keep originals first.
+  assert.match(worker, /image\?\.url, \.\.\.originals, image\?\.originalUrl/);
+});
+
+test('animated images (Live Photo / short video) are scanned and downloaded as media', () => {
+  // Scanner recognizes video suffixes and Weibo Live Photo relay URLs.
+  assert.match(popup, /livephoto=/);
+  assert.match(popup, /mp4\|m4v\|mov\|webm\|ogv/);
+  assert.match(popup, /document\.querySelectorAll\('video'\)/);
+  assert.match(popup, /querySelectorAll\('source\[src\]'\)/);
+  assert.match(popup, /data-livephoto/);
+  // formatFromUrl tags video formats so they reach the results.
+  assert.match(popup, /\['mp4', 'm4v', 'mov', 'webm', 'ogv'\]\.includes\(extension\)\) return extension/);
+  // Download side: media content types accepted (incl. octet-stream) and correct extensions mapped.
+  assert.match(worker, /contentType\.startsWith\('video\/'\)/);
+  assert.match(worker, /contentType === 'application\/octet-stream'/);
+  assert.match(worker, /'video\/quicktime': '\.mov'/);
+  assert.match(worker, /mov: '\.mov'/);
+  assert.match(worker, /mime === 'video\/quicktime'\) return 'mov'/);
+
+  // Executable check: the Weibo relay URL is upgraded to a signed direct MOV link and
+  // the resulting content type maps to a .mov download extension.
+  const relay = 'https://video.weibo.com/media/play?livephoto=' + encodeURIComponent('https://livephoto.us.sinaimg.cn/abc.mov');
+  const parsed = new URL(relay);
+  assert.equal(parsed.searchParams.get('livephoto'), 'https://livephoto.us.sinaimg.cn/abc.mov');
+  const MIME_EXTENSIONS = { 'video/quicktime': '.mov', 'video/mp4': '.mp4', 'video/webm': '.webm' };
+  assert.equal(MIME_EXTENSIONS['video/quicktime'], '.mov');
+
+  // A dedicated "Animated" format tab/classification routes GIF and video to it.
+  assert.match(html, /data-format="animated"/);
+  assert.match(popup, /\['gif', 'mp4', 'm4v', 'mov', 'webm', 'ogv'\]\.includes\(format\)\) return 'animated'/);
+  assert.match(popup, /SMART_FORMATS = \['jpeg', 'png', 'webp', 'avif', 'animated', 'other'\]/);
+  assert.match(popup, /animated: t\('animated'\)/);
+  // Both the tab label and the library dropdown localize the new option.
+  assert.match(popup, /'AVIF', t\('animated'\), t\('libraryFormatOther'\)/);
+});
+
+test('translation table has no unexpected key overwrites (shortcutHint regression)', () => {
+  // 3.7.0 bug: shortcutHint was defined twice — once for the result-area shortcut
+  // legend and once for the settings-page hint. The later Object.assign silently
+  // overwrote the former, so the result area showed the settings wording. The
+  // static "key defined in both languages" test could not see this because both
+  // definitions existed. Execute the real translation table and record every key
+  // that a later Object.assign overwrites.
+  const start = popup.indexOf('const TRANSLATIONS = {');
+  const end = popup.indexOf('function t(');
+  assert.ok(start >= 0 && end > start, 'translation table region must be locatable');
+  const region = popup.slice(start, end);
+  const sandbox = { console };
+  vm.createContext(sandbox);
+  vm.runInContext(`
+    const __overwrites = [];
+    const __origAssign = Object.assign;
+    Object.assign = function(target, ...sources) {
+      for (const source of sources) {
+        for (const key of Object.keys(source)) {
+          if (Object.prototype.hasOwnProperty.call(target, key)) __overwrites.push(key);
+        }
+      }
+      return __origAssign(target, ...sources);
+    };
+    ${region}
+    globalThis.__RESULT__ = { translations: TRANSLATIONS, overwrites: __overwrites };
+  `, sandbox);
+  const { translations, overwrites } = sandbox.__RESULT__;
+
+  // Only these two keys were historically overwritten before 3.7.0 and are
+  // intentionally kept. Any new overwrite is a regression and must fail.
+  const allowed = new Set(['all', 'galleryExported']);
+  const unexpected = [...new Set(overwrites)].filter((key) => !allowed.has(key));
+  assert.deepEqual(unexpected, [], `unexpected translation key overwrite(s): ${unexpected.join(', ')}`);
+
+  // The result-area legend keeps its shortcut wording; the settings page uses
+  // its own dedicated key with the customize-hint wording.
+  assert.match(translations.zh.shortcutHint, /快捷键/);
+  assert.match(translations.en.shortcutHint, /Shortcuts:/);
+  assert.match(translations.zh.shortcutPageHint, /Chrome 扩展快捷键页面/);
+  assert.match(translations.en.shortcutPageHint, /extension shortcuts page/);
+  assert.doesNotMatch(translations.zh.shortcutHint, /Chrome 扩展快捷键页面/);
+  assert.ok(translations.en.shortcutPageHint, 'settings-page hint must exist in English');
+  assert.notEqual(translations.zh.shortcutHint, translations.zh.shortcutPageHint);
+
+  // The settings page must reference the dedicated key, not the legend key.
+  assert.match(popup, /els\.shortcutStatus\)\s+els\.shortcutStatus\.textContent = t\('shortcutPageHint'\)/);
+  assert.match(popup, /setText\(els\.shortcutHint, t\('shortcutHint'\)\)/);
 });
 
 test('text scale follows the active tab zoom without scaling the whole panel', () => {

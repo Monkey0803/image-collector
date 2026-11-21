@@ -1,8 +1,8 @@
 # Image Collector TODO
 
-本文档记录当前 `3.6.1` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
+本文档记录当前 `3.7.0` 及后续版本的功能计划。已完成的任务使用 `[x]` 标记；未勾选项表示待开发或待验证内容。
 
-最后更新：2026-09-11
+最后更新：2026-11-19
 
 ## 当前状态
 
@@ -21,6 +21,7 @@
 - [x] `3.6.0` 图片来源保真度已完成。
 - [x] `3.6.1` 多页面采集入口位置已完成。
 - [x] `3.6.2` Referer 规则行为覆盖正在进行。
+- [x] `3.7.0` 体验优化已完成：字号阶梯、卡片命中区、初始化反馈、快捷键作用域、筛选控件、工具收纳、选择反馈、保存默认与差异化空状态。
 
 ## 已知缺陷（2026-09-11 真机验收发现）
 
@@ -143,9 +144,9 @@
 
 ## English
 
-This document tracks the current `3.6.1` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
+This document tracks the current `3.7.0` release and future versions. Completed items use `[x]`; unchecked items are planned or still need verification.
 
-Last updated: 2026-09-11
+Last updated: 2026-11-19
 
 ## Current status
 
@@ -164,6 +165,7 @@ Last updated: 2026-09-11
 - [x] `3.6.0` image metadata source fidelity is complete.
 - [x] `3.6.1` multi-page entry placement is complete.
 - [x] `3.6.2` referrer rule coverage is in progress.
+- [x] `3.7.0` usability refinement is complete: font-size ladder, card hit targets, initialization feedback, shortcut scoping, unified filters, tool grouping, selection feedback, save default, and contextual empty states.
 
 ### 1.0.1 core experience
 
@@ -710,6 +712,42 @@ Last updated: 2026-09-11
 - [x] Show the active scan scope in the top bar whenever it is not "current tab", so the rescan action is not mistaken for one that covers an already-selected multi-tab scope.
 - [x] Update the assertion written for 3.4.0 from "the panel must follow the results" to "the panel must precede the results", noting in the assertion that this corrects the 3.4.0 decision.
 - [x] Verify on a real browser: the panel position and order, its first-screen visibility, and the end-to-end multi-page flow of choosing a scope, ticking tabs, starting the scan, and merging results.
+
+## 3.7.0 usability and accessibility refinement
+
+### 中文
+
+- [x] 抬升字号阶梯：把 7/8/9px 控件字号统一提升到 10.5px 可读下限，保留 10px 基准与紧凑模式承载密度需求。
+- [x] 修复卡片点击目标冲突：缩略图预览与卡片选中分区，通过 `zoom-in` 光标与角标区分，复选框命中区扩大到 24px。
+- [x] 消除初始化期静默锁死：加入 `aria-busy` 与加载遮罩，被拦截的交互给出可见提示，统一就绪释放入口。
+- [x] 修复快捷键跨视图错乱：`⌘/Ctrl+A`、`I`、`/`、`R` 增加当前页视图与模态框守卫，并在界面加入可见快捷键提示。
+- [x] 统一两视图筛选控件：素材库精确数值输入收纳为可折叠区，默认主交互与当前页滑块对齐。
+- [x] 降低功能过载：素材库平铺工具收敛为主路径与「导出 / 清理」两组折叠区，保留全部操作入口。
+- [x] 统一选择反馈计数：结果标题栏改为「已选 N / 共 M」占比，按钮内保留待下载数。
+- [x] 默认关闭保存对话框：`saveAs` 默认改为关闭，尊重老用户已保存的偏好。
+- [x] 差异化空状态：按「页面无图 / 被筛选过滤 / 扫描失败」给出针对性文案，筛选态增加「清除筛选条件」按钮。
+- [x] 运行全量回归测试（71/71 通过）、JS 语法检查与 HTML 标签配对校验，确认无控件 id 回归。
+- [x] 下载/预览强制走原图：扫描阶段保留全部原图候选 `originalCandidates`，下载与大图预览的回退顺序把原图排在缩略图之前，素材库记录同步保留该字段。
+- [x] 平台原图 URL 升级：X/Twitter 的 `pbs.twimg.*` 尺寸变体（`name=small/medium/large/thumb`）在扫描时升级为 `name=orig` 原图候选，图片尺寸详情不再显示缩略图变体地址。
+- [x] 采集动态图：扫描器识别视频后缀与微博 Live Photo 的 `livephoto=` 中转地址，纳入 `<video>`/`source` 与 `videoSrc` 等元素的动态源；下载侧放行 `video/*` 与 `application/octet-stream`，并按真实 MIME 保存为 `.mov`/`.mp4`。
+- [x] 独立的「动态图」格式标签：`formatCategory` 将 GIF 与视频格式归入 `animated`，当前页格式栏、素材库下拉、智能集合与本地化同步新增该分类，可从「其它」中分离筛选动态图。
+
+### English
+
+- [x] Raise the font-size ladder: lift all 7/8/9px controls to a 10.5px readable floor, keeping the 10px baseline and compact mode for density.
+- [x] Fix competing card click targets: separate thumbnail preview from card selection with a `zoom-in` cursor and badge, and enlarge checkbox hit areas to 24px.
+- [x] Remove silent lockout during initialization: add `aria-busy` and a loading gate, show visible feedback for intercepted interactions, and unify the readiness-release path.
+- [x] Fix cross-view shortcut chaos: guard `⌘/Ctrl+A`, `I`, `/`, and `R` by the current-page view and modal state, and add a visible in-app shortcut hint.
+- [x] Unify filter controls across views: collapse exact numeric inputs in the library and align its primary interaction with the current-page sliders.
+- [x] Reduce feature overload: group the library's flat tools into the main path plus collapsible "export / cleanup" sections while keeping every action reachable.
+- [x] Unify selection feedback counts: show "N of M selected" in the results heading and keep the pending-download count on the button.
+- [x] Turn off the save dialog by default: default `saveAs` to off while respecting preferences saved by returning users.
+- [x] Differentiate empty states: give targeted copy for "no images / filtered out / scan failed" and add a "clear filters" action to the filtered state.
+- [x] Run the full regression suite (71/71 passing), JS syntax checks, and HTML tag-pair validation, confirming no control-id regressions.
+- [x] Force originals for downloads and previews: retain every original candidate as `originalCandidates` during scanning, try originals before the thumbnail on download/preview fallback, and persist the field on library records.
+- [x] Platform original-URL upgrade: during scanning, X/Twitter `pbs.twimg.*` size variants (`name=small/medium/large/thumb`) are upgraded to `name=orig` as original candidates, so the image-details URL no longer shows a thumbnail variant.
+- [x] Collect animated images: the scanner recognizes video suffixes and Weibo Live Photo `livephoto=` relay URLs, includes `<video>`/`source` and `videoSrc` elements as animated sources, and the downloader accepts `video/*` and `application/octet-stream`, saving them with their real `.mov`/`.mp4` extensions.
+- [x] Dedicated "Animated" format tab: `formatCategory` routes GIF and video formats to `animated`, added across the page format tabs, library dropdown, smart collections, and localization so animated images can be filtered separately from "Other".
 
 ## Test coverage: image referrer rules
 

@@ -16,8 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # two commits so the whitespace check can diff against the parent
-          fetch-depth: 2
+          # full history so the whitespace check can diff against the push base
+          # or the PR base branch, not just the immediate parent
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -38,6 +39,9 @@ jobs:
       - name: Image referrer rule tests
         run: node --test tests/image-referrer-rules.test.js
 
+      - name: 3.7.0 feature behaviour tests
+        run: node --test tests/feature-3.7-behavior.test.js
+
       - name: Packaging validation
         run: bash scripts/package-extension.sh
 
@@ -57,8 +61,19 @@ jobs:
 
       - name: Whitespace errors
         run: |
-          if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
-            git diff --check HEAD~1 HEAD
+          # Check the full range introduced by this push/PR, not just the last
+          # commit, so a multi-commit change cannot hide whitespace errors.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/${{ github.base_ref }}"
+          elif [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            BASE="${{ github.event.before }}"
           else
-            echo "no parent commit available; skipping"
+            BASE="HEAD~1"
+          fi
+          if git rev-parse --verify "$BASE" >/dev/null 2>&1; then
+            echo "checking whitespace from $BASE to HEAD"
+            git diff --check "$BASE" HEAD
+          else
+            echo "base $BASE unavailable; checking the last commit instead"
+            git diff --check HEAD~1 HEAD
           fi

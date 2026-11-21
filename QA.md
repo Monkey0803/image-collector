@@ -1,4 +1,4 @@
-# Image Collector 3.6.1 验收清单
+# Image Collector 3.7.0 验收清单
 
 ## 验收环境
 
@@ -398,9 +398,43 @@ README 中英两半的项目结构必须列出仓库全部顶层条目。两条�
 - [x] `tests/extension-regression.test.js` 40/40、`tests/smart-collections.test.js` 5/5 通过。
 - [x] 全量真机回归 16/16 通过。
 
+## 3.6.2 变更验证（2026-11-21）
+
+### Referer 规则行为测试
+
+3.6.2 引入的行为测试在 3.6.2 当时的验收清单中未单独成节（Referer 会话规则的真机实测记录在 3.4.1 章节）。此处补记代码级验证结果：
+
+- [x] `tests/image-referrer-rules.test.js` 17/17 通过；测试在 VM 中执行真实规则函数，覆盖规则构造、候选过滤、长度保护、安装复用、1000 条上限与降级路径，而非仅检查源码文本。
+- [x] CI（`.github/workflows/ci.yml`）在 Node 20 / 22 两个矩阵上运行该测试文件。
+
+## 3.7.0 变更验证（2026-11-21）
+
+说明：本节为**代码级与自动化验证**。3.7.0 的真机交互回归（真实浏览器加载扩展并操作 UI）尚未执行，见文末「待验证」。以下每项均来自本仓库可复现的命令，不依赖一次性外部夹具。
+
+### 体验优化与原图/动态图
+
+- [x] 字号阶梯、卡片命中区、初始化闸门、快捷键作用域、筛选控件、工具收纳、选择反馈、保存默认值与差异化空状态均已实现，对应 TODO 条目全部勾选。
+- [x] 下载/预览改为原图候选优先；X/Twitter `pbs.twimg.*` 的 `name=small/medium/large/thumb` 升级为 `name=orig`；动态图（视频后缀与微博 `livephoto=` 中转）纳入采集并按真实 MIME 保存为 `.mov`/`.mp4`；`formatCategory` 新增 `animated` 分类。
+- [x] `tests/feature-3.7-behavior.test.js` 6/6 通过：在 VM 中执行真实的 `platformOriginalUrl`、`imageLikeUrl` 与 `formatCategory`，覆盖已知平台升级、非目标 URL 不改写、视频/中转地址识别、动态图分类与 metadataCache 上限契约。
+
+### 缺陷修复
+
+- [x] 修复 `shortcutHint` 翻译键被二次 `Object.assign` 覆盖的回归：结果区快捷键提示此前会显示设置页文案。设置页改用独立的 `shortcutPageHint` 键。
+- [x] 新增覆盖检测测试（`tests/extension-regression.test.js`）：执行真实翻译表并记录被覆盖的键，除历史白名单 `all` / `galleryExported` 外禁止任何覆盖；已用注入原缺陷的方式验证该测试会失败（负向验证）。
+- [x] `service-worker.js` 的 `metadataCache` 增加容量上限（等于 `MAX_METADATA_INSPECTIONS`）与写入时过期清理，避免长时间运行的 worker 内存单调增长。
+
+### 回归与工程化
+
+- [x] 四套测试全绿：`extension-regression` 43/43、`smart-collections` 5/5、`image-referrer-rules` 17/17、`feature-3.7-behavior` 6/6，合计 **71/71**。
+- [x] JavaScript 语法检查（`popup.js` / `library.js` / `service-worker.js`）通过。
+- [x] `.gitignore` 补充 `dist/`、`node_modules/`、`.workbuddy/`，构建产物与本地数据不再进入版本库。
+- [x] CI 覆盖全部四套测试；whitespace 检查改为覆盖完整 push/PR 范围，不再只看最近一次提交。
+
 ## 待验证
 
 - [ ] 需要登录态的站点上的限流与防盗链行为（本次夹具未包含登录场景）。
+- [ ] 3.7.0 真机交互回归：在真实 Chrome 侧边栏中验证原图升级与动态图下载、快捷键作用域守卫、初始化闸门与差异化空状态（自动化夹具无法覆盖真实 Side Panel）。
+- [ ] 英文界面全视图扫描，确认 3.7.0 新增文案（动态图、原图、空状态、快捷键提示）无中文残留。
 
 ## 本次验收发现并修复的问题
 

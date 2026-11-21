@@ -6,7 +6,8 @@
     <title>Image Collector</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
-  <body>
+  <body aria-busy="true">
+    <div id="initGate" class="init-gate" role="status" aria-live="polite"><span class="spinner"></span><span id="initGateLabel">正在准备扩展…</span></div>
     <main class="app-shell">
       <header class="topbar">
         <div class="topbar-identity" aria-label="当前页面">
@@ -126,6 +127,7 @@
             <button class="format-tab" type="button" data-format="png" aria-pressed="false">PNG <strong data-count>0</strong></button>
             <button class="format-tab" type="button" data-format="webp" aria-pressed="false">WEBP <strong data-count>0</strong></button>
             <button class="format-tab" type="button" data-format="avif" aria-pressed="false">AVIF <strong data-count>0</strong></button>
+            <button class="format-tab" type="button" data-format="animated" aria-pressed="false">动态图 <strong data-count>0</strong></button>
             <button class="format-tab" type="button" data-format="other" aria-pressed="false">其它 <strong data-count>0</strong></button>
           </div>
         </div>
@@ -175,6 +177,7 @@
             <button id="saveSelectionPreset" class="subtle-button" type="button">保存选择</button>
             <button id="invertSelection" class="subtle-button" type="button">反选</button>
             </div>
+            <p id="shortcutHint" class="shortcut-hint">快捷键：⌘/Ctrl+A 全选 · I 反选 · / 搜索 · R 重新扫描</p>
           </details>
         </div>
         <div id="imageGrid" class="image-grid"></div>
@@ -183,6 +186,7 @@
           <div class="empty-icon">◌</div>
           <strong>没有符合条件的图片</strong>
           <span>尝试放宽尺寸筛选，或重新扫描当前页面。</span>
+          <button id="emptyClearFilters" class="primary-button" type="button" hidden>清除筛选条件</button>
         </div>
         <div id="loadingState" class="loading-state">
           <span class="spinner"></span><span id="loadingLabel">正在扫描当前页面…</span>
@@ -192,7 +196,7 @@
 
       <section class="download-panel">
         <div class="download-caption">
-          <div class="download-context"><p id="downloadEyebrow" class="eyebrow">EXPORT SELECTION</p><label class="save-option"><input id="saveAs" type="checkbox" checked /><span>下载时选择保存位置</span><span class="help" title="ZIP 下载或单张下载时会打开 Chrome 的保存对话框">?</span></label></div>
+          <div class="download-context"><p id="downloadEyebrow" class="eyebrow">EXPORT SELECTION</p><label class="save-option"><input id="saveAs" type="checkbox" /><span>下载时选择保存位置</span><span class="help" title="ZIP 下载或单张下载时会打开 Chrome 的保存对话框">?</span></label></div>
           <span class="download-caption-note">支持普通文件与 ZIP</span>
         </div>
         <div id="downloadProgress" class="download-progress" hidden>
@@ -310,15 +314,27 @@
         </section>
         <div class="library-tools">
           <button id="newCollection" class="subtle-button" type="button">新建集合</button>
-          <button id="exportLibrary" class="subtle-button" type="button">导出收藏数据</button>
-          <button id="exportLibraryResultsJson" class="subtle-button" type="button">导出筛选 JSON</button>
-          <button id="exportLibraryResultsCsv" class="subtle-button" type="button">导出筛选 CSV</button>
-          <button id="exportLibraryMarkdown" class="subtle-button" type="button">导出 Markdown</button>
-          <button id="exportLibraryHtml" class="subtle-button" type="button">导出 HTML</button>
-          <button id="exportLibraryContactSheet" class="subtle-button" type="button">导出联系表</button>
           <button id="importLibrary" class="subtle-button" type="button">导入数据</button>
           <input id="importLibraryFile" type="file" accept="application/json,.json" hidden />
-          <button id="cleanupInvalid" class="subtle-button danger" type="button">清理无效</button><button id="cleanupUnfavorited" class="subtle-button danger" type="button">清理未收藏</button><button id="cleanupDuplicates" class="subtle-button danger" type="button">清理重复</button>
+          <details class="tool-group">
+            <summary><span id="libraryExportLabel">导出</span><span class="details-chevron" aria-hidden="true">⌄</span></summary>
+            <div class="tool-group-content">
+              <button id="exportLibrary" class="subtle-button" type="button">导出收藏数据</button>
+              <button id="exportLibraryResultsJson" class="subtle-button" type="button">导出筛选 JSON</button>
+              <button id="exportLibraryResultsCsv" class="subtle-button" type="button">导出筛选 CSV</button>
+              <button id="exportLibraryMarkdown" class="subtle-button" type="button">导出 Markdown</button>
+              <button id="exportLibraryHtml" class="subtle-button" type="button">导出 HTML</button>
+              <button id="exportLibraryContactSheet" class="subtle-button" type="button">导出联系表</button>
+            </div>
+          </details>
+          <details class="tool-group danger-group">
+            <summary><span id="libraryCleanupLabel">清理</span><span class="details-chevron" aria-hidden="true">⌄</span></summary>
+            <div class="tool-group-content">
+              <button id="cleanupInvalid" class="subtle-button danger" type="button">清理无效</button>
+              <button id="cleanupUnfavorited" class="subtle-button danger" type="button">清理未收藏</button>
+              <button id="cleanupDuplicates" class="subtle-button danger" type="button">清理重复</button>
+            </div>
+          </details>
         </div>
         <div id="libraryBatchToolbar" class="library-batch-toolbar" hidden>
           <label><input id="selectAllLibrary" type="checkbox" /><span>全选筛选结果</span></label><button id="selectLoadedLibrary" class="subtle-button" type="button">选择已加载</button><span id="librarySelectedSummary">已选 0</span><button id="invertLibrarySelection" class="subtle-button" type="button">反选</button><button id="clearLibrarySelection" class="subtle-button" type="button">清除选择</button>
@@ -326,14 +342,16 @@
         </div>
         <div id="duplicateGroupList" class="duplicate-group-list" hidden></div>
         <div class="library-filter-row">
-          <select id="libraryFormat" aria-label="按格式筛选"><option value="all">全部格式</option><option value="jpeg">JPEG</option><option value="png">PNG</option><option value="webp">WEBP</option><option value="avif">AVIF</option><option value="other">其它</option></select>
-          <input id="libraryMinWidth" type="number" min="0" step="10" placeholder="最小宽度" aria-label="素材库最小宽度" />
-          <input id="libraryMaxWidth" type="number" min="0" step="10" placeholder="最大宽度" aria-label="素材库最大宽度" />
-          <input id="libraryMinHeight" type="number" min="0" step="10" placeholder="最小高度" aria-label="素材库最小高度" />
-          <input id="libraryMaxHeight" type="number" min="0" step="10" placeholder="最大高度" aria-label="素材库最大高度" />
-          <input id="libraryMinSize" type="number" min="0" step="1" placeholder="最小 KB" aria-label="素材库最小文件大小 KB" />
-          <input id="libraryMaxSize" type="number" min="0" step="1" placeholder="最大 KB" aria-label="素材库最大文件大小 KB" />
+          <select id="libraryFormat" aria-label="按格式筛选"><option value="all">全部格式</option><option value="jpeg">JPEG</option><option value="png">PNG</option><option value="webp">WEBP</option><option value="avif">AVIF</option><option value="animated">动态图</option><option value="other">其它</option></select>
           <select id="librarySort" aria-label="素材库排序"><option value="updated">最近更新</option><option value="width">宽度</option><option value="height">高度</option><option value="size">文件大小</option></select>
+          <details id="libraryExactFilters" class="library-exact-filters">
+            <summary><span id="libraryExactLabel">精确数值</span><span class="details-chevron" aria-hidden="true">⌄</span></summary>
+            <div class="library-exact-content">
+              <label><span>宽度</span><input id="libraryMinWidth" type="number" min="0" step="10" inputmode="numeric" placeholder="最小" aria-label="素材库最小宽度" /><input id="libraryMaxWidth" type="number" min="0" step="10" inputmode="numeric" placeholder="最大" aria-label="素材库最大宽度" /></label>
+              <label><span>高度</span><input id="libraryMinHeight" type="number" min="0" step="10" inputmode="numeric" placeholder="最小" aria-label="素材库最小高度" /><input id="libraryMaxHeight" type="number" min="0" step="10" inputmode="numeric" placeholder="最大" aria-label="素材库最大高度" /></label>
+              <label><span>大小(KB)</span><input id="libraryMinSize" type="number" min="0" step="1" inputmode="numeric" placeholder="最小" aria-label="素材库最小文件大小 KB" /><input id="libraryMaxSize" type="number" min="0" step="1" inputmode="numeric" placeholder="最大" aria-label="素材库最大文件大小 KB" /></label>
+            </div>
+          </details>
         </div>
         <div class="library-visual-filters">
           <div class="mini-range-control"><span>文件大小</span><div class="range-slider" id="librarySizeTrack"><input id="libraryMinSizeRange" type="range" min="0" max="1024" step="1" value="0" aria-label="素材库最小文件大小 KB" /><input id="libraryMaxSizeRange" type="range" min="0" max="1024" step="1" value="1024" aria-label="素材库最大文件大小 KB" /></div><strong id="librarySizeRangeValue">不限</strong></div>

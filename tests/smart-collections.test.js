@@ -20,10 +20,10 @@ function createLogicApi() {
     SMART_COLLECTION_LIMIT: 50,
     SMART_RANGE_FIELDS: ['width', 'height', 'size', 'aspect'],
     SMART_CONDITION_FIELDS: ['width', 'height', 'size', 'aspect', 'format', 'domain', 'source', 'date'],
-    SMART_FORMATS: ['jpeg', 'png', 'webp', 'avif', 'other'],
+    SMART_FORMATS: ['jpeg', 'png', 'webp', 'avif', 'animated', 'other'],
     SMART_DATE_PRESETS: ['today', 'week', 'month', 'older'],
     state: { smartCollections: [] },
-    formatCategory: (format) => ['jpeg', 'png', 'webp', 'avif'].includes(format) ? format : 'other',
+    formatCategory: (format) => ['jpeg', 'png', 'webp', 'avif'].includes(format) ? format : (['gif', 'mp4', 'm4v', 'mov', 'webm', 'ogv'].includes(format) ? 'animated' : 'other'),
     sourceCategory: (source) => ['IMG', 'CSS', 'VIDEO', 'RULE'].includes(String(source || '').toUpperCase()) ? String(source).toUpperCase() : 'other',
     t: (key) => key,
     els: {}

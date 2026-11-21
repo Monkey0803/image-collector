@@ -2,10 +2,13 @@ importScripts('library.js');
 
 const MIME_EXTENSIONS = {
   'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp',
-  'image/svg+xml': '.svg', 'image/avif': '.avif', 'image/bmp': '.bmp', 'image/x-icon': '.ico'
+  'image/svg+xml': '.svg', 'image/avif': '.avif', 'image/bmp': '.bmp', 'image/x-icon': '.ico',
+  // 3.7.0：动态图（Live Photo / 短视频）按真实 MIME 保存，避免被写成 .jpg 静态图。
+  'video/mp4': '.mp4', 'video/quicktime': '.mov', 'video/webm': '.webm', 'video/ogg': '.ogv'
 };
 const FORMAT_EXTENSIONS = {
-  jpeg: '.jpg', png: '.png', gif: '.gif', webp: '.webp', avif: '.avif', svg: '.svg'
+  jpeg: '.jpg', png: '.png', gif: '.gif', webp: '.webp', avif: '.avif', svg: '.svg',
+  mp4: '.mp4', m4v: '.m4v', mov: '.mov', webm: '.webm', ogv: '.ogv'
 };
 const activeJobs = new Map();
 const downloadQueue = [];
@@ -18,6 +21,18 @@ const MAX_ZIP_IMAGES = 1000;
 // Must match MAX_METADATA_INSPECTIONS in popup.js: one HEAD request per image.
 const MAX_METADATA_INSPECTIONS = 1000;
 const METADATA_INSPECT_BUDGET_MS = 25000;
+// A single worker can outlive many scans; without a bound the cache grows with
+// every distinct URL ever seen. Keep it to the largest scan we ever probe.
+const METADATA_CACHE_MAX_ENTRIES = MAX_METADATA_INSPECTIONS;
+function pruneMetadataCache(now = Date.now()) {
+  for (const [url, entry] of metadataCache) {
+    if (now - entry.timestamp >= METADATA_CACHE_TTL) metadataCache.delete(url);
+  }
+  while (metadataCache.size > METADATA_CACHE_MAX_ENTRIES) {
+    const oldest = metadataCache.keys().next().value;
+    metadataCache.delete(oldest);
+  }
+}
 const MAX_ZIP_BYTES = 256 * 1024 * 1024;
 const MAX_ZIP_DURATION_MS = 5 * 60 * 1000;
 // Session rules apply only to this extension's image/HEAD/fetch requests.
@@ -400,7 +415,9 @@ async function saveDownloadRecord(kind, images, result, jobId = '', language = '
 }
 
 function imageCandidates(image) {
-  return [...new Set([image?.url, image?.originalUrl, image?.displayUrl, image?.sourceUrl, ...(Array.isArray(image?.candidateUrls) ? image.candidateUrls : [])]
+  const originals = Array.isArray(image?.originalCandidates) ? image.originalCandidates : [];
+  // 3.7.0：下载时先尝试全部原图候选，缩略图（displayUrl）留在后面作为回退。
+  return [...new Set([image?.url, ...originals, image?.originalUrl, image?.displayUrl, image?.sourceUrl, ...(Array.isArray(image?.candidateUrls) ? image.candidateUrls : [])]
     .map((url) => String(url || '').trim())
     .filter(Boolean))];
 }
@@ -505,7 +522,13 @@ async function readImageWithFallback(image, job, maxBytes = Infinity) {
         const contentType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
         // Servers sometimes return an HTML login page with a 200 status. Do
         // not cache or place that response into a ZIP as if it were an image.
-        if (contentType && !contentType.startsWith('image/')) throw new Error(`Unexpected content type: ${contentType}`);
+        // 3.7.0：动态图（微博 Live Photo 等）常以 video/* 或 application/octet-stream
+        // 返回，均视为合法媒体；仅拦截 HTML/JSON 等明确的非媒体响应。
+        const isMediaType = contentType && (
+          contentType.startsWith('image/') || contentType.startsWith('video/')
+          || contentType === 'application/octet-stream'
+        );
+        if (contentType && !isMediaType) throw new Error(`Unexpected content type: ${contentType}`);
         const contentLength = Number(response.headers.get('content-length'));
         if (Number.isFinite(contentLength) && contentLength > maxBytes) throw new Error('Image exceeds ZIP size limit');
         return {
@@ -751,6 +774,7 @@ async function inspectImages(images) {
       await prepareImageRequest(image);
       const item = await probeImageMetadata(image.url, deadline);
       if (!item) throw new Error('metadata unavailable');
+      pruneMetadataCache();
       metadataCache.set(image.url, { item, timestamp: Date.now(), ok: true });
       items.push(item);
     } catch {
@@ -991,6 +1015,7 @@ function formatFromUrl(url) {
     const extension = (queryHint || parsed.pathname.split('.').pop() || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     if (extension === 'jpg' || extension === 'jpeg') return 'jpeg';
     if (['png', 'gif', 'webp', 'avif', 'svg'].includes(extension)) return extension;
+    if (['mp4', 'm4v', 'mov', 'webm', 'ogv'].includes(extension)) return extension;
   } catch { /* Keep the fallback format. */ }
   return 'other';
 }
@@ -1004,6 +1029,8 @@ function formatFor(image, contentType = '') {
   if (mime === 'image/jpeg') return 'jpeg';
   if (mime === 'image/svg+xml') return 'svg';
   if (mime.startsWith('image/')) return mime.slice(6) || 'other';
+  if (mime === 'video/quicktime') return 'mov';
+  if (mime.startsWith('video/')) return mime.slice(6) || 'video';
   return String(image.format || 'other').toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'other';
 }
 

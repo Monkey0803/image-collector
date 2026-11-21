@@ -130,7 +130,8 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - PNG
 - WEBP
 - AVIF
-- 其它（例如 GIF、SVG 或无法从地址判断的格式）
+- 动态图（GIF、Live Photo、短视频），以 `.mov`/`.mp4` 等视频格式保存，保留动画
+- 其它（例如 SVG 或无法从地址判断的格式）
 
 分类按钮上的数字表示该格式在当前尺寸筛选条件下的图片数量。
 
@@ -373,6 +374,9 @@ image_2026.08.20.zip
 - 每页最多探测 1000 张图片的文件大小和 MIME；超出部分不显示文件大小，也不会参与按文件大小筛选和排序。
 - 带 `data-src` 等惰性属性的图片可以直接采集，尺寸按图片本体解析；只有在滚动前不存在任何地址（例如由 IntersectionObserver 赋值）的图片，需要开启「自动滚动」才能采集到。
 - iframe 扫描依赖当前扩展对对应 frame 来源拥有访问权限；受保护或沙盒 frame 可能无法注入。
+- 动态图（GIF 与视频）在「动态图」分类下统一筛选；浏览器或系统缺少对应编解码器时，部分视频格式可能无法预览，但下载仍按真实 MIME 后缀保存。
+- X/Twitter 的尺寸变体仅在识别出 `name=small/medium/large/thumb` 时升级为 `name=orig`；其它 CDN 或自定义参数不会被改写，原图不可用时仍回退到页面提供的地址。
+- 「下载时选择保存位置」默认关闭；如需每次下载前选择目录，请在设置中重新开启。
 
 ### 从 GitHub 获取和更新
 
@@ -403,7 +407,7 @@ download_image/
 ├── LICENSE             # MIT 开源许可证
 ├── QA.md               # 发布前 Chrome 验收清单
 ├── SECURITY.md         # 权限和本地数据边界说明
-├── TODO.md             # 3.6.1 已完成任务和后续路线图
+├── TODO.md             # 3.7.0 已完成任务和后续路线图
 ├── README.md           # 中文和英文项目文档
 ├── scripts/
 │   └── package-extension.sh          # 校验并打包扩展为可发布 ZIP
@@ -599,8 +603,8 @@ Use the format tabs to show:
 - JPEG
 - PNG
 - WEBP
-- AVIF
-- Other, including GIF, SVG, and formats that cannot be identified from the URL
+- Animated (GIF, Live Photos, short videos), saved as `.mov`/`.mp4` video so motion is preserved
+- Other, including SVG and formats that cannot be identified from the URL
 
 The number on each tab reflects the images matching the current dimension filters.
 
@@ -849,6 +853,9 @@ Image filtering and list processing happen locally in the browser. The project h
 - File size and MIME are inspected for at most 1,000 images per page; images beyond that show no file size and are excluded from file-size filtering and sorting.
 - Images carrying lazy attributes such as `data-src` are collected directly and sized from the image itself; images with no address at all before scrolling (for example those assigned by an IntersectionObserver) require **Auto scroll** to be enabled.
 - Iframe scanning depends on access to the frame's origin; protected or sandboxed frames may reject injection.
+- Animated images (GIF and video) are grouped under the "Animated" filter; some video formats may not preview when the browser or OS lacks the right codec, but downloads still use the real MIME-based extension.
+- X/Twitter size variants are upgraded to `name=orig` only when `name=small/medium/large/thumb` is recognised; other CDNs or custom parameters are left untouched, and the page-supplied address remains the fallback when an original is unavailable.
+- "Ask where to save downloads" is off by default; re-enable it in settings if you want to pick a folder before every download.
 
 ### Getting and updating from GitHub
 
@@ -879,7 +886,7 @@ download_image/
 ├── LICENSE             # MIT open-source license
 ├── QA.md               # Pre-release Chrome acceptance checklist
 ├── SECURITY.md         # Permission and local-data boundary notes
-├── TODO.md             # 3.6.1 checklist and future roadmap
+├── TODO.md             # 3.7.0 checklist and future roadmap
 ├── README.md           # Chinese and English documentation
 ├── scripts/
 │   └── package-extension.sh          # Validate and package the release ZIP
