@@ -8,6 +8,7 @@ const read = (file) => fs.readFileSync(file, 'utf8');
 const manifest = JSON.parse(read('manifest.json'));
 const html = read('popup.html');
 const popup = read('popup.js');
+const css = read('popup.css');
 const library = read('library.js');
 const worker = read('service-worker.js');
 const todo = read('TODO.md');
@@ -590,6 +591,37 @@ test('animated images (Live Photo / short video) are scanned and downloaded as m
   assert.match(popup, /animated: t\('animated'\)/);
   // Both the tab label and the library dropdown localize the new option.
   assert.match(popup, /'AVIF', t\('animated'\), t\('libraryFormatOther'\)/);
+});
+
+test('animated images play in the preview via a dedicated <video> element', () => {
+  // A real <video> is mounted in the preview stage with muted autoplay attributes
+  // so video-format animated records (Live Photo / short video) are not stuck on
+  // the static <img> path. GIF stays on <img>, which animates natively.
+  assert.match(html, /id="previewVideo"/);
+  assert.match(html, /<video id="previewVideo"[^>]*\bmuted\b[^>]*\bloop\b[^>]*\bplaysinline\b/);
+  assert.match(html, /id="previewAnimatedBadge"/);
+  assert.match(popup, /previewVideo: \$\('#previewVideo'\)/);
+  // Detection helper and media selection route video records to the <video> node.
+  assert.match(popup, /function isAnimatedVideoRecord\(image\)/);
+  assert.match(popup, /const VIDEO_FORMATS = \['mp4', 'm4v', 'mov', 'webm', 'ogv'\]/);
+  assert.match(popup, /function previewMedia\(image\)/);
+  assert.match(popup, /isAnimatedVideoRecord\(image\) \? els\.previewVideo : els\.previewImage/);
+  // The loader picks the ready event per media type and starts muted playback.
+  assert.match(popup, /const readyEvent = isVideo \? 'loadeddata' : 'load'/);
+  assert.match(popup, /media\[readyEvent === 'loadeddata' \? 'onloadeddata' : 'onload'\]/);
+  assert.match(popup, /void media\.play\(\)\.catch\(\(\) => \{\}\)/);
+  // Preview state (title/badge/zoom/close/error/cache) switches with the media type.
+  assert.match(popup, /const isVideo = isAnimatedVideoRecord\(image\);[\s\S]*els\.previewVideo\.hidden = !isVideo/);
+  assert.match(popup, /els\.previewAnimatedBadge\.textContent = t\('animated'\)/);
+  assert.match(popup, /const media = previewMedia\(state\.preview\);\n  media\.style\.transform/);
+  assert.match(popup, /function showPreviewError[\s\S]*els\.previewVideo\.hidden = true/);
+  assert.match(popup, /function closePreview[\s\S]*els\.previewVideo\.pause\(\)/);
+  assert.match(popup, /const media = previewMedia\(image\);\n    media\.src = state\.previewObjectUrl/);
+  // Animated thumbnails carry a play badge and both card builders mark them.
+  assert.match(popup, /function markAnimatedThumbnail\(wrap, image\)/);
+  assert.equal((popup.match(/markAnimatedThumbnail\(wrap, (image|record)\)/g) || []).length >= 2, true);
+  assert.match(css, /\.thumbnail-wrap\[data-animated="true"\]::before/);
+  assert.match(css, /\.preview-stage \.preview-video\[hidden\] \{ display: none; \}/);
 });
 
 test('translation table has no unexpected key overwrites (shortcutHint regression)', () => {

@@ -538,7 +538,7 @@ const els = {
   onboardingHint: $('#onboardingHint'), onboardingTitle: $('#onboardingTitle'), onboardingSteps: $('#onboardingSteps'), onboardingClose: $('#onboardingClose'),
   downloadProgress: $('#downloadProgress'), progressLabel: $('#progressLabel'), progressValue: $('#progressValue'),
   progressBar: $('#progressBar'), progressDetail: $('#progressDetail'), progressMetrics: $('#progressMetrics'), cancelButton: $('#cancelButton'), retryButton: $('#retryButton'),
-  retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewError: $('#previewError'), previewErrorText: $('#previewErrorText'), previewErrorDetail: $('#previewErrorDetail'), previewCopyCandidates: $('#previewCopyCandidates'), previewOpenSource: $('#previewOpenSource'), previewDownload: $('#previewDownload'), previewEditTags: $('#previewEditTags'), previewCollectionSelect: $('#previewCollectionSelect'), previewDetailsList: $('#previewDetailsList'), previewCandidates: $('#previewCandidates'), retryPreview: $('#retryPreview'), openPreviewPage: $('#openPreviewPage'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), previewPrevious: $('#previewPrevious'), previewNext: $('#previewNext'), previewPosition: $('#previewPosition'), copyFilteredUrls: $('#copyFilteredUrls'), pageFavoriteSelected: $('#pageFavoriteSelected'), pageTagSelected: $('#pageTagSelected'), pageArchiveSelected: $('#pageArchiveSelected'), batchActionModal: $('#batchActionModal'), batchActionForm: $('#batchActionForm'), batchActionClose: $('#batchActionClose'), batchActionTitle: $('#batchActionTitle'), batchActionDescription: $('#batchActionDescription'), batchActionTagField: $('#batchActionTagField'), batchActionTagLabel: $('#batchActionTagLabel'), batchActionTagInput: $('#batchActionTagInput'), batchActionCollectionField: $('#batchActionCollectionField'), batchActionCollectionLabel: $('#batchActionCollectionLabel'), batchActionCollectionSelect: $('#batchActionCollectionSelect'), batchActionError: $('#batchActionError'), batchActionCancel: $('#batchActionCancel'), batchActionConfirm: $('#batchActionConfirm'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
+  retryCount: $('#retryCount'), toast: $('#toast'), language: $('#languageButton'), filterPreset: $('#filterPreset'), saveFilterPreset: $('#saveFilterPreset'), deleteFilterPreset: $('#deleteFilterPreset'), selectionPreset: $('#selectionPreset'), saveSelectionPreset: $('#saveSelectionPreset'), invertSelection: $('#invertSelection'), previewModal: $('#previewModal'), previewImage: $('#previewImage'), previewVideo: $('#previewVideo'), previewAnimatedBadge: $('#previewAnimatedBadge'), previewError: $('#previewError'), previewErrorText: $('#previewErrorText'), previewErrorDetail: $('#previewErrorDetail'), previewCopyCandidates: $('#previewCopyCandidates'), previewOpenSource: $('#previewOpenSource'), previewDownload: $('#previewDownload'), previewEditTags: $('#previewEditTags'), previewCollectionSelect: $('#previewCollectionSelect'), previewDetailsList: $('#previewDetailsList'), previewCandidates: $('#previewCandidates'), retryPreview: $('#retryPreview'), openPreviewPage: $('#openPreviewPage'), previewTitle: $('#previewTitle'), previewMeta: $('#previewMeta'), closePreview: $('#closePreview'), copyImageUrl: $('#copyImageUrl'), openImageUrl: $('#openImageUrl'), previewPrevious: $('#previewPrevious'), previewNext: $('#previewNext'), previewPosition: $('#previewPosition'), copyFilteredUrls: $('#copyFilteredUrls'), pageFavoriteSelected: $('#pageFavoriteSelected'), pageTagSelected: $('#pageTagSelected'), pageArchiveSelected: $('#pageArchiveSelected'), batchActionModal: $('#batchActionModal'), batchActionForm: $('#batchActionForm'), batchActionClose: $('#batchActionClose'), batchActionTitle: $('#batchActionTitle'), batchActionDescription: $('#batchActionDescription'), batchActionTagField: $('#batchActionTagField'), batchActionTagLabel: $('#batchActionTagLabel'), batchActionTagInput: $('#batchActionTagInput'), batchActionCollectionField: $('#batchActionCollectionField'), batchActionCollectionLabel: $('#batchActionCollectionLabel'), batchActionCollectionSelect: $('#batchActionCollectionSelect'), batchActionError: $('#batchActionError'), batchActionCancel: $('#batchActionCancel'), batchActionConfirm: $('#batchActionConfirm'), zoomIn: $('#zoomIn'), zoomOut: $('#zoomOut'), zoomReset: $('#zoomReset'), zoomValue: $('#zoomValue')
 };
 
 // 3.4.1: a failure raised outside init() — inside a listener or a detached promise —
@@ -1963,6 +1963,7 @@ function createLibraryCard(record) {
   checkbox.addEventListener('click', (event) => event.stopPropagation());
   checkbox.addEventListener('change', () => { if (checkbox.checked) state.librarySelected.add(record.url); else state.librarySelected.delete(record.url); renderLibrary(); });
   const wrap = document.createElement('div'); wrap.className = 'thumbnail-wrap';
+  markAnimatedThumbnail(wrap, record);
   const thumbnail = document.createElement('img'); thumbnail.className = 'thumbnail'; thumbnail.alt = record.alt || t('webImage'); thumbnail.loading = 'lazy';
   loadThumbnailWithFallback(record, thumbnail, wrap);
   thumbnail.addEventListener('click', (event) => { event.stopPropagation(); openPreview(record); });
@@ -2696,6 +2697,24 @@ function previewCandidates(image, preferDisplay = false) {
     .filter(Boolean))];
 }
 
+// 动图预览：GIF 由 <img> 原生播放；视频格式（Live Photo / 短视频）必须走 <video>。
+// 只依据记录自身的格式 / MIME / 候选地址判断，不依赖页面运行时状态。
+const VIDEO_FORMATS = ['mp4', 'm4v', 'mov', 'webm', 'ogv'];
+const VIDEO_URL_PATTERN = /\.(?:mp4|m4v|mov|webm|ogv)(?:$|[?#])/i;
+const LIVEPHOTO_URL_PATTERN = /[?&]livephoto=/i;
+function isAnimatedVideoRecord(image) {
+  if (!image) return false;
+  const format = String(image.format || '').toLowerCase();
+  if (VIDEO_FORMATS.includes(format)) return true;
+  const mime = String(image.mime || '').toLowerCase();
+  if (mime.startsWith('video/')) return true;
+  return previewCandidates(image).some((url) => VIDEO_URL_PATTERN.test(url) || LIVEPHOTO_URL_PATTERN.test(url));
+}
+
+function previewMedia(image) {
+  return isAnimatedVideoRecord(image) ? els.previewVideo : els.previewImage;
+}
+
 function showPreviewUnavailable(container, image) {
   if (!container) return;
   const button = document.createElement('button');
@@ -2707,6 +2726,11 @@ function showPreviewUnavailable(container, image) {
   container.replaceChildren(button);
   container.style.color = '#9ba4ac';
   container.style.fontSize = 'calc(10px * var(--browser-text-scale, 1))';
+}
+
+// 动图缩略图标记：视频格式无法用静态 <img> 呈现首帧，用角标提示可播放。
+function markAnimatedThumbnail(wrap, image) {
+  if (wrap && isAnimatedVideoRecord(image)) wrap.dataset.animated = 'true';
 }
 
 async function preparePreviewRequest(image) {
@@ -2773,9 +2797,17 @@ function renderPreviewNavigation() {
 function updatePreviewContent(image) {
   const primaryUrl = previewCandidates(image)[0];
   if (!primaryUrl) return false;
+  const isVideo = isAnimatedVideoRecord(image);
   state.preview = image;
   state.previewZoom = 1;
   els.previewImage.alt = image.alt || t('imagePreview');
+  els.previewVideo.pause();
+  els.previewImage.hidden = isVideo;
+  els.previewVideo.hidden = !isVideo;
+  if (els.previewAnimatedBadge) {
+    els.previewAnimatedBadge.hidden = !isVideo;
+    els.previewAnimatedBadge.textContent = t('animated');
+  }
   els.previewTitle.textContent = fileName(primaryUrl);
   els.previewMeta.textContent = (image.width && image.height ? image.width + ' × ' + image.height + 'px' : t('unknownSize')) + ' · ' + formatLabel(image.format) + (image.original ? ' · ' + t('original') : '');
   renderPreviewDetails(image);
@@ -2816,6 +2848,9 @@ function navigatePreview(delta) {
 
 function showPreviewError(detail = '') {
   els.previewImage.hidden = true;
+  els.previewVideo.hidden = true;
+  els.previewVideo.pause();
+  if (els.previewAnimatedBadge) els.previewAnimatedBadge.hidden = true;
   els.previewError.hidden = false;
   els.previewErrorText.textContent = t('previewUnavailable');
   if (els.previewErrorDetail) els.previewErrorDetail.textContent = detail || t('previewFailureHint');
@@ -2828,9 +2863,11 @@ async function loadPreviewFromCache(image, token) {
     if (!record?.blob) return false;
     releasePreviewObjectUrl();
     state.previewObjectUrl = URL.createObjectURL(record.blob);
-    els.previewImage.src = state.previewObjectUrl;
-    els.previewImage.hidden = false;
+    const media = previewMedia(image);
+    media.src = state.previewObjectUrl;
+    media.hidden = false;
     els.previewError.hidden = true;
+    if (media === els.previewVideo) void media.play().catch(() => {});
     return true;
   } catch {
     return false;
@@ -2840,6 +2877,9 @@ async function loadPreviewFromCache(image, token) {
 async function loadPreviewWithFallback(image, options = {}) {
   const candidates = previewCandidates(image, Boolean(options.retry));
   const token = ++previewLoadToken;
+  const isVideo = isAnimatedVideoRecord(image);
+  const media = isVideo ? els.previewVideo : els.previewImage;
+  const readyEvent = isVideo ? 'loadeddata' : 'load';
   let candidateIndex = 0;
   let cacheTried = false;
   let usingCachedPreview = false;
@@ -2849,30 +2889,34 @@ async function loadPreviewWithFallback(image, options = {}) {
   releasePreviewObjectUrl();
   els.previewError.hidden = true;
   if (els.previewErrorDetail) els.previewErrorDetail.textContent = '';
-  els.previewImage.hidden = false;
   els.previewImage.onerror = null;
   els.previewImage.onload = null;
-  els.previewImage.removeAttribute('src');
+  els.previewVideo.onerror = null;
+  els.previewVideo.onloadeddata = null;
+  els.previewVideo.pause();
+  els.previewVideo.removeAttribute('src');
+  media.hidden = false;
   await preparePreviewRequest(image);
   if (token !== previewLoadToken) return;
+  const startMedia = (url) => {
+    const currentAttempt = ++attemptToken;
+    media.src = url;
+    if (isVideo) void media.play().catch(() => {});
+    timeoutId = setTimeout(() => {
+      if (token === previewLoadToken && currentAttempt === attemptToken) void handleFailure();
+    }, isVideo ? 12000 : 6000);
+  };
   const handleFailure = async () => {
     if (token !== previewLoadToken) return;
     clearPreviewTimeout();
-    attemptToken += 1;
     if (candidateIndex < candidates.length) {
-      const currentAttempt = attemptToken;
-      els.previewImage.src = candidates[candidateIndex++];
-      timeoutId = setTimeout(() => {
-        if (token === previewLoadToken && currentAttempt === attemptToken) void handleFailure();
-      }, 6000);
+      startMedia(candidates[candidateIndex++]);
       return;
     }
     if (!cacheTried) {
       cacheTried = true;
       usingCachedPreview = true;
-      if (await loadPreviewFromCache(image, token)) {
-        return;
-      }
+      if (await loadPreviewFromCache(image, token)) return;
       await requestImageCache(image);
       if (token !== previewLoadToken) return;
       if (await loadPreviewFromCache(image, token)) return;
@@ -2881,22 +2925,17 @@ async function loadPreviewWithFallback(image, options = {}) {
     // these records eligible for destructive "clear invalid" cleanup.
     if (token === previewLoadToken) showPreviewError(t('previewFailureHint', { count: candidates.length }));
   };
-  els.previewImage.onerror = handleFailure;
-  els.previewImage.onload = () => {
+  media.onerror = handleFailure;
+  media[readyEvent === 'loadeddata' ? 'onloadeddata' : 'onload'] = () => {
     if (token !== previewLoadToken) return;
     clearPreviewTimeout();
     attemptToken += 1;
-    els.previewImage.hidden = false;
+    media.hidden = false;
     els.previewError.hidden = true;
+    if (isVideo) void media.play().catch(() => {});
     if (!usingCachedPreview) void requestImageCache(image);
   };
-  if (candidates.length) {
-    const currentAttempt = ++attemptToken;
-    els.previewImage.src = candidates[candidateIndex++];
-    timeoutId = setTimeout(() => {
-      if (token === previewLoadToken && currentAttempt === attemptToken) void handleFailure();
-    }, 6000);
-  }
+  if (candidates.length) startMedia(candidates[candidateIndex++]);
   else if (!(await loadPreviewFromCache(image, token)) && token === previewLoadToken) showPreviewError(t('previewFailureHint', { count: 0 }));
 }
 
@@ -2926,6 +2965,12 @@ function closePreview() {
   els.previewImage.hidden = false;
   els.previewImage.onerror = null;
   els.previewImage.onload = null;
+  els.previewVideo.pause();
+  els.previewVideo.removeAttribute('src');
+  els.previewVideo.hidden = true;
+  els.previewVideo.onerror = null;
+  els.previewVideo.onloadeddata = null;
+  if (els.previewAnimatedBadge) els.previewAnimatedBadge.hidden = true;
   els.previewError.hidden = true;
   if (els.previewErrorDetail) els.previewErrorDetail.textContent = '';
   state.preview = null;
@@ -2950,7 +2995,8 @@ function changePreviewZoom(delta) {
 
 function updatePreviewZoom() {
   if (!state.preview) return;
-  els.previewImage.style.transform = `scale(${state.previewZoom})`;
+  const media = previewMedia(state.preview);
+  media.style.transform = `scale(${state.previewZoom})`;
   els.zoomValue.textContent = `${Math.round(state.previewZoom * 100)}%`;
 }
 
@@ -4493,6 +4539,7 @@ function createCard(image) {
   const favorite = document.createElement('button'); favorite.type = 'button'; favorite.className = `card-favorite${savedRecord?.favorite ? ' active' : ''}`; favorite.textContent = savedRecord?.favorite ? '★' : '☆'; favorite.title = savedRecord?.favorite ? t('removeFavorite') : t('favoriteImage'); favorite.setAttribute('aria-label', favorite.title); favorite.setAttribute('aria-pressed', savedRecord?.favorite ? 'true' : 'false');
   favorite.addEventListener('click', (event) => { event.stopPropagation(); toggleFavorite(image); });
   const wrap = document.createElement('div'); wrap.className = 'thumbnail-wrap';
+  markAnimatedThumbnail(wrap, image);
   const thumbnail = document.createElement('img'); thumbnail.className = 'thumbnail'; thumbnail.alt = image.alt || t('webImage'); thumbnail.loading = 'lazy';
   loadThumbnailWithFallback(image, thumbnail, wrap);
   thumbnail.addEventListener('click', (event) => { event.stopPropagation(); openPreview(image); });

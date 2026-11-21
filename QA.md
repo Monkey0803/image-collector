@@ -415,7 +415,7 @@ README 中英两半的项目结构必须列出仓库全部顶层条目。两条�
 
 - [x] 字号阶梯、卡片命中区、初始化闸门、快捷键作用域、筛选控件、工具收纳、选择反馈、保存默认值与差异化空状态均已实现，对应 TODO 条目全部勾选。
 - [x] 下载/预览改为原图候选优先；X/Twitter `pbs.twimg.*` 的 `name=small/medium/large/thumb` 升级为 `name=orig`；动态图（视频后缀与微博 `livephoto=` 中转）纳入采集并按真实 MIME 保存为 `.mov`/`.mp4`；`formatCategory` 新增 `animated` 分类。
-- [x] `tests/feature-3.7-behavior.test.js` 6/6 通过：在 VM 中执行真实的 `platformOriginalUrl`、`imageLikeUrl` 与 `formatCategory`，覆盖已知平台升级、非目标 URL 不改写、视频/中转地址识别、动态图分类与 metadataCache 上限契约。
+- [x] `tests/feature-3.7-behavior.test.js` 8/8 通过：在 VM 中执行真实的 `platformOriginalUrl`、`imageLikeUrl` 与 `formatCategory`，覆盖已知平台升级、非目标 URL 不改写、视频/中转地址识别、动态图分类与 metadataCache 上限契约；新增 `isAnimatedVideoRecord` 行为测试，覆盖视频格式/MIME/微博中转地址判定与静态图排除。
 
 ### 缺陷修复
 
@@ -425,10 +425,26 @@ README 中英两半的项目结构必须列出仓库全部顶层条目。两条�
 
 ### 回归与工程化
 
-- [x] 四套测试全绿：`extension-regression` 45/45、`smart-collections` 5/5、`image-referrer-rules` 17/17、`feature-3.7-behavior` 6/6，合计 **73/73**。
+- [x] 四套测试全绿：`extension-regression` 46/46、`smart-collections` 5/5、`image-referrer-rules` 17/17、`feature-3.7-behavior` 8/8，合计 **76/76**。
 - [x] JavaScript 语法检查（`popup.js` / `library.js` / `service-worker.js`）通过。
 - [x] `.gitignore` 补充 `dist/`、`node_modules/`、`.workbuddy/`，构建产物与本地数据不再进入版本库。
 - [x] CI 覆盖全部四套测试；whitespace 检查改为覆盖完整 push/PR 范围，不再只看最近一次提交。
+
+## 动图预览验证（代码级）
+
+### 实现
+
+- [x] 预览区新增 `<video id="previewVideo">`（`muted loop playsinline controls`），视频格式动态图走该元素静音循环播放，用户可暂停、拖动进度或开启声音；GIF 保持 `<img>` 原生动画路径。
+- [x] `isAnimatedVideoRecord` 依据 `format` / `mime` / 候选 URL（视频后缀与 `livephoto=` 中转）判定，静态图不被误判；预览标题旁角标标明动态图，缩略图左上角显示播放角标。
+- [x] 视频预览复用既有的候选顺序、防盗链准备、本地缓存回退、超时重试逻辑，并纳入缩放（`transform`）、导航切换与关闭清理（暂停、移除 `src`、撤销 object URL）。
+
+### 验证
+
+- [x] `tests/extension-regression.test.js` 新增 `animated images play in the preview via a dedicated <video> element`：断言 `<video>` 挂载、媒体类型选择、就绪事件切换、播放、缩放/关闭/错误/缓存分支与缩略图角标。
+- [x] `tests/feature-3.7-behavior.test.js` 新增 2 项：VM 执行真实 `isAnimatedVideoRecord`，覆盖视频格式、MIME、`originalCandidates` 中的视频地址与微博中转地址，并确认静态图不受影响。
+- [x] 四套测试 76/76 通过；`popup.js` 与两套测试文件语法检查通过。
+
+> 注：视频能否实际解码播放取决于浏览器与系统编解码器；此节为代码级验证，真实视频（尤其微博 Live Photo 的 MOV 中转）在 Side Panel 中的播放效果列入下方「待验证」。
 
 ## 窄屏布局优化验证（2026-11-21）
 
@@ -474,6 +490,7 @@ README 中英两半的项目结构必须列出仓库全部顶层条目。两条�
 - [ ] 需要登录态的站点上的限流与防盗链行为（本次夹具未包含登录场景）。
 - [ ] 3.7.0 真机交互回归：在真实 Chrome 侧边栏中验证原图升级与动态图下载、快捷键作用域守卫、初始化闸门与差异化空状态（自动化夹具无法覆盖真实 Side Panel）。
 - [ ] 英文界面全视图扫描，确认 3.7.0 新增文案（动态图、原图、空状态、快捷键提示）无中文残留。
+- [ ] 动图预览真机验证：在真实 Chrome 侧边栏中分别对 GIF、MP4/WebM 短视频与微博 Live Photo MOV 中转打开预览，确认静音循环播放、控件暂停/开启声音、缩放与上一张/下一张切换正常。
 
 ## 本次验收发现并修复的问题
 

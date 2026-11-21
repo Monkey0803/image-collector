@@ -105,6 +105,48 @@ test('formatCategory routes animated formats to the animated bucket', () => {
   assert.equal(formatCategory('bmp'), 'other');
 });
 
+// ------------------------------------------------------------------ animated preview detection
+
+function createPreviewHelpers() {
+  const context = { URL };
+  vm.createContext(context);
+  // previewCandidates is a top-level function; extract it with its helper block.
+  vm.runInContext(between('function previewCandidates(image, preferDisplay = false) {', '// 动图预览：'), context);
+  vm.runInContext(between('const VIDEO_FORMATS =', 'function previewMedia(image)'), context);
+  vm.runInContext(`this.helpers = { isAnimatedVideoRecord };`, context);
+  return context.helpers;
+}
+
+test('isAnimatedVideoRecord recognizes video formats, MIME types, and relay URLs', () => {
+  const { isAnimatedVideoRecord } = createPreviewHelpers();
+  for (const record of [
+    { url: 'https://cdn.example.com/a.mp4', format: 'mp4' },
+    { url: 'https://cdn.example.com/a.mov', format: 'mov' },
+    { url: 'https://cdn.example.com/a.webm', format: 'webm' },
+    { url: 'https://cdn.example.com/media', mime: 'video/quicktime' },
+    // A static-looking record that carries a video original candidate still needs <video>.
+    { url: 'https://cdn.example.com/cover.jpg', format: 'jpeg', originalCandidates: ['https://cdn.example.com/clip.mp4'] },
+  ]) {
+    assert.equal(isAnimatedVideoRecord(record), true, `expected video record: ${record.url}`);
+  }
+  const relay = 'https://video.weibo.com/media/play?livephoto=' + encodeURIComponent('https://livephoto.us.sinaimg.cn/a.mov');
+  assert.equal(isAnimatedVideoRecord({ url: relay, format: 'other' }), true);
+});
+
+test('isAnimatedVideoRecord leaves static images on the <img> path', () => {
+  const { isAnimatedVideoRecord } = createPreviewHelpers();
+  for (const record of [
+    { url: 'https://cdn.example.com/a.jpg', format: 'jpeg' },
+    { url: 'https://cdn.example.com/a.png', format: 'png' },
+    { url: 'https://cdn.example.com/a.gif', format: 'gif' },
+    { url: 'https://cdn.example.com/a.webp', format: 'webp' },
+    { url: 'https://cdn.example.com/a.svg', format: 'svg' },
+    {},
+  ]) {
+    assert.equal(isAnimatedVideoRecord(record), false, `expected static record: ${record.url || 'empty'}`);
+  }
+});
+
 // ------------------------------------------------------------------ cache bound contract
 
 test('metadata cache has a bounded size and prunes expired entries', () => {

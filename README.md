@@ -42,6 +42,7 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 记录最近扫描页面以及图片/ZIP 下载活动
 - 提供右键扫描页面、下载图片和收藏图片操作
 - 点击缩略图打开大图预览，支持缩放、复制原图地址和新标签页打开
+- 动图预览：GIF 自动播放，Live Photo / 短视频在预览中静音循环播放并可暂停或开启声音
 - 支持保存筛选预设、选择预设和反选当前结果
 - 提供下载任务中心，可暂停、继续、取消和重试失败任务
 - 支持创建自定义素材集合，并按集合浏览本地图片
@@ -198,6 +199,7 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 #### 预览、预设和任务中心
 
 - 点击任意图片缩略图可打开大图预览；预览窗口支持 `25%` 到 `400%` 缩放、复制原图地址和新标签页打开。
+- 动态图在预览中会播放：GIF 自动循环，Live Photo 与短视频以静音循环播放，可通过播放器控件暂停、调节进度或开启声音；预览标题旁的角标标明这是动态图。
 - 在筛选区域点击“保存筛选”可以保存当前尺寸、格式、搜索和排序条件；在选择区域可以保存当前图片选择结果。
 - “任务”视图会列出排队中、进行中、暂停、完成和失败的下载。进行中的任务支持暂停、继续和取消，失败或部分失败任务可以重新提交。
 - 任务列表和收藏数据均保存在浏览器本地，不会上传到服务器。
@@ -375,7 +377,7 @@ image_2026.08.20.zip
 - 每页最多探测 1000 张图片的文件大小和 MIME；超出部分不显示文件大小，也不会参与按文件大小筛选和排序。
 - 带 `data-src` 等惰性属性的图片可以直接采集，尺寸按图片本体解析；只有在滚动前不存在任何地址（例如由 IntersectionObserver 赋值）的图片，需要开启「自动滚动」才能采集到。
 - iframe 扫描依赖当前扩展对对应 frame 来源拥有访问权限；受保护或沙盒 frame 可能无法注入。
-- 动态图（GIF 与视频）在「动态图」分类下统一筛选；浏览器或系统缺少对应编解码器时，部分视频格式可能无法预览，但下载仍按真实 MIME 后缀保存。
+- 动态图（GIF 与视频）在「动态图」分类下统一筛选；预览会尝试静音循环播放视频，浏览器或系统缺少对应编解码器时部分格式仍可能无法播放，但下载仍按真实 MIME 后缀保存。
 - X/Twitter 的尺寸变体仅在识别出 `name=small/medium/large/thumb` 时升级为 `name=orig`；其它 CDN 或自定义参数不会被改写，原图不可用时仍回退到页面提供的地址。
 - 「下载时选择保存位置」默认关闭；如需每次下载前选择目录，请在设置中重新开启。
 
@@ -517,6 +519,7 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Record recently scanned pages and image/ZIP download activity
 - Provide context-menu actions for scanning pages, downloading images, and favoriting images
 - Open a large-image preview with zoom, original-URL copying, and new-tab opening
+- Animated preview: GIFs play automatically; Live Photos and short videos play muted in a loop with pause and unmute controls
 - Save filter presets and selection presets, and invert the current selection
 - Use a download task center to pause, resume, cancel, and retry failed tasks
 - Create custom local collections and browse images by collection
@@ -670,6 +673,7 @@ On a webpage, right-click to open the Image Collector menu. It provides **Scan c
 #### Preview, presets, and task center
 
 - Click any thumbnail to open a large preview. The preview supports zoom from `25%` to `400%`, copying the original URL, and opening it in a new tab.
+- Animated images play in the preview: GIFs loop automatically, while Live Photos and short videos play muted in a loop with on-screen controls to pause, seek, or unmute; a badge beside the preview title marks animated items.
 - Click **Save filter** to store the current dimension, format, search, and sort settings. The selection toolbar can store the current image selection as a reusable preset.
 - The **Tasks** view lists queued, running, paused, completed, and failed downloads. Active tasks can be paused, resumed, or cancelled; failed and partial tasks can be submitted again.
 - Task records and library data stay in the browser and are not uploaded to a server.
@@ -855,7 +859,7 @@ Image filtering and list processing happen locally in the browser. The project h
 - File size and MIME are inspected for at most 1,000 images per page; images beyond that show no file size and are excluded from file-size filtering and sorting.
 - Images carrying lazy attributes such as `data-src` are collected directly and sized from the image itself; images with no address at all before scrolling (for example those assigned by an IntersectionObserver) require **Auto scroll** to be enabled.
 - Iframe scanning depends on access to the frame's origin; protected or sandboxed frames may reject injection.
-- Animated images (GIF and video) are grouped under the "Animated" filter; some video formats may not preview when the browser or OS lacks the right codec, but downloads still use the real MIME-based extension.
+- Animated images (GIF and video) are grouped under the "Animated" filter; the preview attempts muted looping video playback, but some formats may not play when the browser or OS lacks the right codec, while downloads still use the real MIME-based extension.
 - X/Twitter size variants are upgraded to `name=orig` only when `name=small/medium/large/thumb` is recognised; other CDNs or custom parameters are left untouched, and the page-supplied address remains the fallback when an original is unavailable.
 - "Ask where to save downloads" is off by default; re-enable it in settings if you want to pick a folder before every download.
 
