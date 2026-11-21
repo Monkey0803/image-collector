@@ -689,3 +689,40 @@ test('narrow viewports keep heading controls grouped and status feedback visible
   assert.match(popup, /window\.innerWidth <= 390 \? t\('searchPageShort'\) : t\('searchPage'\)/);
   assert.match(popup, /window\.addEventListener\('resize', \(\) => \{ updateSearchPlaceholder\(\); \}\)/);
 });
+
+test('first-run path surfaces scanning early and keeps advanced actions secondary', () => {
+  // The scan must start before secondary reads/render: the gate is released and
+  // scanPage() launched ahead of library, preset and adapter work.
+  const scanAt = popup.indexOf('const scan = scanPage()');
+  const gateAt = popup.indexOf('markInteractionReady();', popup.indexOf('async function init()'));
+  const libraryAt = popup.indexOf('void refreshLibraryData()', popup.indexOf('async function init()'));
+  assert.ok(scanAt > gateAt, 'gate must open before the scan is launched');
+  assert.ok(scanAt < libraryAt, 'scan must start before secondary library reads');
+  assert.ok(popup.indexOf('await refreshTabList();', popup.indexOf('async function init()')) === -1,
+    'init must not await the tab list before scanning; scanPage refreshes it');
+
+  // Progressive disclosure: secondary views stay hidden until they have content.
+  assert.match(popup, /function updateViewTabsAvailability/);
+  assert.match(popup, /VIEWS_REVEALED_STORAGE_KEY/);
+  for (const id of ['libraryViewButton', 'historyViewButton', 'taskViewButton']) {
+    assert.match(popup, new RegExp(`els\\.${id}\\.hidden = true`), `${id} must be hideable`);
+  }
+
+  // Download-all is a direct path from filtered results without selecting first.
+  assert.match(html, /id="downloadAllButton"[^>]*type="button" disabled/);
+  assert.match(popup, /on\(els\.downloadAll, 'click', \(\) => downloadImages\(state\.filtered\.slice\(\), false\)\)/);
+  assert.match(popup, /els\.downloadAll\.disabled = state\.filtered\.length === 0/);
+
+  // One-time guidance and a deeper advanced block.
+  assert.match(html, /id="onboardingHint"[^>]*hidden/);
+  assert.match(popup, /ONBOARDING_STORAGE_KEY = 'onboardingDismissed'/);
+  assert.match(popup, /function maybeShowOnboarding/);
+  assert.match(popup, /function dismissOnboarding/);
+  assert.match(html, /<details class="download-advanced">/);
+  assert.match(popup, /setText\(document\.querySelector\('#downloadAdvancedLabel'\), t\('downloadAdvanced'\)\)/);
+
+  // Setting labels are resolved by element id, not by positional index, so the
+  // two-panel split cannot silently swap ZIP/conflict/filename translations.
+  assert.match(popup, /const labelFor = \(id\) => document\.querySelector\(`#\$\{id\}`\)/);
+  assert.doesNotMatch(popup, /\.download-settings > label > span'\)\]; if \(settingLabels\[0\]/);
+});

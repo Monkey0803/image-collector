@@ -28,6 +28,10 @@
       <small id="scanStats" class="scan-stats" aria-live="polite"></small>
       <button id="retryMetadata" class="metadata-notice" type="button" hidden></button>
 
+      <div id="onboardingHint" class="onboarding-hint" role="status" hidden>
+        <div class="onboarding-copy"><strong id="onboardingTitle">三步开始采集</strong><span id="onboardingSteps">扫描当前网页 · 勾选需要的图片 · 点击下载或下载 ZIP</span></div>
+        <button id="onboardingClose" class="onboarding-close" type="button" aria-label="知道了">×</button>
+      </div>
 
       <nav class="view-switcher" aria-label="视图切换">
         <button id="pageViewButton" class="view-tab active" type="button" aria-selected="true" title="当前页面"><span class="view-tab-icon" aria-hidden="true">▤</span><span class="view-tab-text">当前页面</span></button>
@@ -215,11 +219,12 @@
           <div id="progressMetrics" class="progress-metrics" aria-live="polite"></div>
         </div>
         <div class="download-actions">
+          <button id="downloadAllButton" class="primary-button" type="button" disabled><span id="downloadAllCount">0</span> <span id="downloadAllLabel">张图片 · 全部下载</span></button>
           <button id="downloadButton" class="secondary-button" type="button" disabled>下载选中 <span id="selectedCount">0</span></button>
-          <button id="zipButton" class="primary-button" type="button" disabled><span class="zip-icon">▣</span> 下载 ZIP</button>
+          <button id="zipButton" class="secondary-button" type="button" disabled><span class="zip-icon">▣</span> 下载 ZIP</button>
         </div>
         <details class="download-options">
-          <summary><span id="downloadOptionsLabel">下载设置与批量管理</span><span class="details-chevron" aria-hidden="true">⌄</span></summary>
+          <summary><span id="downloadOptionsLabel">下载设置</span><span class="details-chevron" aria-hidden="true">⌄</span></summary>
           <div class="download-options-content">
         <div class="zip-options">
           <div class="download-settings">
@@ -233,29 +238,36 @@
               <option value="domain-page">按网站 / 页面</option>
               <option value="domain-date">按网站 / 日期</option>
             </select></label>
-            <label><span>文件冲突</span><select id="conflictAction" aria-label="文件冲突处理方式">
-              <option value="uniquify">自动重命名</option>
-              <option value="overwrite">覆盖已有文件</option>
-              <option value="prompt">每次询问</option>
-            </select></label>
-            <label class="filename-setting"><span>文件名模板</span><input id="filenameTemplate" type="text" value="{name}" placeholder="{name}" title="支持 {name}、{filename}、{domain}、{format}、{width}、{height}、{date}" aria-label="文件名模板" /></label>
             <label class="date-folder-setting"><input id="dateFolder" type="checkbox" /><span>按日期建目录</span></label>
           </div>
-          <div class="utility-actions">
-            <button id="exportJson" type="button">导出 JSON</button>
-            <button id="exportCsv" type="button">导出 CSV</button>
-            <button id="exportMarkdown" type="button">导出 Markdown</button>
-            <button id="exportHtml" type="button">导出 HTML</button>
-            <button id="exportContactSheet" type="button">导出联系表</button>
+        </div>
+        <details class="download-advanced">
+          <summary><span id="downloadAdvancedLabel">高级设置与批量管理</span><span class="details-chevron" aria-hidden="true">⌄</span></summary>
+          <div class="download-advanced-content">
+            <div class="download-settings">
+              <label><span>文件冲突</span><select id="conflictAction" aria-label="文件冲突处理方式">
+                <option value="uniquify">自动重命名</option>
+                <option value="overwrite">覆盖已有文件</option>
+                <option value="prompt">每次询问</option>
+              </select></label>
+              <label class="filename-setting"><span>文件名模板</span><input id="filenameTemplate" type="text" value="{name}" placeholder="{name}" title="支持 {name}、{filename}、{domain}、{format}、{width}、{height}、{date}" aria-label="文件名模板" /></label>
+            </div>
+            <div class="utility-actions">
+              <button id="exportJson" type="button">导出 JSON</button>
+              <button id="exportCsv" type="button">导出 CSV</button>
+              <button id="exportMarkdown" type="button">导出 Markdown</button>
+              <button id="exportHtml" type="button">导出 HTML</button>
+              <button id="exportContactSheet" type="button">导出联系表</button>
+            </div>
+            <div class="page-batch-actions">
+              <button id="pageFavoriteSelected" class="subtle-button" type="button" disabled>收藏选中</button>
+              <button id="pageTagSelected" class="subtle-button" type="button" disabled>给选中加标签</button>
+              <button id="pageArchiveSelected" class="subtle-button" type="button" disabled>归档选中</button>
+            </div>
+            <div class="download-utility-actions"><button id="copyFilteredUrls" class="subtle-button" type="button" disabled>复制当前结果 URL</button></div>
+            <p class="download-note">ZIP 会将当前选中的图片合并为一个文件，适合批量保存。</p>
           </div>
-        </div>
-        <div class="page-batch-actions">
-          <button id="pageFavoriteSelected" class="subtle-button" type="button" disabled>收藏选中</button>
-          <button id="pageTagSelected" class="subtle-button" type="button" disabled>给选中加标签</button>
-          <button id="pageArchiveSelected" class="subtle-button" type="button" disabled>归档选中</button>
-        </div>
-        <div class="download-utility-actions"><button id="copyFilteredUrls" class="subtle-button" type="button" disabled>复制当前结果 URL</button></div>
-        <p class="download-note">ZIP 会将当前选中的图片合并为一个文件，适合批量保存。</p>
+        </details>
           </div>
         </details>
       </section>

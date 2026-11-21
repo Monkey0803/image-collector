@@ -786,3 +786,48 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .image-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .thumbnail-wrap { height: 86px; }
 }
+
+/* 3.8.0 — first-run guidance and download hierarchy ------------------------ */
+
+/* A short, dismissible three-step hint replaces the silent empty first run. */
+.onboarding-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 var(--space-2);
+  padding: 9px 11px;
+  border: 1px solid rgba(244, 118, 85, .32);
+  border-radius: var(--button-radius);
+  background: var(--orange-100);
+  color: var(--slate-900);
+}
+.onboarding-hint[hidden] { display: none; }
+.onboarding-copy { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.onboarding-copy strong { font-size: calc(11px * var(--browser-text-scale, 1)); font-weight: 800; }
+.onboarding-copy span { font-size: calc(10px * var(--browser-text-scale, 1)); line-height: 1.4; }
+.onboarding-close {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--slate-700);
+  background: rgba(255, 255, 255, .6);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* Download-all is the primary path; selected / ZIP become secondary. */
+.download-actions { grid-template-columns: 1.25fr 1fr 1fr; }
+@media (max-width: 440px) {
+  .download-actions { grid-template-columns: 1fr 1fr; }
+  .download-actions #downloadAllButton { grid-column: 1 / -1; }
+}
+
+/* Advanced download options are collapsed one level deeper than the core settings. */
+.download-advanced { margin-top: 8px; border-top: 1px solid var(--slate-100); }
+.download-advanced > summary { display: flex; align-items: center; justify-content: space-between; min-height: 32px; color: var(--slate-500); cursor: pointer; font-size: calc(10px * var(--browser-text-scale, 1)); font-weight: 800; list-style: none; }
+.download-advanced > summary::-webkit-details-marker { display: none; }
+.download-advanced .details-chevron { width: 16px; height: 16px; }
+.download-advanced-content { padding: 0 0 6px; }

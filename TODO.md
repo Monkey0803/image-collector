@@ -726,7 +726,7 @@ Last updated: 2026-11-19
 - [x] 统一选择反馈计数：结果标题栏改为「已选 N / 共 M」占比，按钮内保留待下载数。
 - [x] 默认关闭保存对话框：`saveAs` 默认改为关闭，尊重老用户已保存的偏好。
 - [x] 差异化空状态：按「页面无图 / 被筛选过滤 / 扫描失败」给出针对性文案，筛选态增加「清除筛选条件」按钮。
-- [x] 运行全量回归测试（72/72 通过）、JS 语法检查与 HTML 标签配对校验，确认无控件 id 回归。
+- [x] 运行全量回归测试（73/73 通过）、JS 语法检查与 HTML 标签配对校验，确认无控件 id 回归。
 - [x] 下载/预览强制走原图：扫描阶段保留全部原图候选 `originalCandidates`，下载与大图预览的回退顺序把原图排在缩略图之前，素材库记录同步保留该字段。
 - [x] 平台原图 URL 升级：X/Twitter 的 `pbs.twimg.*` 尺寸变体（`name=small/medium/large/thumb`）在扫描时升级为 `name=orig` 原图候选，图片尺寸详情不再显示缩略图变体地址。
 - [x] 采集动态图：扫描器识别视频后缀与微博 Live Photo 的 `livephoto=` 中转地址，纳入 `<video>`/`source` 与 `videoSrc` 等元素的动态源；下载侧放行 `video/*` 与 `application/octet-stream`，并按真实 MIME 保存为 `.mov`/`.mp4`。
@@ -743,7 +743,7 @@ Last updated: 2026-11-19
 - [x] Unify selection feedback counts: show "N of M selected" in the results heading and keep the pending-download count on the button.
 - [x] Turn off the save dialog by default: default `saveAs` to off while respecting preferences saved by returning users.
 - [x] Differentiate empty states: give targeted copy for "no images / filtered out / scan failed" and add a "clear filters" action to the filtered state.
-- [x] Run the full regression suite (72/72 passing), JS syntax checks, and HTML tag-pair validation, confirming no control-id regressions.
+- [x] Run the full regression suite (73/73 passing), JS syntax checks, and HTML tag-pair validation, confirming no control-id regressions.
 - [x] Force originals for downloads and previews: retain every original candidate as `originalCandidates` during scanning, try originals before the thumbnail on download/preview fallback, and persist the field on library records.
 - [x] Platform original-URL upgrade: during scanning, X/Twitter `pbs.twimg.*` size variants (`name=small/medium/large/thumb`) are upgraded to `name=orig` as original candidates, so the image-details URL no longer shows a thumbnail variant.
 - [x] Collect animated images: the scanner recognizes video suffixes and Weibo Live Photo `livephoto=` relay URLs, includes `<video>`/`source` and `videoSrc` elements as animated sources, and the downloader accepts `video/*` and `application/octet-stream`, saving them with their real `.mov`/`.mp4` extensions.

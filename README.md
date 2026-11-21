@@ -158,8 +158,9 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 点击图片卡片可以选择或取消选择图片。
 - 点击“全选当前结果”可以选择当前筛选结果中的全部图片。
 - 点击图片卡片右下角的下载按钮，可以只下载这一张图片。
+- 点击“全部下载”，无需选择即可直接下载当前筛选结果中的全部图片。
 - 点击“下载选中”，会分别下载选中的图片。
-- 点击“下载 ZIP”，会将选中的图片合并为一个 ZIP 文件。
+- 点击“下载 ZIP”，会将选中的图片合并为一个 ZIP 文件；文件名模板与冲突策略位于下载设置下的“高级设置与批量管理”中。
 - 下载面板会显示当前任务进度；部分图片失败时，可以点击“重试失败项”。
 - ZIP 分组可以选择不分组、按网站、按格式或按网站/格式。
 - 下载任务进行中可以取消排队、图片读取、ZIP 压缩或下载任务。
@@ -629,8 +630,9 @@ Duplicate results are filtered automatically. Same-origin images use a small pix
 - Click an image card to select or deselect it.
 - Click **Select all current results** to select every visible result.
 - Click the download button on an image card to download only that image.
+- Click **Download all** to download every filtered result without selecting first.
 - Click **Download selected** to download selected images individually.
-- Click **Download ZIP** to combine selected images into one ZIP archive.
+- Click **Download ZIP** to combine selected images into one ZIP archive; the filename template and conflict policy live under **Advanced settings & batch actions** inside the download settings.
 - The download panel shows task progress. If some images fail, click **Retry failed items** to retry them with the same download mode.
 - ZIP grouping can be flat, by hostname, by format, or by hostname and format.
 - Queued, active image reading, ZIP compression, and download tasks can be cancelled.
