@@ -624,6 +624,22 @@ test('animated images play in the preview via a dedicated <video> element', () =
   assert.match(css, /\.preview-stage \.preview-video\[hidden\] \{ display: none; \}/);
 });
 
+test('Instagram CDN images are scanned and downloaded with the required referer', () => {
+  // Scanner recognises signed Instagram/Meta CDN URLs, including extension-less paths.
+  assert.match(popup, /const isInstagramCdnUrl = \(rawUrl\) =>/);
+  assert.ok(popup.includes('cdninstagram\\.com$'), 'popup must match the Instagram CDN host');
+  assert.match(popup, /isInstagramCdnUrl\(url\);/);
+  // srcset variants on the CDN become original candidates so the largest real
+  // resolution is preferred instead of the page's current thumbnail.
+  assert.match(popup, /const fromInstagramCdn = isInstagramCdnUrl\(candidate\.rawUrl\);/);
+  assert.match(popup, /push\(candidate\.rawUrl, 6500 \+ candidate\.widthHint \/ 100, fromInstagramCdn, candidate\.widthHint\)/);
+  // Worker forces the instagram.com referer for these CDN hosts, even without a source page.
+  assert.match(worker, /function isInstagramCdnUrl\(rawUrl\)/);
+  assert.match(worker, /const targetsInstagramCdn = rawUrls\.some\(isInstagramCdnUrl\)/);
+  assert.match(worker, /if \(!source && !targetsInstagramCdn\) return null;/);
+  assert.match(worker, /\? 'https:\/\/www\.instagram\.com\/'/);
+});
+
 test('translation table has no unexpected key overwrites (shortcutHint regression)', () => {
   // 3.7.0 bug: shortcutHint was defined twice — once for the result-area shortcut
   // legend and once for the settings-page hint. The later Object.assign silently

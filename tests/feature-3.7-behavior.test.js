@@ -35,7 +35,7 @@ function createHelpers() {
   // formatCategory is a top-level function; extract through the next function.
   vm.runInContext(between('function formatCategory(format) {', 'function updateRangeLimits()'), context);
   vm.runInContext(
-    `this.helpers = { normalizeUrl, platformOriginalUrl, imageLikeUrl, formatCategory };`,
+    `this.helpers = { normalizeUrl, platformOriginalUrl, imageLikeUrl, isInstagramCdnUrl, formatCategory };`,
     context
   );
   return context.helpers;
@@ -89,6 +89,36 @@ test('imageLikeUrl rejects unrelated URLs', () => {
   ]) {
     assert.equal(imageLikeUrl(url), false, `expected non-image URL: ${url}`);
   }
+});
+
+// ------------------------------------------------------------------ Instagram CDN recognition
+
+test('isInstagramCdnUrl matches only Instagram/Meta image CDN hosts', () => {
+  const { isInstagramCdnUrl } = createHelpers();
+  for (const url of [
+    'https://scontent-cdg2-1.cdninstagram.com/v/t51.2885-15/123_n.jpg?stp=dst-jpg_e35',
+    'https://scontent-hkg3-2.xx.fbcdn.net/v/t51.2885-15/456_n.jpg?oh=abc',
+    'https://cdninstagram.com/a.webp',
+  ]) {
+    assert.equal(isInstagramCdnUrl(url), true, `expected Instagram CDN URL: ${url}`);
+  }
+  for (const url of [
+    'https://cdn.example.com/a.jpg',
+    'https://example.cdninstagram.com.evil.com/a.jpg',
+    'https://pbs.twimg.com/media/a.jpg',
+    'not a url',
+    '',
+  ]) {
+    assert.equal(isInstagramCdnUrl(url), false, `expected non-Instagram URL: ${url}`);
+  }
+});
+
+test('imageLikeUrl recognises signed Instagram CDN URLs without an extension', () => {
+  const { imageLikeUrl } = createHelpers();
+  // Extension-less signed CDN path, plus the stp= variant marker.
+  assert.equal(imageLikeUrl('https://scontent-cdg2-1.cdninstagram.com/v/t51.2885-15/abc?stp=dst-jpg_e35&ccb=7-5'), true);
+  assert.equal(imageLikeUrl('https://scontent-hkg3-2.xx.fbcdn.net/v/t51.2885-15/def?oh=xyz&oe=123'), true);
+  assert.equal(imageLikeUrl('https://cdn.example.com/page?stp=dst-jpg_e35'), true);
 });
 
 // ------------------------------------------------------------------ format classification

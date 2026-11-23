@@ -422,6 +422,15 @@ function imageCandidates(image) {
     .filter(Boolean))];
 }
 
+// Instagram 图片/Reels 落在带签名的 CDN 上，且强制校验来自 instagram.com 的 Referer。
+// 没有正确 Referer 时 CDN 返回 403 或 HTML 登录页，下载/预览都会失败。
+function isInstagramCdnUrl(rawUrl) {
+  try {
+    const host = new URL(String(rawUrl || '')).hostname.toLowerCase();
+    return /(^|\.)cdninstagram\.com$/.test(host) || /^scontent-[^.]+\.[^.]+\.fbcdn\.net$/.test(host);
+  } catch { return false; }
+}
+
 function imageReferrerRule(image, id) {
   let source;
   for (const value of [image?.frameUrl, image?.pageUrl]) {
@@ -430,22 +439,28 @@ function imageReferrerRule(image, id) {
       if (/^https?:$/.test(parsed.protocol)) { source = parsed; break; }
     } catch { /* Older records may not carry a source page. */ }
   }
-  if (!source) return null;
-  const urls = imageCandidates(image).slice(0, 16).flatMap((value) => {
+  const rawUrls = imageCandidates(image).slice(0, 16);
+  const targetsInstagramCdn = rawUrls.some(isInstagramCdnUrl);
+  // Instagram CDN 需要固定的来源页 Referer；来源页缺失时也应为该 CDN 生成规则。
+  if (!source && !targetsInstagramCdn) return null;
+  const urls = rawUrls.flatMap((value) => {
     try {
       const url = new URL(value);
       if (!/^https?:$/.test(url.protocol) || url.username || url.password) return [];
-      if (source.protocol === 'https:' && url.protocol === 'http:') return [];
+      if (source?.protocol === 'https:' && url.protocol === 'http:') return [];
       url.hash = '';
       return [url.href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')];
     } catch { return []; }
   });
   if (!urls.length) return null;
+  const referer = targetsInstagramCdn
+    ? 'https://www.instagram.com/'
+    : `${source.origin}/`;
   const regexFilter = `^(${[...new Set(urls)].join('|')})$`;
   if (regexFilter.length > 2000) return null;
   return {
     id, priority: 1,
-    action: { type: 'modifyHeaders', requestHeaders: [{ header: 'referer', operation: 'set', value: `${source.origin}/` }] },
+    action: { type: 'modifyHeaders', requestHeaders: [{ header: 'referer', operation: 'set', value: referer }] },
     condition: { regexFilter, isUrlFilterCaseSensitive: true, initiatorDomains: [chrome.runtime.id], resourceTypes: ['image', 'xmlhttprequest'], requestMethods: ['get', 'head'] }
   };
 }

@@ -415,7 +415,7 @@ README 中英两半的项目结构必须列出仓库全部顶层条目。两条�
 
 - [x] 字号阶梯、卡片命中区、初始化闸门、快捷键作用域、筛选控件、工具收纳、选择反馈、保存默认值与差异化空状态均已实现，对应 TODO 条目全部勾选。
 - [x] 下载/预览改为原图候选优先；X/Twitter `pbs.twimg.*` 的 `name=small/medium/large/thumb` 升级为 `name=orig`；动态图（视频后缀与微博 `livephoto=` 中转）纳入采集并按真实 MIME 保存为 `.mov`/`.mp4`；`formatCategory` 新增 `animated` 分类。
-- [x] `tests/feature-3.7-behavior.test.js` 8/8 通过：在 VM 中执行真实的 `platformOriginalUrl`、`imageLikeUrl` 与 `formatCategory`，覆盖已知平台升级、非目标 URL 不改写、视频/中转地址识别、动态图分类与 metadataCache 上限契约；新增 `isAnimatedVideoRecord` 行为测试，覆盖视频格式/MIME/微博中转地址判定与静态图排除。
+- [x] `tests/feature-3.7-behavior.test.js` 10/10 通过：在 VM 中执行真实的 `platformOriginalUrl`、`imageLikeUrl` 与 `formatCategory`，覆盖已知平台升级、非目标 URL 不改写、视频/中转地址识别、动态图分类与 metadataCache 上限契约；`isAnimatedVideoRecord` 覆盖视频格式/MIME/微博中转地址判定与静态图排除；`isInstagramCdnUrl` 覆盖 Instagram/Meta CDN 主机与仿冒域名排除。
 
 ### 缺陷修复
 
@@ -425,7 +425,7 @@ README 中英两半的项目结构必须列出仓库全部顶层条目。两条�
 
 ### 回归与工程化
 
-- [x] 四套测试全绿：`extension-regression` 46/46、`smart-collections` 5/5、`image-referrer-rules` 17/17、`feature-3.7-behavior` 8/8，合计 **76/76**。
+- [x] 四套测试全绿：`extension-regression` 47/47、`smart-collections` 5/5、`image-referrer-rules` 20/20、`feature-3.7-behavior` 10/10，合计 **82/82**。
 - [x] JavaScript 语法检查（`popup.js` / `library.js` / `service-worker.js`）通过。
 - [x] `.gitignore` 补充 `dist/`、`node_modules/`、`.workbuddy/`，构建产物与本地数据不再进入版本库。
 - [x] CI 覆盖全部四套测试；whitespace 检查改为覆盖完整 push/PR 范围，不再只看最近一次提交。
@@ -445,6 +445,22 @@ README 中英两半的项目结构必须列出仓库全部顶层条目。两条�
 - [x] 四套测试 76/76 通过；`popup.js` 与两套测试文件语法检查通过。
 
 > 注：视频能否实际解码播放取决于浏览器与系统编解码器；此节为代码级验证，真实视频（尤其微博 Live Photo 的 MOV 中转）在 Side Panel 中的播放效果列入下方「待验证」。
+
+## Instagram 图片下载验证（代码级）
+
+### 实现
+
+- [x] 扫描器新增 `isInstagramCdnUrl`，按 `*.cdninstagram.com` 与 `scontent-*.fbcdn.net` 识别带签名参数、甚至无文件后缀的图片/Reels 地址；`imageLikeUrl` 同时纳入 `stp=` 变体标记，避免漏采。
+- [x] `chooseImageSource` 将来自 Instagram CDN 的 srcset 变体标记为原图候选，使下载/预览优先取最高分辨率而非页面当前显示的缩略图；签名 URL 不做参数改写（改写会使签名失效）。
+- [x] 下载侧 `imageReferrerRule` 对目标为上述 CDN 的请求强制使用 `https://www.instagram.com/` Referer；来源页缺失（素材库旧记录）时仍生成规则，覆盖防盗链 403 / HTML 登录页场景。
+
+### 验证
+
+- [x] `tests/feature-3.7-behavior.test.js` 新增 2 项：VM 执行真实 `isInstagramCdnUrl`（含仿冒域名排除）与 `imageLikeUrl`（含无后缀签名地址）。
+- [x] `tests/image-referrer-rules.test.js` 新增 3 项：Instagram CDN 使用固定 Referer、覆盖无关来源页、无来源页仍生成规则。
+- [x] `tests/extension-regression.test.js` 新增 1 项源码契约断言；四套测试 82/82 通过，`popup.js` / `service-worker.js` 语法检查通过。
+
+> 注：Instagram 登录态内容、Reels 视频解码与 CDN 签名过期属于运行时条件；此节为代码级验证，真实帖子页下载列入下方「待验证」。
 
 ## 窄屏布局优化验证（2026-11-21）
 
@@ -491,6 +507,7 @@ README 中英两半的项目结构必须列出仓库全部顶层条目。两条�
 - [ ] 3.7.0 真机交互回归：在真实 Chrome 侧边栏中验证原图升级与动态图下载、快捷键作用域守卫、初始化闸门与差异化空状态（自动化夹具无法覆盖真实 Side Panel）。
 - [ ] 英文界面全视图扫描，确认 3.7.0 新增文案（动态图、原图、空状态、快捷键提示）无中文残留。
 - [ ] 动图预览真机验证：在真实 Chrome 侧边栏中分别对 GIF、MP4/WebM 短视频与微博 Live Photo MOV 中转打开预览，确认静音循环播放、控件暂停/开启声音、缩放与上一张/下一张切换正常。
+- [ ] Instagram 真机验证：在公开帖子页扫描并下载图片/Reels，确认 srcset 高分辨率候选生效且无 403；登录态内容与签名过期场景单独记录。
 
 ## 本次验收发现并修复的问题
 

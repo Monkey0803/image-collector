@@ -128,6 +128,29 @@ test('candidates exclude unusable addresses', () => {
   assert.ok(!rule.condition.regexFilter.includes('chrome-extension'), 'other schemes must be excluded');
 });
 
+test('Instagram CDN requests always use the instagram.com referer', () => {
+  const { api } = createSandbox();
+  const igImage = 'https://scontent-cdg2-1.cdninstagram.com/v/t51.2885-15/abc_n.jpg?stp=dst-jpg_e35';
+  const rule = api.imageReferrerRule(image({ url: igImage, pageUrl: 'https://www.instagram.com/p/ABC/' }), BASE_ID);
+  assert.ok(rule, 'expected a rule for the Instagram CDN image');
+  assert.equal(refererOf(rule), 'https://www.instagram.com/');
+});
+
+test('Instagram CDN referer overrides an unrelated source page', () => {
+  const { api } = createSandbox();
+  const igImage = 'https://scontent-hkg3-2.xx.fbcdn.net/v/t51.2885-15/def_n.jpg?oh=xyz';
+  const rule = api.imageReferrerRule(image({ url: igImage, pageUrl: 'https://elsewhere.example/post' }), BASE_ID);
+  assert.equal(refererOf(rule), 'https://www.instagram.com/', 'the CDN requires an Instagram referer even when embedded elsewhere');
+});
+
+test('Instagram CDN images without a source page still get a usable rule', () => {
+  const { api } = createSandbox();
+  const igImage = 'https://scontent-cdg2-1.cdninstagram.com/v/t51.2885-15/abc_n.jpg';
+  const rule = api.imageReferrerRule({ url: igImage }, BASE_ID);
+  assert.ok(rule, 'a library record without pageUrl must still be downloadable');
+  assert.equal(refererOf(rule), 'https://www.instagram.com/');
+});
+
 test('at most sixteen candidates enter the filter', () => {
   const { api } = createSandbox();
   const candidateUrls = Array.from({ length: 24 }, (_, i) => `https://cdn.example.com/c${i}.png`);

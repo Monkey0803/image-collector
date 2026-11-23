@@ -43,6 +43,7 @@ Image Collector 是一个基于 Chrome Manifest V3 的开源浏览器扩展。�
 - 提供右键扫描页面、下载图片和收藏图片操作
 - 点击缩略图打开大图预览，支持缩放、复制原图地址和新标签页打开
 - 动图预览：GIF 自动播放，Live Photo / 短视频在预览中静音循环播放并可暂停或开启声音
+- 支持扫描与下载 Instagram 图片/Reels：识别 CDN 签名地址，优先取高分辨率候选，并自动附带所需 Referer
 - 支持保存筛选预设、选择预设和反选当前结果
 - 提供下载任务中心，可暂停、继续、取消和重试失败任务
 - 支持创建自定义素材集合，并按集合浏览本地图片
@@ -378,6 +379,7 @@ image_2026.08.20.zip
 - 带 `data-src` 等惰性属性的图片可以直接采集，尺寸按图片本体解析；只有在滚动前不存在任何地址（例如由 IntersectionObserver 赋值）的图片，需要开启「自动滚动」才能采集到。
 - iframe 扫描依赖当前扩展对对应 frame 来源拥有访问权限；受保护或沙盒 frame 可能无法注入。
 - 动态图（GIF 与视频）在「动态图」分类下统一筛选；预览会尝试静音循环播放视频，浏览器或系统缺少对应编解码器时部分格式仍可能无法播放，但下载仍按真实 MIME 后缀保存。
+- Instagram CDN 地址带时效签名，不在签名参数上做改写；取页面 srcset 中的高分辨率变体作为原图候选，签名过期或登录态内容仍需重新扫描网页获取新地址。
 - X/Twitter 的尺寸变体仅在识别出 `name=small/medium/large/thumb` 时升级为 `name=orig`；其它 CDN 或自定义参数不会被改写，原图不可用时仍回退到页面提供的地址。
 - 「下载时选择保存位置」默认关闭；如需每次下载前选择目录，请在设置中重新开启。
 
@@ -520,6 +522,7 @@ Image Collector is an open-source Chrome extension built with Chrome Manifest V3
 - Provide context-menu actions for scanning pages, downloading images, and favoriting images
 - Open a large-image preview with zoom, original-URL copying, and new-tab opening
 - Animated preview: GIFs play automatically; Live Photos and short videos play muted in a loop with pause and unmute controls
+- Scan and download Instagram images/Reels: signed CDN URLs are recognised, higher-resolution srcset variants are preferred, and the required Referer is attached automatically
 - Save filter presets and selection presets, and invert the current selection
 - Use a download task center to pause, resume, cancel, and retry failed tasks
 - Create custom local collections and browse images by collection
@@ -860,6 +863,7 @@ Image filtering and list processing happen locally in the browser. The project h
 - Images carrying lazy attributes such as `data-src` are collected directly and sized from the image itself; images with no address at all before scrolling (for example those assigned by an IntersectionObserver) require **Auto scroll** to be enabled.
 - Iframe scanning depends on access to the frame's origin; protected or sandboxed frames may reject injection.
 - Animated images (GIF and video) are grouped under the "Animated" filter; the preview attempts muted looping video playback, but some formats may not play when the browser or OS lacks the right codec, while downloads still use the real MIME-based extension.
+- Instagram CDN URLs carry time-limited signatures and are never rewritten; higher-resolution srcset variants are used as original candidates, while expired signatures or sign-in-only content require rescanning the page for fresh URLs.
 - X/Twitter size variants are upgraded to `name=orig` only when `name=small/medium/large/thumb` is recognised; other CDNs or custom parameters are left untouched, and the page-supplied address remains the fallback when an original is unavailable.
 - "Ask where to save downloads" is off by default; re-enable it in settings if you want to pick a folder before every download.
 

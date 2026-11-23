@@ -3628,6 +3628,17 @@ async function collectPageImages(options = {}) {
     } catch { return ''; }
   };
 
+  // Instagram 图片/Reels 落在带签名的 CDN 上，部分地址没有可识别的文件后缀，
+  // 只能按主机名识别。仅匹配已知 CDN 域名，避免误收任意链接。
+  const isInstagramCdnUrl = (rawUrl) => {
+    const url = normalizeUrl(rawUrl);
+    if (!url) return false;
+    try {
+      const host = new URL(url).hostname.toLowerCase();
+      return /(^|\.)cdninstagram\.com$/.test(host) || /^scontent-[^.]+\.[^.]+\.fbcdn\.net$/.test(host);
+    } catch { return false; }
+  };
+
   // 3.7.0：部分 CDN 用查询参数控制图片尺寸，页面 <img> 指向缩略图变体，
   // 原图地址可通过替换参数得到（如 X/Twitter 的 name=small → name=orig）。
   // 只处理已知平台与已知尺寸值，避免对任意 URL 做破坏性改写。
@@ -3648,7 +3659,8 @@ async function collectPageImages(options = {}) {
   // 3.7.0：纳入动态图来源。视频文件后缀 + 微博 Live Photo 的
   // video.weibo.com/media/play?livephoto=<编码地址> 中转形式（该地址直接返回 MOV）。
   const imageLikeUrl = (url) => /\.(?:avif|bmp|gif|jpe?g|png|svg|webp|ico|mp4|m4v|mov|webm|ogv)(?:$|[?#])/i.test(url)
-    || /[?&](?:format|fm|image|img|w|width|livephoto)=/i.test(url);
+    || /[?&](?:format|fm|image|img|w|width|livephoto|stp)=/i.test(url)
+    || isInstagramCdnUrl(url);
 
   let skippedCount = 0;
   const add = (rawUrl, width, height, source, alt = '', options = {}) => {
@@ -3724,7 +3736,10 @@ async function collectPageImages(options = {}) {
     });
     [image.getAttribute('srcset'), image.srcset, image.getAttribute('data-srcset')].forEach((srcset) => {
       parseSrcset(srcset).forEach((candidate) => {
-        push(candidate.rawUrl, 6500 + candidate.widthHint / 100, false, candidate.widthHint);
+        // Instagram CDN 的 srcset 变体才是真实分辨率地址（签名参数不可改写），
+        // 标记为原图候选，让下载/预览优先于页面当前显示的缩略图。
+        const fromInstagramCdn = isInstagramCdnUrl(candidate.rawUrl);
+        push(candidate.rawUrl, 6500 + candidate.widthHint / 100, fromInstagramCdn, candidate.widthHint);
       });
     });
     push(image.currentSrc, 6000, false);
