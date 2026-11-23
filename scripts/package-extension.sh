@@ -7,6 +7,7 @@ manifest_path="$project_dir/manifest.json"
 version="$(node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv[1], "utf8")); if (!/^\d+\.\d+\.\d+$/.test(m.version)) process.exit(1); process.stdout.write(m.version);' "$manifest_path")"
 output_path="${1:-$project_dir/dist/image-collector-$version.zip}"
 output_dir="$(dirname "$output_path")"
+extract_dir="$project_dir/dist/image-collector-$version"
 
 required_files=(
   manifest.json
@@ -38,3 +39,8 @@ rm -f "$output_path"
 
 echo "Created $output_path"
 unzip -tq "$output_path"
+
+# Keep a ready-to-load unpacked copy in sync so no manual extraction is needed.
+mkdir -p "$extract_dir"
+unzip -oq "$output_path" -d "$extract_dir"
+echo "Updated $extract_dir (ready for Load unpacked)"

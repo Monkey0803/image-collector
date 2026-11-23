@@ -425,10 +425,11 @@ README 中英两半的项目结构必须列出仓库全部顶层条目。两条�
 
 ### 回归与工程化
 
-- [x] 四套测试全绿：`extension-regression` 47/47、`smart-collections` 5/5、`image-referrer-rules` 20/20、`feature-3.7-behavior` 10/10，合计 **82/82**。
+- [x] 四套测试全绿：`extension-regression` 50/50、`smart-collections` 5/5、`image-referrer-rules` 20/20、`feature-3.7-behavior` 10/10，合计 **85/85**。
 - [x] JavaScript 语法检查（`popup.js` / `library.js` / `service-worker.js`）通过。
 - [x] `.gitignore` 补充 `dist/`、`node_modules/`、`.workbuddy/`，构建产物与本地数据不再进入版本库。
 - [x] CI 覆盖全部四套测试；whitespace 检查改为覆盖完整 push/PR 范围，不再只看最近一次提交。
+- [x] `scripts/package-extension.sh` 打包后自动解压同步到 `dist/image-collector-<version>/`，该目录可直接用于“加载已解压的扩展程序”；每次修复后重新运行脚本即可更新目录，无需手动解压。
 
 ## 动图预览验证（代码级）
 
@@ -458,9 +459,31 @@ README 中英两半的项目结构必须列出仓库全部顶层条目。两条�
 
 - [x] `tests/feature-3.7-behavior.test.js` 新增 2 项：VM 执行真实 `isInstagramCdnUrl`（含仿冒域名排除）与 `imageLikeUrl`（含无后缀签名地址）。
 - [x] `tests/image-referrer-rules.test.js` 新增 3 项：Instagram CDN 使用固定 Referer、覆盖无关来源页、无来源页仍生成规则。
-- [x] `tests/extension-regression.test.js` 新增 1 项源码契约断言；四套测试 82/82 通过，`popup.js` / `service-worker.js` 语法检查通过。
+- [x] `tests/extension-regression.test.js` 新增 1 项源码契约断言；四套测试 85/85 通过，`popup.js` / `service-worker.js` 语法检查通过。
 
 > 注：Instagram 登录态内容、Reels 视频解码与 CDN 签名过期属于运行时条件；此节为代码级验证，真实帖子页下载列入下方「待验证」。
+
+## 预览弹窗间距优化验证（2026-11-23）
+
+- [x] **结构**：弹窗改为 `flex` 纵向布局；标题栏与图片区固定，详情区独立滚动（`.preview-body`），底部操作栏（`.preview-footer`）常驻。长签名 URL 不再把「下载图片 / 添加到集合」等按钮挤出可视区。
+- [x] **间距**：统一 16px 水平边距；工具栏按钮高度 25px→28px，翻页与缩放两组加分隔线；详情表标签列 72px→76px、行距 1.5，长地址与候选地址分别限制 3 / 2 行，悬停 `title` 保留全文。
+- [x] **实测**：Chrome CDP `Emulation.setDeviceMetricsOverride` 精确视口 420×760 / 550×850 加载注入模拟数据的弹窗截图复核；两档详情区 `clientWidth === scrollWidth`（均为 386 / 516px，无横向溢出），纵向 `clientHeight / scrollHeight` 为 210/428、328/428（可滚动）；关闭按钮两档均为完整 30×30px，底部操作栏完整可见。
+- [x] 新增源码契约测试 1 项；四套测试 85/85 通过，JS 语法检查与 `git diff --check` 通过。
+
+## 素材库筛选区布局优化验证（2026-11-23）
+
+- [x] **问题**：`.library-controls` 原为 `auto minmax(0, 1fr)` 两列，左列宽度由内容撑开且偏窄，三个下拉箭头集中在内容区中部；`相似阈值` 标签在同一窄列内换行。
+- [x] **修复**：改为 `repeat(2, minmax(0, 1fr))` 等宽两列，`智能集合` 与 `我的收藏` 配对成行；`相似阈值` 跨整行、标签 `white-space: nowrap`，滑块占满整行。
+- [x] **实测**：Chrome CDP 精确视口 500×1100 加载素材库视图，两列控件右边界分别为 247 / 467px，阈值行宽 434px、标签 42×11px 单行显示；截图复核无错位。
+- [x] 新增源码契约测试 1 项；四套测试 85/85 通过。
+
+## 全项目间距排查（2026-11-23）
+
+- [x] **排查范围**：Chrome CDP 精确视口 500×1100 逐视图渲染当前页、素材库、历史、任务、设置与预览弹窗，检查控件贴边、文字挤压、列间距离与箭头留白。
+- [x] **问题**：原生 `select` 下拉箭头紧贴控件右边缘，与相邻列之间缺少留白；下载高级设置中的冲突处理下拉缺少与其它控件一致的边框和内边距。
+- [x] **修复**：统一 20 个下拉框的箭头为内嵌 8px 的自定义 chevron，右侧内边距 22px（含深色模式浅色箭头）；为冲突处理下拉补齐边框/圆角/字号；素材库筛选区列间距 7px→10px、下边距 8px→10px。
+- [x] **验证**：CDP 计算样式确认 20 个下拉框均为自定义箭头且无文字截断；两列右边界仍对齐（245 / 467px），阈值标签单行；截图复核各视图无新增挤压。
+- [x] 新增源码契约测试 1 项；四套测试 85/85 通过。
 
 ## 窄屏布局优化验证（2026-11-21）
 

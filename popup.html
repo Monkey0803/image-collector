@@ -469,13 +469,16 @@
         <div class="preview-dialog">
           <div class="preview-header"><strong id="previewTitle">图片预览</strong><button id="closePreview" class="icon-button light" type="button" aria-label="关闭预览">×</button></div>
           <div class="preview-stage"><span id="previewAnimatedBadge" class="preview-animated-badge" hidden></span><img id="previewImage" alt="图片预览" /><video id="previewVideo" class="preview-video" muted loop playsinline controls hidden></video><div id="previewError" class="preview-error" hidden><span id="previewErrorText">预览不可用</span><small id="previewErrorDetail"></small><div class="preview-error-actions"><button id="retryPreview" type="button">重新加载</button><button id="openPreviewPage" type="button">使用网页地址</button></div></div></div>
-          <div class="preview-toolbar">
-            <button id="previewPrevious" type="button" aria-label="上一张">‹</button><span id="previewPosition">1 / 1</span><button id="previewNext" type="button" aria-label="下一张">›</button>
-            <button id="zoomOut" type="button">−</button><span id="zoomValue">100%</span><button id="zoomIn" type="button">＋</button><button id="zoomReset" type="button">重置</button>
+          <div class="preview-body">
+            <div class="preview-toolbar">
+              <button id="previewPrevious" type="button" aria-label="上一张">‹</button><span id="previewPosition">1 / 1</span><button id="previewNext" type="button" aria-label="下一张">›</button>
+              <button id="zoomOut" type="button">−</button><span id="zoomValue">100%</span><button id="zoomIn" type="button">＋</button><button id="zoomReset" type="button">重置</button>
+            </div>
+            <p id="previewMeta" class="preview-meta"></p>
+            <div class="preview-actions"><button id="copyImageUrl" class="secondary-button" type="button">复制原图地址</button><button id="openImageUrl" class="primary-button" type="button">在新标签页打开</button></div>
+            <section id="previewDetails" class="preview-details" aria-label="图片详情"><dl id="previewDetailsList"></dl><div id="previewCandidates" class="preview-candidates"></div></section>
           </div>
-          <p id="previewMeta" class="preview-meta"></p>
-          <div class="preview-actions"><button id="copyImageUrl" class="secondary-button" type="button">复制原图地址</button><button id="openImageUrl" class="primary-button" type="button">在新标签页打开</button></div>
-          <section id="previewDetails" class="preview-details" aria-label="图片详情"><dl id="previewDetailsList"></dl><div id="previewCandidates" class="preview-candidates"></div><div class="preview-detail-actions"><button id="previewCopyCandidates" class="secondary-button" type="button">复制所有地址</button><button id="previewOpenSource" class="secondary-button" type="button">打开来源页面</button><button id="previewDownload" class="primary-button" type="button">下载图片</button><button id="previewEditTags" class="secondary-button" type="button">编辑标签</button><select id="previewCollectionSelect" aria-label="修改集合"></select></div></section>
+          <div class="preview-footer"><div class="preview-detail-actions"><button id="previewCopyCandidates" class="secondary-button" type="button">复制所有地址</button><button id="previewOpenSource" class="secondary-button" type="button">打开来源页面</button><button id="previewDownload" class="primary-button" type="button">下载图片</button><button id="previewEditTags" class="secondary-button" type="button">编辑标签</button><select id="previewCollectionSelect" aria-label="修改集合"></select></div></div>
         </div>
       </div>
       <div id="batchActionModal" class="batch-action-modal" hidden role="dialog" aria-modal="true" aria-labelledby="batchActionTitle" aria-describedby="batchActionDescription">

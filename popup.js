@@ -508,6 +508,17 @@ function applyAppearance() {
 const $ = (selector) => document.querySelector(selector);
 const on = (element, eventName, handler, options) => element?.addEventListener(eventName, handler, options);
 const setText = (element, value) => { if (element) element.textContent = value; };
+// Tab buttons keep an icon, a label and (for the library) a count badge. Replacing
+// the whole button text used to drop the icon and collapse the label into the
+// badge grid cell, so update only the label node.
+const setViewTabLabel = (button, label) => {
+  if (!button) return;
+  const labelNode = button.querySelector('.view-tab-text');
+  if (labelNode) { labelNode.textContent = label; return; }
+  const badge = button.querySelector('#favoriteCount');
+  button.textContent = label;
+  if (badge) button.append(document.createTextNode(' '), badge);
+};
 const els = {
   initGate: $('#initGate'), initGateLabel: $('#initGateLabel'),
   refresh: $('#refreshButton'),
@@ -1767,6 +1778,7 @@ function switchView(view) {
   const isTasks = view === 'tasks';
   const isSettings = view === 'settings';
   els.pageView.hidden = !isPage;
+  if (els.multiPagePanel) els.multiPagePanel.hidden = !isPage;
   els.libraryView.hidden = !isLibrary;
   els.historyView.hidden = isPage || isLibrary || isTasks || isSettings;
   els.taskView.hidden = !isTasks;
@@ -2821,8 +2833,8 @@ function renderPreviewDetails(image) {
   if (!els.previewDetailsList) return;
   els.previewDetailsList.replaceChildren();
   const details = [[t('detailUrl'), image.url], [t('detailSourceElement'), image.sourceElement || image.source], [t('detailIframe'), image.iframe ? t('detailYes') : t('detailNo')], [t('detailMime'), image.mime || image.format], [t('detailFileSize'), formatBytes(image.size || 0)], [t('detailCache'), image.cacheState || 'unknown'], [t('detailCollections'), (image.collectionIds || []).map((id) => state.collections.find((c) => c.id === id)?.name || id).join(', ') || t('detailUncategorized')], [t('detailContentHash'), image.contentHash || t('detailNotAnalyzed')], [t('detailPerceptualHash'), image.perceptualHash || t('detailNotAnalyzed')]];
-  details.forEach(([label, value]) => { const dt = document.createElement('dt'); dt.textContent = label; const dd = document.createElement('dd'); dd.textContent = String(value || '—'); els.previewDetailsList.append(dt, dd); });
-  if (els.previewCandidates) { els.previewCandidates.replaceChildren(); previewCandidates(image).concat(image.candidateUrls || []).filter((url, i, arr) => arr.indexOf(url) === i).forEach((url) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'candidate-url'; button.textContent = url; button.title = t('copyAddress'); button.addEventListener('click', () => copyText(url)); els.previewCandidates.append(button); }); }
+  details.forEach(([label, value]) => { const dt = document.createElement('dt'); dt.textContent = label; const dd = document.createElement('dd'); dd.textContent = String(value || '—'); dd.title = String(value || ''); els.previewDetailsList.append(dt, dd); });
+  if (els.previewCandidates) { els.previewCandidates.replaceChildren(); previewCandidates(image).concat(image.candidateUrls || []).filter((url, i, arr) => arr.indexOf(url) === i).forEach((url) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'candidate-url'; button.textContent = url; button.title = url; button.addEventListener('click', () => copyText(url)); els.previewCandidates.append(button); }); }
   if (els.previewCollectionSelect) { els.previewCollectionSelect.replaceChildren(); const none = document.createElement('option'); none.value = ''; none.textContent = t('addToCollection'); els.previewCollectionSelect.append(none); state.collections.forEach((collection) => { const option = document.createElement('option'); option.value = collection.id; option.textContent = collection.name; els.previewCollectionSelect.append(option); }); }
 }
 
@@ -4989,13 +5001,11 @@ function applyLanguage() {
   if (!state.tabId) setText(els.pageTitle, t('readingPage'));
   if (state.images.length && els.loading?.hidden) updateScanStatus();
   else if (!state.images.length && els.loading?.hidden) setScanStatusText(t('scanningStatus'), 'active');
-  setText(els.pageViewButton, t('page'));
-  const favoriteCount = els.favoriteCount?.textContent || '0';
-  if (els.libraryViewButton) {
-    els.libraryViewButton.innerHTML = `${t('library')} <span id="favoriteCount">${favoriteCount}</span>`;
-    els.favoriteCount = $('#favoriteCount');
-  }
-  setText(els.historyViewButton, t('history')); setText(els.taskViewButton, t('tasks')); setText(els.settingsViewButton, t('settings'));
+  setViewTabLabel(els.pageViewButton, t('page'));
+  setViewTabLabel(els.libraryViewButton, t('library'));
+  setViewTabLabel(els.historyViewButton, t('history'));
+  setViewTabLabel(els.taskViewButton, t('tasks'));
+  setViewTabLabel(els.settingsViewButton, t('settings'));
   setText(els.scanActionLabel, t('rescan'));
   setText(els.filterEyebrow, t('filterEyebrow'));
   setText(els.filterTitle, t('sizeFilterTitle'));

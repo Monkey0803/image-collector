@@ -774,3 +774,41 @@ test('first-run path surfaces scanning early and keeps advanced actions secondar
   assert.match(popup, /const labelFor = \(id\) => document\.querySelector\(`#\$\{id\}`\)/);
   assert.doesNotMatch(popup, /\.download-settings > label > span'\)\]; if \(settingLabels\[0\]/);
 });
+
+test('preview dialog keeps metadata scrollable and action buttons reachable', () => {
+  // The media area stays fixed while metadata scrolls, so a long signed URL
+  // cannot push the bottom action row outside the dialog.
+  assert.match(html, /<div class="preview-body">[\s\S]*<div class="preview-toolbar">[\s\S]*<section id="previewDetails"[\s\S]*<\/section>\s*<\/div>\s*<div class="preview-footer">/);
+  for (const id of ['previewCopyCandidates', 'previewOpenSource', 'previewDownload', 'previewEditTags', 'previewCollectionSelect']) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.match(css, /\.preview-dialog \{[^}]*display: flex; flex-direction: column;[^}]*max-height: calc\(100vh - 32px\)/);
+  assert.match(css, /\.preview-body \{[^}]*min-height: 0; overflow-y: auto;/);
+  assert.match(css, /\.preview-footer \{[^}]*flex: 0 0 auto;/);
+  assert.match(css, /\.preview-details \{[^}]*padding: 12px 16px 16px;/);
+  assert.match(css, /\.preview-details dd \{[^}]*-webkit-line-clamp: 3;/);
+  assert.match(css, /\.candidate-url \{[^}]*-webkit-line-clamp: 2;/);
+  // Clamped values remain available in full on hover.
+  assert.match(popup, /dd\.title = String\(value \|\| ''\)/);
+  assert.match(popup, /button\.title = url;/);
+});
+
+test('library controls use equal columns so select arrows align and the threshold label stays on one line', () => {
+  assert.match(css, /\.library-controls \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); gap: 10px;/);
+  assert.doesNotMatch(css, /\.library-controls #librarySmartCollection \{ grid-column: 1 \/ -1; \}/);
+  assert.match(css, /\.threshold-box \{ grid-column: 1 \/ -1; min-width: 0; \}/);
+  assert.match(css, /\.threshold-box span \{[^}]*white-space: nowrap;/);
+});
+
+test('all dropdowns keep an inset arrow and breathing room from labels', () => {
+  // A project-wide spacing audit found native select arrows flush against the
+  // control edge, crowding adjacent columns. Draw one inset chevron everywhere.
+  assert.match(css, /appearance: none;/);
+  assert.match(css, /padding-right: 22px;/);
+  assert.match(css, /background-position: right 8px center;/);
+  for (const group of ['.library-controls select', '.sort-control select', '.download-settings select', '.multi-page-scope select', '.preview-detail-actions select']) {
+    assert.match(css, new RegExp(`${group.replace('.', '\\.')}[\\s\\S]*?appearance: none;`));
+  }
+  assert.match(css, /:root\[data-theme="dark"\] \.library-controls select/);
+  assert.match(css, /\.download-settings select \{[^}]*border: 1px solid/);
+});

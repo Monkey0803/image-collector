@@ -415,7 +415,7 @@ download_image/
 ├── TODO.md             # 3.7.0 已完成任务和后续路线图
 ├── README.md           # 中文和英文项目文档
 ├── scripts/
-│   └── package-extension.sh          # 校验并打包扩展为可发布 ZIP
+│   └── package-extension.sh          # 校验、打包 ZIP 并同步解压目录
 ├── tests/
 │   ├── extension-regression.test.js  # 发布元数据、入口和 UI 契约回归
 │   ├── smart-collections.test.js     # 智能集合规则回归
@@ -441,7 +441,7 @@ node --check service-worker.js
 scripts/package-extension.sh
 ```
 
-默认输出到 `dist/image-collector-<version>.zip`。压缩包只包含扩展运行所需文件，可以直接用于“加载已解压的扩展程序”前的解压测试。
+默认生成 `dist/image-collector-<version>.zip`，并**自动解压同步**到 `dist/image-collector-<version>/`。该目录可直接用于 Chrome 的“加载已解压的扩展程序”，无需手动解压；每次代码修复后重新运行脚本即可更新目录，再在 `chrome://extensions` 点击扩展的“重新加载”。压缩包只包含扩展运行所需文件，可用于发布。
 
 ### 在 GitHub 上发布
 
@@ -899,7 +899,7 @@ download_image/
 ├── TODO.md             # 3.7.0 checklist and future roadmap
 ├── README.md           # Chinese and English documentation
 ├── scripts/
-│   └── package-extension.sh          # Validate and package the release ZIP
+│   └── package-extension.sh          # Validate, package the ZIP, and sync the unpacked directory
 ├── tests/
 │   ├── extension-regression.test.js  # Release metadata, entry-point, and UI contract checks
 │   ├── smart-collections.test.js     # Smart-collection rule checks
@@ -925,7 +925,7 @@ Generate a publishable extension archive while validating the manifest, the asse
 scripts/package-extension.sh
 ```
 
-The archive is written to `dist/image-collector-<version>.zip` by default and contains only the files the extension needs at runtime, so it can be extracted for a load-unpacked test.
+The script writes `dist/image-collector-<version>.zip` and **automatically syncs the extracted files** to `dist/image-collector-<version>/`. Load that directory directly with Chrome's **Load unpacked** — no manual extraction needed. After each code fix, rerun the script and click **Reload** on the extension in `chrome://extensions`. The archive contains only runtime files and is suitable for distribution.
 
 ### Publish on GitHub
 

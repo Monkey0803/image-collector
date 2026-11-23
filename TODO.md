@@ -726,13 +726,16 @@ Last updated: 2026-11-19
 - [x] 统一选择反馈计数：结果标题栏改为「已选 N / 共 M」占比，按钮内保留待下载数。
 - [x] 默认关闭保存对话框：`saveAs` 默认改为关闭，尊重老用户已保存的偏好。
 - [x] 差异化空状态：按「页面无图 / 被筛选过滤 / 扫描失败」给出针对性文案，筛选态增加「清除筛选条件」按钮。
-- [x] 运行全量回归测试（82/82 通过）、JS 语法检查与 HTML 标签配对校验，确认无控件 id 回归。
+- [x] 运行全量回归测试（85/85 通过）、JS 语法检查与 HTML 标签配对校验，确认无控件 id 回归。
 - [x] 下载/预览强制走原图：扫描阶段保留全部原图候选 `originalCandidates`，下载与大图预览的回退顺序把原图排在缩略图之前，素材库记录同步保留该字段。
 - [x] 平台原图 URL 升级：X/Twitter 的 `pbs.twimg.*` 尺寸变体（`name=small/medium/large/thumb`）在扫描时升级为 `name=orig` 原图候选，图片尺寸详情不再显示缩略图变体地址。
 - [x] 采集动态图：扫描器识别视频后缀与微博 Live Photo 的 `livephoto=` 中转地址，纳入 `<video>`/`source` 与 `videoSrc` 等元素的动态源；下载侧放行 `video/*` 与 `application/octet-stream`，并按真实 MIME 保存为 `.mov`/`.mp4`。
 - [x] 独立的「动态图」格式标签：`formatCategory` 将 GIF 与视频格式归入 `animated`，当前页格式栏、素材库下拉、智能集合与本地化同步新增该分类，可从「其它」中分离筛选动态图。
 - [x] 动图预览播放：预览区新增 `<video>`，视频格式的动态图静音循环播放并支持暂停/开启声音，GIF 仍由 `<img>` 原生播放；缩略图加播放角标，视频走缓存回退、缩放与关闭清理。
 - [x] Instagram 图片下载：扫描器按 `*.cdninstagram.com` / `scontent-*.fbcdn.net` 识别带签名的图片与 Reels 地址，srcset 高分辨率变体作为原图候选；下载侧对这些 CDN 强制使用 `https://www.instagram.com/` Referer，无来源页的素材库记录同样可下载。
+- [x] 预览弹窗间距优化：标题/图片区固定、详情区独立滚动、底部操作栏常驻；统一 16px 边距与工具栏分组，长地址限制行数并保留悬停全文，420 / 550px 视口实测无横向溢出且操作按钮完整可见。
+- [x] 素材库筛选区布局优化：筛选控件改为两列等宽网格，下拉箭头按列对齐；「相似阈值」跨整行且标签不换行，滑块占满宽度。
+- [x] 全项目间距排查：统一全部下拉框箭头为内嵌 8px、右侧留白 22px 的自定义 chevron（含深色模式），补齐冲突处理下拉样式，并适度增加筛选区间距。
 
 ### English
 
@@ -745,13 +748,16 @@ Last updated: 2026-11-19
 - [x] Unify selection feedback counts: show "N of M selected" in the results heading and keep the pending-download count on the button.
 - [x] Turn off the save dialog by default: default `saveAs` to off while respecting preferences saved by returning users.
 - [x] Differentiate empty states: give targeted copy for "no images / filtered out / scan failed" and add a "clear filters" action to the filtered state.
-- [x] Run the full regression suite (82/82 passing), JS syntax checks, and HTML tag-pair validation, confirming no control-id regressions.
+- [x] Run the full regression suite (85/85 passing), JS syntax checks, and HTML tag-pair validation, confirming no control-id regressions.
 - [x] Force originals for downloads and previews: retain every original candidate as `originalCandidates` during scanning, try originals before the thumbnail on download/preview fallback, and persist the field on library records.
 - [x] Platform original-URL upgrade: during scanning, X/Twitter `pbs.twimg.*` size variants (`name=small/medium/large/thumb`) are upgraded to `name=orig` as original candidates, so the image-details URL no longer shows a thumbnail variant.
 - [x] Collect animated images: the scanner recognizes video suffixes and Weibo Live Photo `livephoto=` relay URLs, includes `<video>`/`source` and `videoSrc` elements as animated sources, and the downloader accepts `video/*` and `application/octet-stream`, saving them with their real `.mov`/`.mp4` extensions.
 - [x] Dedicated "Animated" format tab: `formatCategory` routes GIF and video formats to `animated`, added across the page format tabs, library dropdown, smart collections, and localization so animated images can be filtered separately from "Other".
 - [x] Animated preview playback: add a `<video>` to the preview stage so video-format animated images play muted in a loop with pause/unmute controls while GIFs keep native `<img>` playback; mark animated thumbnails with a play badge and route video through cache fallback, zoom, and close cleanup.
 - [x] Instagram image downloads: the scanner recognises signed URLs on `*.cdninstagram.com` / `scontent-*.fbcdn.net` (including extension-less paths) and treats high-resolution srcset variants as original candidates; the downloader forces a `https://www.instagram.com/` Referer for those CDN hosts, so library records without a source page still download.
+- [x] Preview dialog spacing: keep the header and image fixed, give metadata its own scroll area, and pin the action bar to the bottom; unify horizontal padding to 16px, group the toolbar, clamp long URLs while keeping full text on hover, and verify no horizontal overflow at 420 / 550px viewports.
+- [x] Library filter layout: switch controls to an equal-width two-column grid so select arrows align by column; span the similarity threshold across the full row with a single-line label and a full-width slider.
+- [x] Project-wide spacing audit: inset every dropdown chevron 8px with 22px right padding (including dark mode), style the previously bare conflict-action select consistently, and loosen filter-row spacing.
 
 ## Test coverage: image referrer rules
 
